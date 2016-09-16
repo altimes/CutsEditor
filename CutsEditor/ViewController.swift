@@ -1370,6 +1370,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.cutsTable.reloadData()
   }
   
+  /// Assigns the button text to each button from
+  /// the user's skip Preferences
+  
   func skipButtonGUISetup(_ skips: skipPreferences)
   {
     seekButton1a.title = skips.lhs[0].display
