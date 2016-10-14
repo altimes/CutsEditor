@@ -11,6 +11,7 @@
 		B74CE7331D20F7C400EB5DC6 /* CutsEditorMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74CE7321D20F7C400EB5DC6 /* CutsEditorMenu.swift */; };
 		B74CE7351D236D8C00EB5DC6 /* PreferencesTabController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74CE7341D236D8C00EB5DC6 /* PreferencesTabController.swift */; };
 		B7571F261D594F0E005C9E14 /* GeneralPreferencesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7571F251D594F0E005C9E14 /* GeneralPreferencesViewController.swift */; };
+		B75D14BE1DA33D4600118308 /* MovieCutting.swift in Sources */ = {isa = PBXBuildFile; fileRef = B75D14BD1DA33D4600118308 /* MovieCutting.swift */; };
 		B782B4B71CAF77C00046B599 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B782B4B61CAF77C00046B599 /* AppDelegate.swift */; };
 		B782B4B91CAF77C00046B599 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B782B4B81CAF77C00046B599 /* ViewController.swift */; };
 		B782B4BB1CAF77C00046B599 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B782B4BA1CAF77C00046B599 /* Assets.xcassets */; };
@@ -23,6 +24,8 @@
 		B7A9BCE61CFC130600E1DDF7 /* EitSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A9BCE51CFC130600E1DDF7 /* EitSupport.swift */; };
 		B7A9BCE81CFC18E000E1DDF7 /* FileHandlers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A9BCE71CFC18E000E1DDF7 /* FileHandlers.swift */; };
 		B7B5BCC31D47091B00340B9A /* TxDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B5BCC21D47091B00340B9A /* TxDocument.swift */; };
+		B7B727EB1DA4B3BA00FC6EFA /* FindFilesOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B727EA1DA4B3BA00FC6EFA /* FindFilesOperation.swift */; };
+		B7B727ED1DA4B45900FC6EFA /* MovieCuttingOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B727EC1DA4B45900FC6EFA /* MovieCuttingOperation.swift */; };
 		B7C45BF31CB0D36B00DB90FD /* CutsData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C45BF21CB0D36B00DB90FD /* CutsData.swift */; };
 		B7C45BF51CB0D43200DB90FD /* CutsFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C45BF41CB0D43200DB90FD /* CutsFile.swift */; };
 		B7FCD6B01D13E9B40078277C /* reconstructscap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FCD6AF1D13E9B40078277C /* reconstructscap.swift */; };
@@ -52,6 +55,7 @@
 		B74CE7321D20F7C400EB5DC6 /* CutsEditorMenu.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsEditorMenu.swift; sourceTree = "<group>"; };
 		B74CE7341D236D8C00EB5DC6 /* PreferencesTabController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = PreferencesTabController.swift; path = ../PreferencesTabController.swift; sourceTree = "<group>"; };
 		B7571F251D594F0E005C9E14 /* GeneralPreferencesViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GeneralPreferencesViewController.swift; path = ../GeneralPreferencesViewController.swift; sourceTree = "<group>"; };
+		B75D14BD1DA33D4600118308 /* MovieCutting.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = MovieCutting.swift; path = ../MovieCutting.swift; sourceTree = "<group>"; };
 		B782B4B31CAF77C00046B599 /* CutsEditor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CutsEditor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B782B4B61CAF77C00046B599 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B782B4B81CAF77C00046B599 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -70,6 +74,8 @@
 		B7A9BCE51CFC130600E1DDF7 /* EitSupport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EitSupport.swift; sourceTree = "<group>"; };
 		B7A9BCE71CFC18E000E1DDF7 /* FileHandlers.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileHandlers.swift; sourceTree = "<group>"; };
 		B7B5BCC21D47091B00340B9A /* TxDocument.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TxDocument.swift; sourceTree = "<group>"; };
+		B7B727EA1DA4B3BA00FC6EFA /* FindFilesOperation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FindFilesOperation.swift; sourceTree = "<group>"; };
+		B7B727EC1DA4B45900FC6EFA /* MovieCuttingOperation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MovieCuttingOperation.swift; sourceTree = "<group>"; };
 		B7C45BF21CB0D36B00DB90FD /* CutsData.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsData.swift; sourceTree = "<group>"; };
 		B7C45BF41CB0D43200DB90FD /* CutsFile.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsFile.swift; sourceTree = "<group>"; };
 		B7FCD6AF1D13E9B40078277C /* reconstructscap.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = reconstructscap.swift; sourceTree = "<group>"; };
@@ -131,6 +137,9 @@
 				B7A9BCE31CFC12B000E1DDF7 /* EitSupport.py.txt */,
 				B782B4B61CAF77C00046B599 /* AppDelegate.swift */,
 				B782B4B81CAF77C00046B599 /* ViewController.swift */,
+				B7B727EC1DA4B45900FC6EFA /* MovieCuttingOperation.swift */,
+				B75D14BD1DA33D4600118308 /* MovieCutting.swift */,
+				B7B727EA1DA4B3BA00FC6EFA /* FindFilesOperation.swift */,
 				B74CE7341D236D8C00EB5DC6 /* PreferencesTabController.swift */,
 				B7571F251D594F0E005C9E14 /* GeneralPreferencesViewController.swift */,
 				B7A42ADE1D1CA477007CEF2C /* CutsPreferencesController.swift */,
@@ -303,11 +312,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				B7A9BCE61CFC130600E1DDF7 /* EitSupport.swift in Sources */,
+				B7B727ED1DA4B45900FC6EFA /* MovieCuttingOperation.swift in Sources */,
 				B7C45BF51CB0D43200DB90FD /* CutsFile.swift in Sources */,
 				B782B4B91CAF77C00046B599 /* ViewController.swift in Sources */,
 				B7C45BF31CB0D36B00DB90FD /* CutsData.swift in Sources */,
 				B7B5BCC31D47091B00340B9A /* TxDocument.swift in Sources */,
 				B782B4B71CAF77C00046B599 /* AppDelegate.swift in Sources */,
+				B7B727EB1DA4B3BA00FC6EFA /* FindFilesOperation.swift in Sources */,
+				B75D14BE1DA33D4600118308 /* MovieCutting.swift in Sources */,
 				B7FE54D11CBB102C002407EC /* MetaData.swift in Sources */,
 				B7A9BCE81CFC18E000E1DDF7 /* FileHandlers.swift in Sources */,
 				B74CE7351D236D8C00EB5DC6 /* PreferencesTabController.swift in Sources */,
