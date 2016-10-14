@@ -45,9 +45,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       
       // general preferences
 
-      if let autoWrite = (defaults?.bool(forKey: generalStringConsts.autoWrite))
+      if let autoWriteValue = (defaults?.integer(forKey: generalStringConsts.autoWrite))
       {
-        defaultGeneral.autoWrite = autoWrite
+        defaultGeneral.autoWrite = CheckMarkState.lookup(autoWriteValue)
         if let enumRawValue = defaults?.integer(forKey: generalStringConsts.bookmarkMode)
         {
           if let mode = MARK_MODE(rawValue: enumRawValue)
@@ -66,10 +66,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
         defaultGeneral.cutLocalMountRoot = (defaults?.string(forKey: generalStringConsts.localMountPoint))!
         defaultGeneral.cutRemoteExport = (defaults?.string(forKey: generalStringConsts.remoteExport))!
         
-        defaultGeneral.cutReplace = (defaults?.integer(forKey: generalStringConsts.replaceMode))!
-        defaultGeneral.cutDescription = (defaults?.integer(forKey: generalStringConsts.newDescriptionMode))!
-        defaultGeneral.cutRenamePrograme = (defaults?.integer(forKey: generalStringConsts.newTitleMode))!
-        defaultGeneral.cutOutputFile = (defaults?.integer(forKey: generalStringConsts.newFileMode))!
+        defaultGeneral.cutReplace = CheckMarkState.lookup((defaults?.integer(forKey: generalStringConsts.replaceMode)))
+        defaultGeneral.cutDescription = CheckMarkState.lookup((defaults?.integer(forKey: generalStringConsts.newDescriptionMode)))
+        defaultGeneral.cutRenamePrograme = CheckMarkState.lookup((defaults?.integer(forKey: generalStringConsts.newTitleMode)))
+        defaultGeneral.cutOutputFile = CheckMarkState.lookup((defaults?.integer(forKey: generalStringConsts.newFileMode)))
         
       }
       else {
@@ -132,7 +132,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   func initGeneralSettings()
   {
     defaultGeneral = generalPreferences()
-//    defaultGeneral = generalPreferences(autoWrite: true, markMode: MARK_MODE.FIXED_COUNT_OF_MARKS, countModeNumberOfMarks: 10, spacingModeDurationOfMarks: 180, cutReplace: NSOnState, cutRenamePrograme: NSOffState, cutOutputFile: NSOffState, cutDescription: NSOffState, cutProgramLocalPath: "", cutProgramRemotePath: "", cutLocalMountRoot: "", cutRemoteExport: "")
+//    defaultGeneral = generalPreferences(autoWrite: Checkmark.checked, markMode: MARK_MODE.FIXED_COUNT_OF_MARKS, countModeNumberOfMarks: 10, spacingModeDurationOfMarks: 180, cutReplace: CheckMarkState.checked, cutRenamePrograme: NSOffState, cutOutputFile: NSOffState, cutDescription: NSOffState, cutProgramLocalPath: "", cutProgramRemotePath: "", cutLocalMountRoot: "", cutRemoteExport: "")
   }
   
   // MARK: AppPreference Protocol
@@ -177,16 +177,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   
   func saveGeneralPreference(_ general: generalPreferences) {
     defaultGeneral = general
-    defaults?.set(defaultGeneral.autoWrite, forKey: generalStringConsts.autoWrite)
+    defaults?.set(defaultGeneral.autoWrite.rawValue, forKey: generalStringConsts.autoWrite)
     defaults?.set(defaultGeneral.countModeNumberOfMarks, forKey: generalStringConsts.bookmarkCount)
     defaults?.set(defaultGeneral.spacingModeDurationOfMarks, forKey: generalStringConsts.bookmarkSpacing)
     defaults?.set(defaultGeneral.markMode.rawValue, forKey: generalStringConsts.bookmarkMode)
    
     // checkBox settings
-    defaults?.set(defaultGeneral.cutReplace, forKey:generalStringConsts.replaceMode)
-    defaults?.set(defaultGeneral.cutOutputFile, forKey:generalStringConsts.newFileMode)
-    defaults?.set(defaultGeneral.cutRenamePrograme, forKey:generalStringConsts.newTitleMode)
-    defaults?.set(defaultGeneral.cutDescription, forKey:generalStringConsts.newDescriptionMode)
+    defaults?.set(defaultGeneral.cutReplace.rawValue, forKey:generalStringConsts.replaceMode)
+    defaults?.set(defaultGeneral.cutOutputFile.rawValue, forKey:generalStringConsts.newFileMode)
+    defaults?.set(defaultGeneral.cutRenamePrograme.rawValue, forKey:generalStringConsts.newTitleMode)
+    defaults?.set(defaultGeneral.cutDescription.rawValue, forKey:generalStringConsts.newDescriptionMode)
     
     // user path settings
     defaults?.set(defaultGeneral.cutProgramLocalPath, forKey:generalStringConsts.localProgramPath)
