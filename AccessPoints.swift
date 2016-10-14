@@ -83,6 +83,7 @@ class AccessPoints {
         m_access_points_array.append(pair)
       }
     }
+    fclose(f)
     // order the map by offset
     if (!sorted) { m_access_points_array.sort{$0.offset < $1.offset}}
     return true
