@@ -38,14 +38,6 @@ public struct CutsTimeConst {
   public static let PTS_DURATION : Double = (1.0/90000.0) // seconds
   public static let PTS_TIMESCALE : Int32 = 90000
 }
-
-struct MessageStrings {
-  static let NO_SUCH_FILE = "No Such File"
-  static let FOUND_FILE = "Found File"
-  static let CAN_CREATE_FILE = "Success on file creation"
-  static let DID_WRITE_FILE = "Success of replacement"
-}
-
 struct FieldStrings {
   static let IN = "IN"
   static let OUT = "OUT"
@@ -53,6 +45,7 @@ struct FieldStrings {
   static let LASTPLAY = "LASTPLAY"
 }
 
+/// Enum to capture the current set of marks that the cuts file can contain
 public enum MARK_TYPE : UInt32
 {
   // note: UInt32 is doco--- swift thinks it knows better and uses 1 byte !!!
@@ -61,6 +54,8 @@ public enum MARK_TYPE : UInt32
   case OUT = 1
   case BOOKMARK = 2
   case LASTPLAY = 3
+  
+  /// return a textural value for the enum I18N'able
   
   func description () -> String {
     switch self
@@ -72,6 +67,9 @@ public enum MARK_TYPE : UInt32
     }
   }
   
+  /// Given a suitable number try to return a MARK_TYPE
+  /// - parameter raw: value of enum
+  /// - returns : valid enum or nil
   static func lookupOnRawValue(_ raw : UInt32) -> MARK_TYPE?
   {
     switch (raw)
@@ -87,26 +85,38 @@ public enum MARK_TYPE : UInt32
 
 /// structure with PTS and MARK_TYPE
 /// and sundry supporting functions to convert
-/// textural formats
+/// textural formats, perform comparions etc.
 public struct  CutEntry {
   var cutPts  : UInt64
   var cutType : UInt32
   
+  /// A useful "0" entry for IN marks - ie start of recording
+  static var InZero: CutEntry {
+    get {
+      return CutEntry(cutPts: UInt64(0), cutType: MARK_TYPE.IN.rawValue)
+    }
+  }
+  
   // debug support functions
+  /// Convert to string with hex values
   func asHex () -> String{
     let hexRep = String(format: "%16.16lx:%8.8x", cutPts, cutType)
     return hexRep
   }
+  
+  /// Convert to string with decimal values
   func asDecimal () -> String{
     let decimalRep = String(format: "%ld : %ld" , cutPts, cutType)
     return decimalRep
   }
   
+  /// Convert PTS to seconds
   func asSeconds() -> Double
   {
     return Double(self.cutPts) * CutsTimeConst.PTS_DURATION
   }
   
+  /// Convert N seconds in to HH:MM:SS.ss format for display
   static func hhMMssFromSeconds(_ seconds: Double) -> String
   {
     var inputSeconds = seconds
@@ -123,7 +133,7 @@ public struct  CutEntry {
     let intHours = Int(hours) % 24
     let intDays = Int(days)
     // compose significant elements only
-    var result = String.init(format: "%02.0fs", remainderSeconds)
+    var result = String.init(format: "%02.0f", remainderSeconds)
     if (intMinutes > 0  || intHours>0 || intDays > 0) {
       result = String.init(format: "%2.2d:\(result)", intMinutes)
     }
@@ -137,10 +147,12 @@ public struct  CutEntry {
     return result
   }
   
+  /// Convert PTS value to HH:MM:SS string
   static public func timeTextFromPTS(_ ptsCount : UInt64) -> String {
     return hhMMssFromSeconds(Double(ptsCount) * CutsTimeConst.PTS_DURATION)
   }
   
+  /// Return entry as printable string
   func asString() -> String {
     if let markType = MARK_TYPE(rawValue: cutType) {
      return "\(markType) " + CutEntry.timeTextFromPTS(self.cutPts)
@@ -150,6 +162,7 @@ public struct  CutEntry {
     }
   }
   
+  /// designated initializer
   init(cutPts:UInt64, cutType:UInt32)
   {
     self.cutPts = cutPts
@@ -158,7 +171,7 @@ public struct  CutEntry {
 }
 
 // this seems a nonsense if struct are "Value Type" they ought to be
-// implicitly equatable ..... but there you go....
+// implicitly equatable ..... but there you go.... new languages take time to get "sensible"
 extension CutEntry: Equatable {}
 
 public func == (lhs: CutEntry, rhs: CutEntry) -> Bool
