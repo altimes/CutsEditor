@@ -926,7 +926,7 @@
                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
-                            <button toolTip="Prompt for new Description" translatesAutoresizingMaskIntoConstraints="NO" id="bHx-kv-Nu9">
+                            <button toolTip="Prompt for new metafile Description" translatesAutoresizingMaskIntoConstraints="NO" id="bHx-kv-Nu9">
                                 <rect key="frame" x="193" y="134" width="166" height="18"/>
                                 <buttonCell key="cell" type="check" title=" add -d flag and prompt" bezelStyle="regularSquare" imagePosition="left" inset="2" id="Wfd-zP-q7Z">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -936,7 +936,7 @@
                                     <action selector="changeCutDescriptionSetting:" target="H50-qk-Urw" id="XjT-W2-MLd"/>
                                 </connections>
                             </button>
-                            <button toolTip="Prompt for new title" translatesAutoresizingMaskIntoConstraints="NO" id="PXA-Q6-doB">
+                            <button toolTip="Prompt for new metafile title" translatesAutoresizingMaskIntoConstraints="NO" id="PXA-Q6-doB">
                                 <rect key="frame" x="193" y="109" width="166" height="18"/>
                                 <buttonCell key="cell" type="check" title=" add -n flag and prompt" bezelStyle="regularSquare" imagePosition="left" inset="2" id="o03-Oi-Zpf">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -946,7 +946,7 @@
                                     <action selector="changeCutTitleSetting:" target="H50-qk-Urw" id="uzS-vh-Bwp"/>
                                 </connections>
                             </button>
-                            <button toolTip="Prompt for output file name" translatesAutoresizingMaskIntoConstraints="NO" id="Xru-7K-DXm">
+                            <button toolTip="Prompt for new output file pathname" translatesAutoresizingMaskIntoConstraints="NO" id="Xru-7K-DXm">
                                 <rect key="frame" x="193" y="86" width="166" height="18"/>
                                 <buttonCell key="cell" type="check" title=" add -o flag and prompt" bezelStyle="regularSquare" imagePosition="left" inset="2" id="vNb-g5-Eku">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1859,6 +1859,9 @@ Gw
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="q62-z1-WB1">
                                 <rect key="frame" x="18" y="699" width="323" height="17"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" relation="lessThanOrEqual" constant="600" id="11z-qh-cZ7"/>
+                                </constraints>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Episode Title" id="qCW-hx-lTB">
                                     <font key="font" metaFont="system"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
