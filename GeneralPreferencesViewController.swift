@@ -85,7 +85,7 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
   func loadCurrentGeneralPrefs()
   {
     general = preferences.generalPreference()
-    autoWriteCheckBox.state = general.autoWrite ? NSOnState : NSOffState
+    autoWriteCheckBox.state = (general.autoWrite == CheckMarkState.checked) ? NSOnState : NSOffState
     updateBookmarkGUI(general)
     
     // cuts program configuration
@@ -94,16 +94,16 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
     remoteExportPath.stringValue = general.cutRemoteExport
     localMountPath.stringValue = general.cutLocalMountRoot
     
-    fileReplaceFlagField.state = general.cutReplace
-    changeDesciptionFlagField.state = general.cutDescription
-    changeTitleFlagField.state = general.cutRenamePrograme
-    newFileNameFlagField.state = general.cutOutputFile
+    fileReplaceFlagField.state = (general.cutReplace == CheckMarkState.checked) ? NSOnState : NSOffState
+    changeDesciptionFlagField.state = (general.cutDescription == CheckMarkState.checked) ? NSOnState : NSOffState
+    changeTitleFlagField.state = (general.cutRenamePrograme == CheckMarkState.checked) ? NSOnState : NSOffState
+    newFileNameFlagField.state = (general.cutOutputFile == CheckMarkState.checked) ? NSOnState : NSOffState
     
   }
   
   func updateBookmarkGUI(_ genPrefs: generalPreferences)
   {
-    autoWriteCheckBox.state = genPrefs.autoWrite ? NSOnState : NSOffState
+    autoWriteCheckBox.state = (genPrefs.autoWrite == CheckMarkState.checked) ? NSOnState : NSOffState
     if (genPrefs.markMode == MARK_MODE.FIXED_COUNT_OF_MARKS)
     {
       fixedSteps.state = NSOnState
@@ -131,7 +131,6 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
   }
   
   @IBAction func changeMarkValue(_ sender: NSTextField) {
-//    print("saw markfield action")
     if (numberFieldEntryIsValid)
     {
       switch general.markMode {
@@ -165,7 +164,7 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
   
   @IBAction func autoWriteChanged(_ sender: NSButton)
   {
-    general.autoWrite = sender.state == NSOnState
+    general.autoWrite = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   
   @IBAction func done(_ sender: NSButton) {
@@ -176,43 +175,39 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
     print("got new path of \(sender.stringValue) for id of \(sender.identifier)")
     if let nextView = sender.nextKeyView {
       sender.resignFirstResponder()
-      print("Trying to change focus ring")
-      sender.window?.makeFirstResponder(nextView)
+//      print("Trying to change focus ring")
       sender.resignFirstResponder()
+      sender.window?.makeFirstResponder(nextView)
     }
     if let fieldIdentifier = sender.identifier {
       print("got field identifier of \(fieldIdentifier)")
       switch (fieldIdentifier) {
-      case generalStringConsts.remoteProgramPath: general.cutProgramRemotePath = sender.stringValue
-      case generalStringConsts.localProgramPath: general.cutProgramLocalPath = sender.stringValue
-      case generalStringConsts.localMountPoint: general.cutLocalMountRoot = sender.stringValue
-      case generalStringConsts.remoteExport: general.cutRemoteExport = sender.stringValue
-      default: print("Argh unknown \(sender.identifier)")
+        case generalStringConsts.remoteProgramPath: general.cutProgramRemotePath = sender.stringValue
+        case generalStringConsts.localProgramPath: general.cutProgramLocalPath = sender.stringValue
+        case generalStringConsts.localMountPoint: general.cutLocalMountRoot = sender.stringValue
+        case generalStringConsts.remoteExport: general.cutRemoteExport = sender.stringValue
+        default: print("Argh unknown \(sender.identifier)")
       }
     }
   }
   @IBAction func changeCutReplaceSetting(_ sender: NSButton) {
-    let stateString = sender.state == NSOnState ? "ON" : "OFF"
-    print("saw replace toggle to \(stateString)")
-    general.cutReplace = sender.state
+//    let stateString = sender.state == NSOnState ? "ON" : "OFF"
+//    print("saw replace toggle to \(stateString)")
+    general.cutReplace = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutDescriptionSetting(_ sender: NSButton) {
-    let stateString = sender.state == NSOnState ? "ON" : "OFF"
-    print("saw description toggle to \(stateString)")
-    general.cutDescription = sender.state
+//    let stateString = sender.state == NSOnState ? "ON" : "OFF"
+//    print("saw description toggle to \(stateString)")
+    general.cutDescription = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutTitleSetting(_ sender: NSButton) {
-    let stateString = sender.state == NSOnState ? "ON" : "OFF"
-    print("saw title toggle to \(stateString)")
-    general.cutRenamePrograme = sender.state
+//    let stateString = sender.state == NSOnState ? "ON" : "OFF"
+//    print("saw title toggle to \(stateString)")
+    general.cutRenamePrograme = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutFilenameSetting(_ sender: NSButton) {
-    let stateString = sender.state == NSOnState ? "ON" : "OFF"
-    print("saw newOutputfile toggle to \(stateString)")
-    general.cutOutputFile = sender.state
+//    let stateString = sender.state == NSOnState ? "ON" : "OFF"
+//    print("saw newOutputfile toggle to \(stateString)")
+    general.cutOutputFile = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
-  
-  
-  
-  
 }
