@@ -10,6 +10,7 @@ import Cocoa
 import AVFoundation
 import AVKit
 
+
 struct StringsCuts {
   static let WORKING = "Working getting file list"
   static let NO_DIRECTORY_SELECTED = "No directory Selected"
@@ -17,6 +18,7 @@ struct StringsCuts {
   static let NO_FILE_CHOOSEN = "No file selected"
   static let SELECT_DIRECTORY = "Select Directory"
   static let CANCEL_SEARCH = "Cancel Search"
+  static let NO_PROGRAMS_FOUND = "No programs found at location"
   static let TABLE_TIME_COLUMN = "Time"
   static let TABLE_TYPE_COLUMN = "Type"
   static let FILE_SAVE_FAILED = "Failed to save file"
@@ -24,8 +26,11 @@ struct StringsCuts {
   static let CANCELLED_BY_USER = "Cancelled by User"
   static let DERIVING_PROGRAM_STATUS = "Determining Program State"
   static let COLOUR_CODING_CANCELLED = "Colour Coding Cancelled"
+  static let FAILED_TRYING_TO_ACCESS = "Failed trying to access %@"
+  static let FAILED_COUNTING_FILES = "Failed counting files on BeyonWiz expected number, got <%@>"
 }
 
+/// Engima file extensions and sundry constants
 struct ConstsCuts {
   static let filelistSize = 200  // starting size for list of files
   static let CUTS_SUFFIX = ".ts.cuts"
@@ -35,7 +40,7 @@ struct ConstsCuts {
   static let AP_SUFFIX = ".ts.ap"
 }
 
-// lookup code for tags of gui buttons
+/// lookup code for tags of GUI buttons
 
 enum skipButtons:Int {
   case PLUS_A = 501
@@ -50,6 +55,27 @@ enum skipButtons:Int {
   case MINUS_E = -505
 }
 
+enum CheckMarkState: Int {
+  case checked = 99
+  case unchecked = 100
+  
+  static func lookup(_ raw : Int?) -> CheckMarkState
+  {
+    guard raw != nil else { return .unchecked }
+    switch (raw!)
+    {
+      case checked.rawValue : return .checked
+      case unchecked.rawValue : return .unchecked
+      default : return .unchecked
+    }
+  }
+}
+
+/// Control which file to process "selected" or just worked on
+enum FileToHandle {
+  case current, previous
+}
+
 /// strings for configuring the remote call to the mcut programs
 public struct mcutConsts {
   static let replaceSwitch = "-r"
@@ -61,10 +87,11 @@ public struct mcutConsts {
   static let remoteExportPath = "/media/hdd"
   static let mcutProgramRemote = "/usr/lib/enigma2/python/Plugins/Extensions/MovieCut/bin/mcut"
   static let mcutProgramLocal = "/usr/local/bin/mcut2"
-  static let remoteLogin = "root@beyonwizT4.local"
-  static let localSshPath = "/usr/bin/ssh"
+  
+  static let pleaseWaitMessage = "Cutting <%@> %@ please wait..."
 }
 
+/// Notification identifiers
 let skipsDidChange = "CutsPreferenceControllerSkipsDidChange"
 let sortDidChange = "SortPreferenceControllerSortDidChange"
 let generalDidChange = "GeneralPreferencesControllerGeneralDidChange"
@@ -76,7 +103,7 @@ struct namePair {
   var programeName: String = ""
 }
 
-/// structure to hold configuration parameters for deciding colouring of
+/// Configuration parameters for deciding colouring of
 /// list of programs in GUI
 struct fileColourParameters {
   static let BOOKMARK_THRESHOLD_COUNT = 5
@@ -95,11 +122,13 @@ struct skipPair {
   var value : Double = 0.0
 }
 
+/// User configuration of sorting for popupbutton display
 struct sortingPreferences {
   var isAscending: Bool = true
   var sortBy: String = ""
 }
 
+/// User configuration enum for type of bulk entry
 enum MARK_MODE: Int {
   case FIXED_COUNT_OF_MARKS
   case FIXED_SPACING_OF_MARKS
@@ -107,24 +136,28 @@ enum MARK_MODE: Int {
 
 let kHyphen = " - "
 
+/// User configuration general preferences
 struct generalPreferences {
-  var autoWrite: Bool = true
+  var autoWrite = CheckMarkState.checked
   var markMode = MARK_MODE.FIXED_COUNT_OF_MARKS
   var countModeNumberOfMarks = 10         // 10 equally spaced bookmarks
   var spacingModeDurationOfMarks = 180    // 180 seconds spaced bookmarks
   // cuts application
-  var cutReplace = NSOnState
-  var cutRenamePrograme = NSOffState
-  var cutOutputFile = NSOffState
-  var cutDescription = NSOffState
+  var cutReplace = CheckMarkState.checked
+  var cutRenamePrograme = CheckMarkState.unchecked
+  var cutOutputFile = CheckMarkState.unchecked
+  var cutDescription = CheckMarkState.unchecked
   var cutProgramLocalPath = mcutConsts.mcutProgramLocal
   var cutProgramRemotePath = mcutConsts.mcutProgramRemote
   var cutLocalMountRoot = mcutConsts.localMount
   var cutRemoteExport = mcutConsts.remoteExportPath
+  // player related config
+//  var playbackControlStyle = AVPlayerViewControlsStyle.inline
+//  var playbackShowFastForwardControls: Bool = true // iff style is floating
+//  var playInOut: Bool = true  // play through out/in pairs (alt is to skip over)
 }
 
-/// Property that contains the user preferences for
-/// the skip buttons.  Organized to mirror screen representation
+/// Property that contains the user preferences for /// the skip buttons.  Organized to mirror screen representation
 /// of two columns (rhs/lhs) of 5 buttons
 struct skipPreferences {
   var lhs = [skipPair]()
@@ -144,7 +177,20 @@ struct skipPreferences {
   }
 }
 
-class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource {
+/// Configuration of users system and path to sh and ssh
+/// FIXME: add to prefernces panel
+public struct systemConfiguration {
+  var remoteManchineAndLogin = "root@beyonwizt4.local"
+  var sshPath = "/usr/bin/ssh"
+  var shPath = "/bin/sh"
+  /// args for the external "cutter" program
+  var instanceArgs = [String]()
+}
+
+typealias FindCompletionBlock = ( _ URLArray:[String]?,  _ forSuffix: String,  _ didCompleteOK:Bool) -> ()
+typealias MovieCutCompletionBlock  = (_ message: String, _ resultValue: Int, _ wasCancelled: Bool) -> ()
+
+class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
   
   @IBOutlet weak var previousButton: NSButton!
   @IBOutlet weak var nextButton: NSButton!
@@ -177,9 +223,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBOutlet weak var tenMarkButton: NSButton!
   
   @IBOutlet weak var progressBar: NSProgressIndicator!
+  
   // MARK: model
   
   let debug = false
+  var basestart : clock_t = 0
+  var fileSearchCancelled = false
   var filelist: [String] = []
   var namelist: [String] = []
   var filelistIndex : Int {
@@ -191,12 +240,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  /// Index into the popup captured during the last MouseDownEvent
+  /// flag if cuts list is coherent, enable CUT button if it is
+  var cuttable : Bool {
+    set {
+      cutButton.isEnabled = newValue
+    }
+    get {
+      return cuts.isCuttable
+    }
+  }
+  
+  /// Index into the GUI popup captured during the last MouseDownEvent
   var mouseDownPopUpIndex : Int?
   
   var lastfileIndex : Int = 0
   var fileWorkingName : String = ""
   var videoDurationFromPlayer: Double = 0.0
+  var programDurationInSecs: Double = 0.0
   /// Flag for completion handler to resume playing after seek
   var wasPlaying: Bool = false
   /// Computed var checks if video was playing
@@ -211,12 +271,63 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  /// readonly computed var of postion of first IN cutmark in PTS units. If no IN is present
+  /// then return 0 for begining of video
+  var firstInCutPTS:UInt64 {
+    get {
+      var pts : UInt64 = 0
+      if let entry = cuts.firstInCutMark
+      {
+        pts = entry.cutPts
+      }
+      return pts
+    }
+  }
+  
+  /// Readonly computed var of the position of the last OUT pts.  If no OUT is present,
+  /// then return the max of the metadata duration (which for some broadcasters
+  /// can be 0 (!)) and the video duration determined by the AVPlayer
+  
+  var lastOutCutPTS: UInt64 {
+    get {
+      var pts : UInt64
+      let metaPTS : UInt64 = UInt64( metadata.duration) ?? UInt64(0)
+      // FIXME: check if first PTS is always 0??
+      let videoPTS : UInt64 = UInt64( videoDurationFromPlayer * Double(CutsTimeConst.PTS_TIMESCALE))
+      
+      if (metaPTS == UInt64(0)) {
+        pts = videoPTS
+      }
+      else {
+        pts = min(metaPTS, videoPTS)
+      }
+      if let entry = cuts.lastOutCutMark
+      {
+        pts = entry.cutPts
+      }
+      return pts
+    }
+  }
+  
   var preferences = NSApplication.shared().delegate as! AppPreferences
   
-  var finderOperationsQueue : OperationQueue = OperationQueue()
+  var finderOperationsQueue : OperationQueue?
+  var cutterOperationsQueue = { () -> OperationQueue in
+    let queue = OperationQueue()
+    queue.name = "Movie Cutting Queue"
+    queue.maxConcurrentOperationCount = 1
+    return queue
+  } ()
+  
+  var systemSetup = systemConfiguration()
+
   var currentFileColouringBlock : BlockOperation?
   var cuts = CutsFile()
-  var cutsModified: Bool = false
+  var cutsModified : Bool {
+    get {
+      return cuts.isModified
+    }
+  }
   var eit = EITInfo()
   var metadata = MetaData()
   var accessPointData : AccessPoints?
@@ -224,12 +335,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var skips = skipPreferences()
   var sortPrefs = sortingPreferences()
   var generalPrefs = generalPreferences()
+  
   /// Controls if avPlayer is dynamically synced to current cut position selection.
   /// This should action should be suppressed during bulk operations.  If not, then
   /// the player will attempt to seek to a new frame each time the table highlight
   /// is changed.  For example, when the user adds 10 bookmarks, the player jumps
   /// to each new bookmark as if the user has just selected it in the table.
   var suppressPlayerUpdate = false
+  
+  
+  /// value to track periodic callbacks in player and suppress execution of multiples at the same time
+  var lastPeriodicCallBackTime : Float = -1.0
+  
+  /// ensure that user selecting a row is not overriden with timed observed updates
+  var suppressTimedUpdates = false
+  
+  /// flag to control if out/in block skipping is honoured
+  var honourOutInMarks = true
+  
+  /// var used to maintain ordered list of movie cuttting jobs added to the cutting queue.
+  /// Used as a lightweight queue monitor.  Displayed as "tooltip" on Cut button
+  
+  var cuttingInQueue = ""
   
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -240,18 +367,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     nextButton.isEnabled = false
     fileWorkingName = StringsCuts.NO_FILE_CHOOSEN
     statusField.stringValue = StringsCuts.NO_DIRECTORY_SELECTED
-//    currentFile.stringValue = StringsCuts.NO_FILE_CHOOSEN
     currentFile.removeAllItems()
     currentFile.addItem(withTitle: StringsCuts.NO_FILE_CHOOSEN)
     currentFile.selectItem(at: 0)
     cutsTable.dataSource = self
     cutsTable.delegate = self
     actionsSetEnabled(false)
+    
     skips = preferences.skipPreference()
     sortPrefs = preferences.sortPreference()
+    generalPrefs = preferences.generalPreference()
     
-//    let application = NSApplication.sharedApplication()
-//    application.addObserver(self, forKeyPath: "skipsChange", options: NSKeyValueObservingOptions.New, context: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(skipsChange(_:)), name: NSNotification.Name(rawValue: skipsDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sortChange(_:)), name: NSNotification.Name(rawValue: sortDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(generalChange(_:)), name: NSNotification.Name(rawValue: generalDidChange), object: nil )
@@ -265,6 +391,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //    reconstructScAp.readFFMeta("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts.ap")
 //    reconstructScAp.pyProcessScAp("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts")
   }
+  
+  override func viewDidDisappear() {
+        super.viewDidDisappear()
+    
+        if let token = timeObserverToken {
+          self.monitorView.player?.removeTimeObserver(token)
+          self.timeObserverToken = nil
+        }
+        self.monitorView.player?.pause()
+  }
+  
   
   override func viewWillDisappear() {
     NotificationCenter.default.removeObserver(self)
@@ -288,8 +425,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func retainAttributedStringList(_ popUpList: NSPopUpButton) -> ([String],[NSMenuItem])
   {
-    // Fiddly bit here
-    // To avoid recreating the popupbutton attributed strings (costly)
+    // Fiddly bit here.
+    // To avoid recreating the popupbutton attributed strings (costly to decide on colouring)
     // We save the old one, create a parallel array of titles
     // then for the newly sorted namelist, we pick out
     // the title, look up the old index from the simple string array
@@ -321,12 +458,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if let oldIndex = itemTitles.index(of: title)
       {
         self.currentFile.item(at: newIndex)?.attributedTitle = menuItems[oldIndex].attributedTitle
+        self.currentFile.item(at: newIndex)?.toolTip = menuItems[oldIndex].toolTip
       }
     }
   }
-  
-  
-  
   
   /// Observer function to handle the "sort order" changes that are made
   /// during changes in the preferences dialog
@@ -355,31 +490,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       setPrevNextButtonState(filelistIndex)
       changeFile(filelistIndex)
     }
-    
   }
   
-  /// Observer function to handle the "general" changes that are made
-  /// during changes in the preferences dialog
+  /// Observer function to handle the "General Preferences" changes that are made
+  /// and saved during changes in the preferences dialog
   
   func generalChange(_ notification: Notification)
   {
     // get the changed general settings and update the gui to match
     self.generalPrefs = preferences.generalPreference()
-    // now update the GUI
-//    if (filelist.count > 0) {
-//      // save current item
-//      let savedDiskURL = filelist[filelistIndex]
-//      
-//      sortNames()
-//      
-//      filelistIndex = filelist.indexOf(savedDiskURL)!
-//      
-//      self.currentFile.removeAllItems()
-//      self.currentFile.addItemsWithTitles(namelist)
-//      setPrevNextButtonState(filelistIndex)
-//      changeFile(filelistIndex)
-//    }
-    
   }
   
   /// Observer function that responds to the selection of
@@ -388,35 +507,38 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func fileToOpenChange(_ notification: Notification)
   {
     let filename = notification.object as! String
-    if (appendSingleFileToListAndSelect(filename))
+    if (!appendSingleFileToListAndSelect(filename))
     {
-      print("failed")
+      let message = String.localizedStringWithFormat( StringsCuts.FAILED_TRYING_TO_ACCESS, filename)
+      self.statusField.stringValue = message
     }
   }
   
   /// Query the PVR (or directory) for a recursive count of the files with xxx extension.
   /// Written to do a external shell query and then process the resulting message
   /// eg. countFilesWithSuffix(".ts", "/hdd/media/movie")
-  /// Written to support sizing of progress bar for background tasks
+  /// Used to support sizing of progress bar for background tasks.
   /// If remote query fails for any reason, function returns default value of 100
+  /// - parameter fileSuffix: tail of file name, eg .ts, .ts.cuts, etc
+  /// - parameter belowPath: root of path to recursively search
   
   func countFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> Int
   {
-    var fileCount = 100
+    let defaultCount = 100   // use 100 as a dummy value 100% setting
     var searchPath: String
     // use a task to get a count of the files in the directory
     // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
     // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-    // CLI specifics are for Enigma2 BusyBox
+    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
     let fileCountTask = Process()
     let outPipe = Pipe()
-    if (belowPath.contains("Harddisk")) {
-      searchPath = belowPath.replacingOccurrences(of: "/Volumes/Harddisk", with: "/media/hdd")
-      fileCountTask.launchPath = "/usr/bin/ssh"
-      fileCountTask.arguments = ["root@beyonwizt4.local", "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
+    if (belowPath.contains(generalPrefs.cutLocalMountRoot)) {
+      searchPath = belowPath.replacingOccurrences(of: generalPrefs.cutLocalMountRoot, with: generalPrefs.cutRemoteExport)
+      fileCountTask.launchPath = systemSetup.sshPath
+      fileCountTask.arguments = [systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
    }
     else {
-      fileCountTask.launchPath = "/bin/sh"
+      fileCountTask.launchPath = systemSetup.shPath
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
       searchPath = belowPath
     }
@@ -426,11 +548,147 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let data = handle.readDataToEndOfFile()
     if let resultString = String(data: data, encoding: String.Encoding.utf8)
     {
-      // trim to just the text
+      // trim to just the text and try converting to a number
       let digitString = resultString.trimmingCharacters(in: CharacterSet(charactersIn: " \n"))
-      fileCount = Int(digitString)!
+      if let fileCount = Int(digitString) {
+        return fileCount
+      }
+      else {
+        let message = String.localizedStringWithFormat(StringsCuts.FAILED_COUNTING_FILES, digitString)
+        self.statusField.stringValue = message
+      }
     }
-    return fileCount
+    return defaultCount
+  }
+  
+//  /// Query the PVR (or directory) for a list of the files with .xxx extension.
+//  /// Written to do a external shell query and then process the resulting message
+//  /// eg. countFilesWithSuffix(".ts", "/hdd/media/movie")
+//  /// - parameter fileSuffix: tail to match including  leading "."
+//  /// - parameter belowPath: absolute root path to start from 
+//  /// - returns: array of filename strings in URL format
+//  
+//  func getListOfFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> [String]?
+//  {
+//    var searchPath: String
+//    
+//    // use a task to get a count of the files in the directory
+//    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
+//    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
+//    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
+//    let fileCountTask = Process()
+//    let outPipe = Pipe()
+//    if (belowPath.contains(generalPrefs.cutLocalMountRoot)) {
+//      searchPath = belowPath.replacingOccurrences(of: generalPrefs.cutLocalMountRoot, with: generalPrefs.cutRemoteExport)
+//      fileCountTask.launchPath = systemSetup.sshPath
+//      fileCountTask.arguments = [systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | grep -v \\.Trash"]
+//    }
+//    else {
+//      fileCountTask.launchPath = systemSetup.shPath
+//      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(fileSuffix)$\""]
+//      searchPath = belowPath
+//    }
+//    fileCountTask.standardOutput = outPipe
+//    fileCountTask.launch()
+//    let handle = outPipe.fileHandleForReading
+//    let data = handle.readDataToEndOfFile()
+//    
+//    if let resultString = String(data: data, encoding: String.Encoding.utf8)
+//    {
+//      // build array from string result
+//      let trimmedString = resultString.trimmingCharacters(in: CharacterSet(charactersIn:" \n"))
+//      if (trimmedString.isEmpty ) {
+//        return nil
+//      }
+//      else {
+//        let fileNameArray = trimmedString.components(separatedBy: "\n")
+////        var reducedFileNameArray = fileNameArray.filter({!$0.contains(".Trash")})
+//        // typicall replace the /hdd/media with /Volumes/Harddisk for local handling
+//        let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: generalPrefs.cutRemoteExport, with: generalPrefs.cutLocalMountRoot)})
+//        let URLStringArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
+//        return URLStringArray
+//      }
+//    }
+//    return nil
+//  }
+  
+  
+  func makeSearchTaskFor(filesWithSuffix: String,  belowPath: String) -> Process
+  {
+    // use a task to get a count of the files in the directory
+    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
+    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
+    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
+    var searchPath: String
+    let fileCountTask = Process()
+    fileCountTask.standardOutput = Pipe()
+    if (belowPath.contains(self.generalPrefs.cutLocalMountRoot)) {
+      searchPath = belowPath.replacingOccurrences(of: self.generalPrefs.cutLocalMountRoot, with: self.generalPrefs.cutRemoteExport)
+      fileCountTask.launchPath = self.systemSetup.sshPath
+      fileCountTask.arguments = [self.systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
+    }
+    else {
+      fileCountTask.launchPath = self.systemSetup.shPath
+      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
+      searchPath = belowPath
+    }
+    return fileCountTask
+  }
+  
+  /// Background a potentially slow task.
+  /// Query the PVR (or directory) for a list of the files with .xxx extension.
+  /// Written to do a external shell query and then process the resulting message
+  /// eg. backgroundGetListOfFiles(withSuffix: ".ts", belowPath: "/hdd/media/movie")
+  /// - parameter fileSuffix: tail to match including  leading "."
+  /// - parameter belowPath: absolute root path to start from
+  
+  func backgroundGetListOfFiles(withSuffix: String, belowPath: String)
+  {
+    
+    let userQueue = DispatchQueue.global(qos: .userInitiated)
+    
+    let fileCountTask = makeSearchTaskFor(filesWithSuffix: withSuffix, belowPath: belowPath)
+    userQueue.async(execute: { [unowned self] in
+    // use a task to get a count of the files in the directory
+    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
+    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
+    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
+    fileCountTask.launch()
+    let handle = (fileCountTask.standardOutput as! Pipe).fileHandleForReading
+    let data = handle.readDataToEndOfFile()
+    var builtURLArray: [String]?
+    if let resultString = String(data: data, encoding: String.Encoding.utf8)
+    {
+      // build array from string result
+      let trimmedString = resultString.trimmingCharacters(in: CharacterSet(charactersIn:" \n"))
+      if (!trimmedString.isEmpty ) {
+        let fileNameArray = trimmedString.components(separatedBy: "\n")
+        //  var reducedFileNameArray = fileNameArray.filter({!$0.contains(".Trash")})
+        // typically replace the /hdd/media with /Volumes/Harddisk for local handling
+        let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: self.generalPrefs.cutRemoteExport, with: self.generalPrefs.cutLocalMountRoot)})
+        builtURLArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
+        // 
+        // All done dispatch results back to application
+        //
+        DispatchQueue.main.async(execute:  {
+          if (!self.fileSearchCancelled) {
+            if (builtURLArray != nil ) {
+              self.filelist = builtURLArray!
+            }
+            else {
+              // post a nothing found message
+              self.statusField.stringValue = "No files found with suffix \(withSuffix)"
+            }
+            self.listingOfFilesFinished()
+          } else {
+            self.fileSearchCancelled = false
+            self.selectDirectory.isEnabled = true
+            self.statusField.stringValue = "Search Terminated"
+          }
+          })
+      }
+    }
+    } )
   }
   
   /// Observer function that responds to a mouseDown event on the
@@ -460,11 +718,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Flush any pending changes back to the file system if
   /// there are any at index given
   
-  func flushPendingChangesForFileIndex(_ index: Int)
+  func flushPendingChangesForFileIndex(_ indexSelector: FileToHandle) -> Bool
   {
+    let index = (indexSelector == FileToHandle.current) ? filelistIndex : lastfileIndex
     var proceedWithWrite = true
-    if (cutsModified) {
-      if (!generalPrefs.autoWrite) {
+    let validCuts = self.cuts.validateInOut()
+    guard (validCuts.result) else {
+      self.statusField.stringValue = validCuts.errorMessage
+      return false
+    }
+    if (cutsModified ) {
+      if (generalPrefs.autoWrite == CheckMarkState.unchecked) {
         // pop up a modal dialog to confirm overwrite of cuts file
         let overWriteDialog = NSAlert()
         overWriteDialog.alertStyle = NSAlertStyle.critical
@@ -479,61 +743,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         proceedWithWrite = result == NSAlertFirstButtonReturn
       }
       
+      // autowrite is enabled, so just get on with it
       if (proceedWithWrite) {
         // rewrite cuts file
         let (fileMgr, found, fullFileName) = getFileManagerForFile(filelist[index])
         if (found) {
           self.cuts.saveCutsToFile(fullFileName, using: fileMgr)
           setDropDownColourForIndex(index)
-          cutsModified = false
         }
         else {
           self.statusField.stringValue = StringsCuts.FILE_SAVE_FAILED
-          return
+          return true
         }
       }
     }
+    return true
   }
-  
-  
-//  /// Flush any pending changes back to the file system if
-//  /// there are any.
-//  
-//  func flushPendingChanges()
-//  {
-//    var proceedWithWrite = true
-//    if (cutsModified) {
-//      if (!generalPrefs.autoWrite) {
-//        // pop up a modal dialog to confirm overwrite of cuts file
-//        let overWriteDialog = NSAlert()
-//        overWriteDialog.alertStyle = NSAlertStyle.CriticalAlertStyle
-//        overWriteDialog.informativeText = "Will overwrite the \(ConstsCuts.CUTS_SUFFIX) file"
-//        overWriteDialog.window.title = "Save File"
-//        let programname = self.currentFile.itemAtIndex(lastfileIndex)!.title.stringByReplacingOccurrencesOfString(ConstsCuts.CUTS_SUFFIX, withString: "")
-//        overWriteDialog.messageText = "OK to overwrite file \n\(programname)"
-//        overWriteDialog.addButtonWithTitle("OK")
-//        overWriteDialog.addButtonWithTitle("Cancel")
-//        
-//        let result = overWriteDialog.runModal()
-//        proceedWithWrite = result == NSAlertFirstButtonReturn
-//      }
-//      
-//      if (proceedWithWrite) {
-//        // rewrite cuts file
-//        let (fileMgr, found, fullFileName) = getFileManagerForFile(filelist[lastfileIndex])
-//        if (found) {
-//          self.cuts.saveCutsToFile(fullFileName, using: fileMgr)
-//          setDropDownColourForIndex(lastfileIndex)
-//          cutsModified = false
-//        }
-//        else {
-//          self.statusField.stringValue = StringsCuts.FILE_SAVE_FAILED
-//          return
-//        }
-//      }
-//    }
-//  }
-  
   
   /// Change the selected file to
   /// the one corrensponding to the given index.  Open the
@@ -541,11 +766,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// and update the GUI to match
   /// - parameter arrayIndex: index in to the array of recording file URLs
   ///
-  func changeFile(_ arrayIndex: Int)
+  func changeFile(_ toIndex: Int)
   {
     var startTime : CMTime
     
-    flushPendingChangesForFileIndex(lastfileIndex)
+    guard flushPendingChangesForFileIndex(.previous) else
+    {
+      // ensure that picker list is not changed
+      // capture and restore error message
+      let flushMessage = self.statusField.stringValue
+      currentFile.selectItem(at: lastfileIndex)
+      currentFile.toolTip = currentFile.selectedItem?.toolTip
+      self.statusField.stringValue = flushMessage
+      return
+    }
 
     //  clean out the GUI and context for the next file
     self.monitorView.player?.cancelPendingPrerolls()
@@ -555,21 +789,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     setStatusFieldToCurrentSelection()
     videoDurationFromPlayer = 0.0
    
+    currentFile.toolTip = currentFile.selectedItem?.toolTip
     let actualFileName = filelist[filelistIndex].components(separatedBy: CharacterSet(charactersIn: "/")).last
-//    fileWorkingName = actualFileName!.stringByRemovingPercentEncoding()
     fileWorkingName = actualFileName!.removingPercentEncoding!
     let baseName = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
     
-    let cutsData = loadRawDataFromFile(filelist[filelistIndex])
+    let cutsData = loadRawDataFrom(file: filelist[filelistIndex])
     if cutsData != nil {
       cuts = CutsFile(data: cutsData!)
       if (debug) { cuts.printCutsData() }
       self.cutsTable.reloadData()
       
       // select begining of file or earliest bookmark if just a few
-      if (cuts.cutsArray.count>0 && cuts.cutsArray.count<=3)
+      if (cuts.count>0 && cuts.count<=3)
       {
-        let startPTS = Int64(cuts.cutsArray.first!.cutPts)
+        let startPTS = Int64(cuts.first!.cutPts)
         startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
       }
       else {
@@ -578,33 +812,36 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       // process eit file
       let EitName = baseName+ConstsCuts.EIT_SUFFIX
-      let EITData = loadRawDataFromFile(EitName)
-      if (EITData != nil) {
+      let EITData = loadRawDataFrom(file: EitName)
+      if (EITData != nil ) {
         eit=EITInfo(data: EITData!)
         if (debug) { print(eit.description()) }
-        
-        let metaFilename = baseName+ConstsCuts.META_SUFFIX
-        
-        metadata = MetaData(fromFilename: URL(string: metaFilename)!)
-        
-        // load the ap file
-        let apName = URL(string: filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))!
-        accessPointData = AccessPoints(fullpath: apName)
-
-        if (debug) { print(metadata.description()) }
-        programTitle.stringValue = eit.programNameText()
-        epsiodeTitle.stringValue = eit.episodeText()
-        programDescription.string = eit.descriptionText()
-        // if description is empty, replicate title in description field
-        // some eit entries fail to give a title and put the description
-        // in the notional episode title descriptor
-        if programDescription.string!.isEmpty
-        {
-          programDescription.string = eit.episodeText()
-        }
-        let TSName = baseName+ConstsCuts.TS_SUFFIX
-        setupAVPlayerFor(TSName, startTime: startTime)
       }
+      else {
+        eit = EITInfo()
+      }
+      programTitle.stringValue = eit.programNameText()
+      epsiodeTitle.stringValue = eit.episodeText()
+      programDescription.string = eit.descriptionText()
+      
+      let metaFilename = baseName+ConstsCuts.META_SUFFIX
+      
+      metadata = MetaData(fromFilename: URL(string: metaFilename)!)
+      
+      // load the ap file
+      let apName = URL(string: filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))!
+      accessPointData = AccessPoints(fullpath: apName)
+
+      if (debug) { print(metadata.description()) }
+      // if description is empty, replicate title in description field
+      // some eit entries fail to give a title and put the description
+      // in the notional episode title descriptor
+      if programDescription.string!.isEmpty
+      {
+        programDescription.string = eit.episodeText()
+      }
+      let TSName = baseName+ConstsCuts.TS_SUFFIX
+      setupAVPlayerFor(TSName, startTime: startTime)
       // found a loaded a file, update the recent file menu
       let name = baseName+ConstsCuts.CUTS_SUFFIX
       let fileURL = URL(string: name)!
@@ -644,10 +881,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       let adjustment = direction == .NEXT ? 1 : -1
       lastfileIndex = filelistIndex
+//      print("filelistIndex is now \(filelistIndex)")
       currentFile.selectItem(at: lastfileIndex+adjustment)
-      print("filelistIndex is now \(filelistIndex)")
-      setPrevNextButtonState(filelistIndex)
       changeFile(filelistIndex)
+      // check sucess of change file, filelistIndex reset to last file on failure
+      if (lastfileIndex != filelistIndex)
+      { // success
+        setPrevNextButtonState(filelistIndex)
+      }
+      else {
+        // failed, put picker has been put back
+        setPrevNextButtonState(filelistIndex)
+      }
     }
   }
   
@@ -660,95 +905,52 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   
+  /// with thanks for a shortcut to
+  /// http://stackoverflow.com/questions/28362472/is-there-a-simple-input-box-in-cocoa
+  ///
+  func getString(title: String, question: String, defaultValue: String) -> String {
+    let msg = NSAlert()
+    msg.addButton(withTitle: "OK")      // 1st button
+    msg.addButton(withTitle: "Cancel")  // 2nd button
+    msg.messageText = title
+    msg.informativeText = question
+    
+    let txt = NSTextField(frame: NSRect(x: 0, y: 0, width: 400, height: 24))
+    txt.stringValue = defaultValue
+    
+    msg.accessoryView = txt
+    let response: NSModalResponse = msg.runModal()
+    
+    if (response == NSAlertFirstButtonReturn) {
+      return txt.stringValue
+    } else {
+      return ""
+    }
+  }
   
-  /// perform a live "while you wait" cut.  Based on contents of Advanced
-  /// preferences dialog
-  
-  // FIXME: post please wait + local | remote message
   // FIXME: disable all buttons except cancel?
   // FIXME: close all files and clear dialogs - set model to nil?
   
   @IBAction func cutButton(_ sender: NSButton)
   {
-    var targetPathName: String
-    let global_mcut_errors = ["The movie \"%@\" is successfully cut",
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Bad arguments"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ts file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .cuts file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ap file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ts file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .cuts file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ap file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Empty .ap file"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("No cuts specified"),
-                          ("Cutting failed for movie \"%@\"")+":\n"+("Read/write error (disk full?)"),
-                          ("Cutting was aborted for movie \"%@\"")]
-    var mcutCommand: String
-    
-    let cutTask = Process()
-    let outPipe = Pipe()
-    flushPendingChangesForFileIndex(filelistIndex)
-    // FIXME: add spinner
-    // FIXME: add result report somewhere
-    // FIXME: reload file on success
-    // FIXME: configure in mcut arguments respond to user preferences
-    sender.isEnabled = false // stop double clicking and sinking the processor
-    // TODO: WHAT THE HECK
-    // spawn process to perfrom cut
-    // FIXME: mark entry as locked in some way until process completed
-    // Usage: mcut [-r] [-o output_ts_file] [-n title] [-d description] ts_file [-c start1 end1 [start2 end2] ... ]
-    let basename = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-    if let fullPathName = basename.replacingOccurrences(of: "file://",
-                                                                        with: "").removingPercentEncoding {
-      targetPathName = fullPathName
-      // decide if we are doing this locally or remotely and setup commnad line accordingly
-      if fullPathName.contains(mcutConsts.localMount) {
-        targetPathName = fullPathName.replacingOccurrences(of: mcutConsts.localMount, with: mcutConsts.remoteExportPath)
-        mcutCommand = mcutConsts.mcutProgramRemote
-        cutTask.launchPath = mcutConsts.localSshPath
-      }
-      else {  // local processing
-        mcutCommand = mcutConsts.mcutProgramLocal
-        cutTask.launchPath = mcutCommand
-      }
-      // build array of command arguments with required switches
-      // array is collapsed to single string for remote or passed on as array of args to local command
-      var mcutCommandArgs = [String]()
-      if (generalPrefs.cutReplace == NSOnState) {
-         mcutCommandArgs.append(mcutConsts.replaceSwitch)
-      }
-      if (cutTask.launchPath == mcutConsts.mcutProgramLocal)
-      {
-        mcutCommandArgs.append("\(targetPathName)")
-        cutTask.arguments = mcutCommandArgs
-      }
-      else {
-        mcutCommandArgs.insert(mcutConsts.mcutProgramRemote, at: 0)
-        mcutCommandArgs.append("\"\(targetPathName)\"")
-        cutTask.arguments = [mcutConsts.remoteLogin, mcutCommandArgs.joined(separator: " ")]
-      }
-      if (debug) {
-        print("Sending lauch >\(cutTask.launchPath)<")
-        print("with args:< \(cutTask.arguments)>")
-      }
-      cutTask.standardOutput = outPipe
-      cutTask.launch()
-      let handle = outPipe.fileHandleForReading
-      let data = handle.readDataToEndOfFile()
-      cutTask.waitUntilExit()
-      let result = cutTask.terminationStatus
-      if let resultString = String(data: data, encoding: String.Encoding.utf8) {
-        print( resultString)
-        print("got result of \(result)")
-        let programName = targetPathName.components(separatedBy: "/").last
-        let message = String.init(format: global_mcut_errors[Int(result)], programName!)
-        print(message)
-        setDropDownColourForIndex(filelistIndex)
-        changeFile(filelistIndex)
-        self.statusField.title = message
-      }
+//    var itemTitle:String
+    // disconnect player display from the item about to be processed
+    guard flushPendingChangesForFileIndex(.current) else
+    {
+      return
     }
-    sender.isEnabled = true
+    removePlayerObserversAndItem()
+    // clear current dialog entries
+    resetCurrentModel()
+    resetGUI()
+    let oldVers = true
+    if (oldVers) {  // dispatch and wait version
+      sender.isEnabled = false
+      movieCutAndWait()
+    }
+    else {  // OperationQueue Version
+      
+    }
   }
   
   /// Invokes "change program" code on action with the
@@ -762,6 +964,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       setPrevNextButtonState(indexSelected)
       changeFile(indexSelected)
+      // check if change succeeded or it has reset the selected index
+      if (indexSelected == lastfileIndex) {
+        sender.selectItem(at: indexSelected)
+      }
+      currentFile.toolTip = currentFile.selectedItem?.toolTip
     }
     mouseDownPopUpIndex = nil
   }
@@ -772,9 +979,128 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   @IBAction func findFileAction(_ sender: NSButton)
   {
-    flushPendingChangesForFileIndex(filelistIndex)
+    guard flushPendingChangesForFileIndex(.current) else
+    {
+      return
+    }
     resetSearch()
+// Verion 1 use language native file handling library functions in detached QUEUE
+    
 //    print("button label is \(sender.title)")
+//    if (sender.title == StringsCuts.SELECT_DIRECTORY)
+//    {
+//      if  let pickedPath = self.browseForFolder()
+//      {
+//        var rootPath : String
+//        rootPath = pickedPath + StringsCuts.DIRECTORY_SEPERATOR
+//        let foundRootPath = rootPath;
+//        self.progressBar.isHidden = false
+//        self.progressBar.maxValue = Double(countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath))
+//        findfilesOperationQueue(foundRootPath, fromButton: sender)
+//      }
+//      else {
+//        sender.title = StringsCuts.SELECT_DIRECTORY
+//      }
+//    }
+//    else    // user clicked on cancel search
+//    {
+//      sender.title = StringsCuts.SELECT_DIRECTORY
+//      if let runningOperations = self.finderOperationsQueue?.operations {
+//        for operation in runningOperations {
+//         operation.cancel()
+//        }
+//        if (debug) { print(runningOperations) }
+//      }
+//      actionsSetEnabled(false)
+//      self.progressBar.isHidden = true
+//    }
+//    actionsSetEnabled(false)
+    // flush any pending writes
+
+    
+// Version 2 using OS executed task rather than internal recursive traversal
+    
+//    if  let pickedPath = self.browseForFolder()
+//    {
+//      var rootPath : String
+//      rootPath = pickedPath + StringsCuts.DIRECTORY_SEPERATOR
+//      let foundRootPath = rootPath
+//      let start = clock()
+//      if let listOfURLs = getListOfFilesWithSuffix(ConstsCuts.CUTS_SUFFIX, belowPath: foundRootPath) {
+//        filelist = listOfURLs
+//        listingOfFilesFinished()
+//      }
+//      else {
+//        self.statusField.stringValue = StringsCuts.NO_PROGRAMS_FOUND
+//      }
+//      let delta = Double(clock() - start) / Double(CLOCKS_PER_SEC)
+//      print("took time \(delta) seconds")
+//    }
+    
+// Version 3 user OS excuted task on detatched queue rather than block main queue
+    
+//    if (sender.title == StringsCuts.SELECT_DIRECTORY)
+//    {
+//      if  let pickedPath = self.browseForFolder()
+//      {
+//        var rootPath : String
+//        rootPath = pickedPath + StringsCuts.DIRECTORY_SEPERATOR
+//        let foundRootPath = rootPath;
+////        self.progressBar.isHidden = false
+////        self.progressBar.maxValue = Double(countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath))
+////        findfilesOperationQueue(foundRootPath, fromButton: sender)
+//        sender.title = StringsCuts.CANCEL_SEARCH
+//        fileSearchCancelled = false
+//        backgroundGetListOfFiles(withSuffix: ConstsCuts.CUTS_SUFFIX, belowPath: foundRootPath)
+//      }
+//      else {
+//        sender.title = StringsCuts.SELECT_DIRECTORY
+//      }
+//    }
+//    else    // user clicked on cancel search
+//    {
+//      fileSearchCancelled = true
+//      sender.title = StringsCuts.SELECT_DIRECTORY
+//      actionsSetEnabled(false)
+//      sender.isEnabled = false
+//      statusField.stringValue = "Waiting on cancellation of search opertion"
+////      if let runningOperations = self.finderOperationsQueue?.operations {
+////        for operation in runningOperations {
+////         operation.cancel()
+////        }
+////        if (debug) { print(runningOperations) }
+////      }
+////      actionsSetEnabled(false)
+////      self.progressBar.isHidden = true
+//    }
+////    actionsSetEnabled(false)
+
+    // Version 4 user OS excuted task on operation QUEUE
+    
+    basestart = clock()
+    
+    let completionBlock : FindCompletionBlock = {  foundList,  forSuffix,  wasCancelled in
+      /// Call back function for each completed operation.
+      /// Can return list of files, no files and SUCCESS
+      /// or nil list and CANCELLED
+        if (!wasCancelled) {
+          if (foundList != nil ) {
+            self.filelist = foundList!
+          }
+          else {
+            // post a nothing found message
+            self.filelist.removeAll()
+            self.statusField.stringValue = "No files found with suffix \(forSuffix)"
+          }
+          self.listingOfFilesFinished()
+          self.actionsSetEnabled(true)
+        } else {
+          self.fileSearchCancelled = false
+          self.selectDirectory.isEnabled = true
+          self.statusField.stringValue = "Search Terminated"
+        }
+    }
+    
     if (sender.title == StringsCuts.SELECT_DIRECTORY)
     {
       if  let pickedPath = self.browseForFolder()
@@ -784,29 +1110,44 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let foundRootPath = rootPath;
         self.progressBar.isHidden = false
         self.progressBar.maxValue = Double(countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath))
-        findfilesOperationQueue(foundRootPath)
+        self.finderOperationsQueue = findfilesOperationQueue()
+        let findFilesOperation = FindFilesOperation(foundRootPath: foundRootPath,
+                                                    withSuffix: ConstsCuts.CUTS_SUFFIX,
+                                                    localMountPoint: generalPrefs.cutLocalMountRoot,
+                                                    remoteExportPath: generalPrefs.cutRemoteExport,
+                                                    sysConfig: systemSetup,
+                                                    completion: completionBlock)
+        self.finderOperationsQueue?.addOperation(findFilesOperation)
         sender.title = StringsCuts.CANCEL_SEARCH
+        fileSearchCancelled = false
       }
       else {
         sender.title = StringsCuts.SELECT_DIRECTORY
       }
     }
-    else    // user clicked on cancel search
+    else    // user clicked on Cancel Search
     {
+      fileSearchCancelled = true
       sender.title = StringsCuts.SELECT_DIRECTORY
-      let runningOperations = self.finderOperationsQueue.operations
-      for operation in runningOperations {
-       operation.cancel()
-      }
       actionsSetEnabled(false)
-      self.progressBar.isHidden = true
-      if (debug) { print(runningOperations) }
+      sender.isEnabled = false
+      statusField.stringValue = "Waiting on cancellation of search opertion"
+      //      if let runningOperations = self.finderOperationsQueue?.operations {
+      //        for operation in runningOperations {
+      //         operation.cancel()
+      //        }
+      //        if (debug) { print(runningOperations) }
+      //      }
+      //      actionsSetEnabled(false)
+      //      self.progressBar.isHidden = true
     }
-    actionsSetEnabled(false)
+    //    actionsSetEnabled(false)
+    
  }
   
-  // respond to configurable skip buttons
-  
+  /// respond to configured skip buttons
+  // TODO: Create the logic to handle honour skipping into Out/In sections
+  // TODO: when skipping is to be honoured
   @IBAction func seekToAction(_ sender: NSButton) {
     if let key = skipButtons(rawValue: sender.tag) {
       switch key {
@@ -829,15 +1170,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   // files on disk are unique.. therefore easy sorting
-  // names may occur in multiple directories.  We don't care
+  // Duplicate names may occur in multiple directories.  We don't care
   // where they are, we want all 'like' names brought together
   
   func pairsListNameSorter( _ s1: namePair, s2: namePair) -> Bool
   {
+    var names1, names2: String
     let names1Array = s1.programeName.components(separatedBy: kHyphen)
     let names2Array = s2.programeName.components(separatedBy: kHyphen)
-    let names1 = names1Array[2 ... names1Array.count-1].joined(separator: kHyphen)
-    let names2 = names2Array[2 ... names2Array.count-1].joined(separator: kHyphen)
+    // pick program name from expected format of "DateTime - Channel - ProgramName"
+    if (names1Array.count >= 3 && names2Array.count >= 3) { // pick name from expected
+     names1 = names1Array[2 ... names1Array.count-1].joined(separator: kHyphen)
+     names2 = names2Array[2 ... names2Array.count-1].joined(separator: kHyphen)
+    }
+    else { // not expected format use full name
+      names1 = s1.programeName
+      names2 = s2.programeName
+    }
     var greaterThan: Bool
     if sortPrefs.isAscending {
       greaterThan = names1 < names2
@@ -906,6 +1255,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     for pair in namePairs
     {
       filelist.append(pair.diskURL)
+      
+      // take care of duplication of names in different directories by appending (n) to name
       if (namelist.contains(pair.programeName)) {
         count += 1
         let secondaryName = pair.programeName + " (\(count))"
@@ -1007,6 +1358,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       self.currentFile.removeAllItems()
       self.currentFile.addItems(withTitles: namelist)
+      // add a tip of the actual file path 
+      for index in 0 ..< self.currentFile.itemArray.count {
+        let path = filelist[index].replacingOccurrences(of: "file://", with: "")
+        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding
+      }
     
   }
   
@@ -1097,14 +1453,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var thisProgramDuration = 0.0
     
     // work through the set of files
-    let cutsData = loadRawDataFromFile(filelist[index])
+    let cutsData = loadRawDataFrom(file: filelist[index])
     let metaName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.META_SUFFIX))!
     let metaData = MetaData(fromFilename: metaName)
     let eitName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.EIT_SUFFIX))!
-    let EITData = loadRawDataFromFile(eitName.path)
+    let EITData = loadRawDataFrom(file: eitName.path)
     var eitdata : EITInfo?
-    if (EITData != nil) {
+    if (EITData != nil  && (EITData?.count)! > 0) {
       eitdata=EITInfo(data: EITData!)
+    }
+    else {
+      eitdata = EITInfo()
     }
     // load the ap file
     let apName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))!
@@ -1114,7 +1473,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     if cutsData != nil {
       let thisCuts = CutsFile(data: cutsData!)
-      attributeColour = (thisCuts.cutsArray.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
+      attributeColour = (thisCuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
       
       // override if we have in/out pairs
       if ( thisCuts.containsINorOUT()) {
@@ -1167,7 +1526,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.progressBar.needsDisplay = true
     self.view.needsDisplay = true
     currentFileColouringBlock = colourCodeProgramList()
-//    setCurrentFileAttributedString()
   }
 
 //  // FIXME: Check what happens if user changes directory selection whilst this
@@ -1233,32 +1591,98 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     sortFilelist()
     setCurrentFileListColors()
     setPrevNextButtonState(filelistIndex)
+    let delta = Double(clock() - basestart) / Double(CLOCKS_PER_SEC)
+    print("overall took time \(delta) seconds")
     changeFile(filelistIndex)
   }
-  
-  func findfilesOperationQueue(_ rootPath:String)
+
+  /// Call back function for each completed operation.
+  /// Can return list of files, no files and SUCCESS
+  /// or nil list and CANCELLED
+  func findFilesOperationCompleted(foundList: [String]?, forSuffix: String, completedFully: Bool)
   {
-    let fileFinder = FileFindingOperation(foundRootPath: rootPath, finderDialog: self)
-    fileFinder.completionBlock = {
-      if fileFinder.isCancelled  {
-        return
+    if (completedFully) {
+      if (foundList != nil ) {
+        self.filelist = foundList!
       }
-      self.filelist = fileFinder.foundfiles
-      weak var weakself = self
-      DispatchQueue.main.async {
-          weakself!.listingOfFilesFinished()
-        
+      else {
+        // post a nothing found message
+        self.filelist.removeAll()
+        self.statusField.stringValue = "No files found with suffix \(forSuffix)"
       }
+      self.listingOfFilesFinished()
+    } else {
+      self.fileSearchCancelled = false
+      self.selectDirectory.isEnabled = true
+      self.statusField.stringValue = "Search Terminated"
     }
-    self.finderOperationsQueue = {
-      let queue = OperationQueue()
-      queue.name = "Search queue"
-      queue.maxConcurrentOperationCount = 1
-      return queue
-    } ()
-    finderOperationsQueue.addOperation(fileFinder)
   }
   
+  /// Create a opeation queue for file finding
+  /// - returns: the queue
+  func findfilesOperationQueue() -> OperationQueue
+  {
+    // create the queue
+    let queue = OperationQueue()
+    queue.name = "File Search queue"
+    // make it serial
+    queue.maxConcurrentOperationCount = 1
+    return queue
+  }
+
+  ///
+  
+//  func findfilesOperationQueue(_ rootPath:String, fromButton: NSButton)
+//  {
+//    let fileFinder = FileFindingOperation(foundRootPath: rootPath, finderDialog: self)
+//    fileFinder.completionBlock = {
+//      if fileFinder.isCancelled  {
+//        return
+//      }
+//      self.filelist = fileFinder.foundfiles
+//      weak var weakself = self
+//      DispatchQueue.main.async {
+////          print("Found \(fileFinder.foundfiles.count) files")
+////          print("filelist \n \(fileFinder.foundfiles) ")
+////          print("completion CallBack from fileFinder Operation instance "+#function)
+//          weakself!.listingOfFilesFinished()
+//      }
+//    }
+//    // create the queue if we have not already done so
+//    if (self.finderOperationsQueue == nil) {
+//      self.finderOperationsQueue = {
+//        let queue = OperationQueue()
+//        queue.name = "Search queue"
+//        queue.maxConcurrentOperationCount = 1
+//        return queue
+//      } ()
+//    }
+//    
+////    let secondFileFinder = FileFindingOperation(foundRootPath: "/Users/alanf/.Trash/", finderDialog: self)
+////    secondFileFinder.completionBlock = {
+////      if secondFileFinder.isCancelled  {
+////        return
+////      }
+////      self.filelist = secondFileFinder.foundfiles
+////      weak var weakself = self
+////      DispatchQueue.main.async {
+////        print("Second Found \(secondFileFinder.foundfiles.count) files")
+////        print("second filelist \n \(secondFileFinder.foundfiles) ")
+////        
+////        print("completion CallBack from  secondFileFinder Operation instance "+#function)
+////        weakself!.listingOfFilesFinished()
+////      }
+////    }
+////    finderOperationsQueue.addOperation(secondFileFinder)
+//    
+//    finderOperationsQueue?.addOperation(fileFinder)
+//    fromButton.title = StringsCuts.CANCEL_SEARCH
+//
+//  }
+//  
+  //
+  
+
 //  func findfilesGCD(rootPath:String)
 //  {
 //    weak var weakself = self
@@ -1325,6 +1749,57 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       return true
     }
   }
+
+  
+  @IBAction func trim(sender: AnyObject)
+  {
+    print("hello from Trim")
+    self.monitorView.beginTrimming(completionHandler: nil)
+  }
+  
+
+  func validateUserInterfaceItem(_ anItem: NSValidatedUserInterfaceItem) -> Bool
+  {
+//    if anItem.action == #selector("test:") {
+//      print("validating item \(anItem)")
+//      return true
+//    }
+    let theAction = anItem.action
+    if ( theAction == #selector(trim)) {
+      if (self.monitorView.canBeginTrimming) {
+        self.monitorView.beginTrimming(completionHandler: {result in
+          if result == .okButton {
+          print ("Ok trimed")
+          }
+          else {print("trim cancelled")
+          }
+        })
+      }
+    }
+    return true
+  }
+//  - (BOOL) validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)anItem
+//  {
+//  
+//  SEL theAction = [anItem action];
+//  
+//  if(theAction == @selector(trim:)) {
+//  if ([self.playerView canBeginTrimming]) {
+//  [self.playerView beginTrimmingWithCompletionHandler:^(AVPlayerViewTrimResult result) {
+//  if (result == AVPlayerViewTrimOKButton)
+//  {
+//  //                    CMTime inPoint = [AVPlayerItem reversePlaybackEndTime];
+//  }
+//  }];
+//  // handle trim result
+//  
+//  }
+//  else {
+//  return NO;
+//  }
+//  }
+//  return [super validateUserInterfaceItem:anItem];
+//  }
   
   /// set the GUI elements that are dependent on having at least one
   /// file available enabled or not
@@ -1368,6 +1843,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     statusField.stringValue = ""
     actionsSetEnabled(false)
     self.cutsTable.reloadData()
+    currentFile.toolTip = ""
   }
   
   /// Assigns the button text to each button from
@@ -1390,10 +1866,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func resetCurrentModel()
   {
-    cuts.cutsArray.removeAll()
+    cuts.removeAll()
     eit = EITInfo()
     cuts = CutsFile()
-    cutsModified = false
     wasPlaying = false
     metadata = MetaData()
   }
@@ -1426,21 +1901,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // count of found matching files
   // call back from detached operation
   
-  func findFilesFinished(_ fileIndexCount : Int, listOfFiles : [String])
-  {
-    self.selectDirectory.title = StringsCuts.SELECT_DIRECTORY
-//    print(listOfFiles)
-    self.filelist = listOfFiles
-    self.statusField.stringValue = "file count is \(fileIndexCount) ... finished"
-    self.progressBar.isHidden = true
-  }
+//  func findFilesFinished(_ fileIndexCount : Int, listOfFiles : [String])
+//  {
+//    self.selectDirectory.title = StringsCuts.SELECT_DIRECTORY
+////    print(listOfFiles)
+//    self.filelist = listOfFiles
+//    self.statusField.stringValue = "file count is \(fileIndexCount) ... finished"
+//    self.progressBar.isHidden = true
+//  }
   
   /// Select folder for processing of file
   /// - returns: full path to directory or nil
   func browseForFolder() -> String?
   {
-    // flush any pending writes
-    flushPendingChangesForFileIndex(filelistIndex)
     
     // Create the File Open Dialog class.
     let openDlg = NSOpenPanel()
@@ -1471,27 +1944,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return directory?.path
   }
   
-  func seekCompletedOK(_ isFinished:Bool)
-  {
-    if (!isFinished ) {
-      if (debug) { print("Seek Canceled") }
-    }
-    else {
-      if (debug) { print("Seek completed") }
-      if (wasPlaying) {
-        self.monitorView.player?.play()
-      }
-    }
-  }
-  
-  
   override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?)
   {
-//    let whatsIt = Mirror(reflecting: object!)
-//    print(whatsIt)
-//    for case let (label?, value) in whatsIt.children {
-//      print (label, value)
-//    }
+    let whatsIt = Mirror(reflecting: object!)
+    if (debug) { print(whatsIt) }
+    for case let (label?, value) in whatsIt.children {
+      print (label, value)
+    }
     if (debug) { print ("keypath <\(keyPath)> for  \((object as AnyObject).className)") }
     if (keyPath == "tracks") {
       if let tracks = change?[NSKeyValueChangeKey.newKey] as? [AVPlayerItemTrack] {
@@ -1531,8 +1990,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               print("metadata duration = \(metadata.duration)")
               print("eit duration = \(eit.eit.Duration)")
             }
-            let thisDuration = getBestDurationInSeconds(metadata, eit: eit, ap: accessPointData, player: self.monitorView.player)
-            self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(thisDuration)
+            programDurationInSecs = getBestDurationInSeconds(metadata, eit: eit, ap: accessPointData, player: self.monitorView.player)
+            
+            self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
 //            if (metadata.duration == "0" || metadata.duration == "")
 //            {
 //              if (eit.eit.Duration != "00:00:00.00") {
@@ -1547,7 +2007,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //            {  // meta data looks OK, use it for duration display
 //              self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(metadata.duration)!)
 //            }
-//            let startTime = (self.cuts.cutsArray.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
+//            let startTime = (self.cuts.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
             let startTime = CMTimeMake(Int64(firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -1580,7 +2040,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               print("metadata duration = \(metadata.duration)")
             }
             self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(metadata.duration)!)
-            let startTime = (self.cuts.cutsArray.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
+            let startTime = (self.cuts.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
             if (self.monitorView.player?.status == .readyToPlay)
             {
               self.monitorView.player?.seek(to: startTime, completionHandler: seekCompletedOK)
@@ -1592,9 +2052,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         if (debug) { print ("new value of player status = \(newStatus)") }
       }
-      else {
-        super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+    }
+    else if (keyPath == "rate" && object is AVPlayer)
+    {
+      if let newRate = change?[NSKeyValueChangeKey.newKey]
+      {
+        if (debug) { print ("new value of player rate = \(newRate)") }
       }
+    }
+    else {
+      super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
     }
  }
 
@@ -1607,6 +2074,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         self.monitorView.player?.currentItem?.removeObserver(self, forKeyPath: "tracks")
         self.monitorView.player?.currentItem?.removeObserver(self, forKeyPath: "status")
         self.monitorView.player?.removeObserver(self, forKeyPath: "status")
+        self.monitorView.player?.removeObserver(self, forKeyPath: "rate")
+        if let token = self.timeObserverToken {
+          self.monitorView.player?.removeTimeObserver(token)
+          self.timeObserverToken = nil
+        }
       }
     }
     self.monitorView.player = nil
@@ -1646,19 +2118,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       avItem.addObserver(self, forKeyPath: "tracks", options: NSKeyValueObservingOptions.new, context: nil)
       avItem.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
       let samplePlayer = AVPlayer(playerItem: avItem)
+      samplePlayer.addObserver(self, forKeyPath: "rate", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.isClosedCaptionDisplayEnabled = true
-      self.monitorView.showsFrameSteppingButtons = true
+      self.monitorView.controlsStyle = .floating
       self.monitorView.player = samplePlayer
       self.monitorView.showsFullScreenToggleButton = true
-      self.monitorView.showsFrameSteppingButtons = true
+      self.monitorView.showsFrameSteppingButtons = false
       self.monitorView.player?.seek(to: startTime)
+//      print("number of views under avplayerview \(self.monitorView.subviews.count)")
+      self.addPeriodicTimeObserver()
    }
     else {
       self.statusField.stringValue = "Invalid Time duration cannot work with"
     }
   }
-  
   func getFileManagerForFile( _ fullFileName : String) -> (FileManager, Bool, String)
   {
     var pathName : String
@@ -1685,23 +2159,43 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let arrayIndex = currentFile.indexOfSelectedItem
     self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
   }
-
   
-  // MARK: Player related functions
+  // MARK: - Player related functions
+  
+  func seekCompletedOK(_ isFinished:Bool)
+  {
+    if (!isFinished ) {
+      if (debug) { print("Seek Canceled") }
+    }
+    else {
+      if (debug) { print("Seek completed") }
+      if (wasPlaying) {
+        self.monitorView.player?.play()
+      }
+      suppressTimedUpdates = false
+    }
+  }
+  
+  
+  
+  /// Seek player by delta value in seconds.  Retains
+  /// current paused or playing state
   
   func seekToSkip(_ skipDurationSeconds:Double)
   {
     let pts=Int64(skipDurationSeconds*Double(CutsTimeConst.PTS_TIMESCALE))
     wasPlaying = isPlaying
-    self.monitorView.player?.pause()
+//    self.monitorView.player?.pause()
     let now = (self.monitorView.player?.currentTime())!
     let newtime = CMTimeAdd(now, CMTime(value: pts, timescale: CutsTimeConst.PTS_TIMESCALE))
     self.monitorView.player?.seek(to: newtime, completionHandler: seekCompletedOK)
-    if (wasPlaying) {
-      self.monitorView.player?.play()
-    }
+//    if (wasPlaying) {
+//      self.monitorView.player?.play()
+//    }
   }
   
+  /// Seek player to absolute cutMark position.  Retains
+  /// current paused or playing state
   func seekPlayerToCutEntry(_ entry: CutEntry?)
   {
     selectCutTableEntry(entry)
@@ -1713,8 +2207,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func seekPlayerToMark(_ seekBarPos : CutEntry)
   {
     wasPlaying = isPlaying
-    self.monitorView.player?.pause()
-    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), completionHandler: seekCompletedOK)
+    if (wasPlaying) {
+      self.monitorView.player?.pause()
+    }
+    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity, completionHandler: seekCompletedOK)
   }
   
   /// Get the video players current position as a PTS value
@@ -1728,17 +2224,247 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return UInt64((playPosition?.value)!)
   }
   
-  // MARK: TableView delegate, datasource and table related functions
+  private var timeObserverToken: Any?
+  
+  // from apple code sample
+  func addPeriodicTimeObserver() {
+    let debug = false
+    // Invoke callback every second
+    let interval = CMTime(seconds: 1.0,
+                          preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+    // Queue on which to invoke the callback
+    let mainQueue = DispatchQueue.main
+    // Add time observer - note that this may get multiple invocations for the SAME time
+    timeObserverToken =
+      self.monitorView.player?.addPeriodicTimeObserver(forInterval: interval, queue: mainQueue) {
+        [weak self] time in
+        // update player transport UI
+        // check cut markers and skips over OUT -> IN sections
+        let currentCMTime =  self?.monitorView.player?.currentTime()
+//          print("currentRate is  \(self?.monitorView.player?.rate)")
+        
+        let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
+        if (debug)  { print("Saw callback start at \(currentTime)") }
+        guard (self?.lastPeriodicCallBackTime != currentTime && self?.suppressTimedUpdates == false ) else {
+          // do nothing
+          if (debug) { print("skipping callback at \(currentTime)") }
+          if (self?.lastPeriodicCallBackTime == currentTime && debug ) {print("duplicate time")}
+          if (self?.suppressTimedUpdates == true && debug ) {print("timed updates suppressed")}
+          return
+        }
+        self?.lastPeriodicCallBackTime = currentTime
+        let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
+        self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
+        if (self?.honourOutInMarks)! {
+          if let afterAdTime = self?.cuts.programTimeAfter(currentCMTime!)
+          {
+            // ensure we seek AFTER the current time, ie don't seek backwards!!
+            if (afterAdTime.seconds > (currentCMTime?.seconds)!)
+            {
+              self?.monitorView.player?.seek(to: afterAdTime, toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity)
+            }
+            if (debug) { print("Will Skip to time \(afterAdTime.seconds)") }
+            if let (entry,index) = self?.cuts.entryBeforeTime(Double(afterAdTime.seconds))
+            {
+              if (index != self?.cutsTable.selectedRow) {  // ensure double seek does not happen
+                // due to seek occuring with row selection of table
+                let currentSuppressState = self?.suppressPlayerUpdate
+                self?.suppressPlayerUpdate = true
+                self?.selectCutTableEntry(entry)
+                self?.suppressPlayerUpdate = currentSuppressState!
+              }
+            }
+          }
+        }
+        else {
+          if let (entry,index) = self?.cuts.entryBeforeTime(Double(currentTime))
+          {
+            let cutSecs = entry.asSeconds()
+            if (debug) { print("returned cuts table index of \(index) for time \(cutSecs)") }
+            if (index != self?.cutsTable.selectedRow)
+            {
+              let currentSuppressState = self?.suppressPlayerUpdate
+              self?.suppressPlayerUpdate = true
+              self?.selectCutTableEntry(entry)
+              self?.suppressPlayerUpdate = currentSuppressState!
+            }
+          }
+          else {
+            if (debug) { print("?? failed to find entry for \(currentTime)") }
+          }
+        }
+        if (debug) { print("Saw callback end for \(currentTime)") }
+//        }
+    }
+  }
+  
+//  func sampleNavigationMarkerGroup() -> AVNavigationMarkersGroup
+//  {
+//    let group = AVNavigationMarkersGroup(title: "Announcements", timedNavigationMarkers: [
+//      timedMetaDataGroupWithTitle("Apple Watch", startTime: 90, endTime: 917),
+//      timedMetaDataGroupWithTitle("iPad Pro", startTime: 917, endTime: 1691),
+//      timedMetaDataGroupWithTitle("Apple Pencil", startTime: 1691, endTime: 3105),
+//      timedMetaDataGroupWithTitle("Apple TV", startTime: 3105, endTime: 4968),
+//      timedMetaDataGroupWithTitle("iPhone", startTime: 4968, endTime: 7328)
+//      ])
+//  }
+  
+  // MARK: - Movie Cutting functions
+  
+  /// Callback function for movie cutting Operations
+  
+  func movieCuttingFinished(_ resultMessage: String, movieAtPath: String)
+  {
+    if let movieIndex = self.filelist.index(of: movieAtPath) {
+      setDropDownColourForIndex(movieIndex)
+      changeFile(movieIndex)
+    }
+    self.statusField.title = resultMessage
+    print("Saw callback from movie cutting opeations queue")
+  }
+  
+  /// Look at user preferences and  collect the
+  /// required information interactively from the user
+  func getCutsCommandLineArgs() -> [String]
+  {
+    // string args wrapped in " for remote usage
+    // double quotes are removed for local usage
+    var args = [String]()
+    if (generalPrefs.cutReplace == CheckMarkState.checked) {
+      args.append(mcutConsts.replaceSwitch)
+    }
+    if (generalPrefs.cutDescription == CheckMarkState.checked)
+    {
+      args.append((mcutConsts.descriptionSwitch))
+      let programDescription = getString(title: "Description Entry", question: "Enter new Program Description", defaultValue: "-")
+      args.append(programDescription)
+    }
+    if (generalPrefs.cutRenamePrograme == CheckMarkState.checked)
+    {
+      args.append((mcutConsts.nameSwitch ))
+      let programName = getString(title: "Program Title", question: "Enter new Program Title", defaultValue: "-")
+      args.append(programName)
+    }
+    if (generalPrefs.cutOutputFile == CheckMarkState.checked)
+    {
+      var programFileName: String
+      args.append((mcutConsts.outputSwitch ))
+      let basename = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
+      if let fullPathName = basename.replacingOccurrences(of: "file://",
+                                                          with: "").removingPercentEncoding
+      {
+        programFileName = getString(title: "Recording File", question: "Enter new Program File", defaultValue: fullPathName)
+      }
+      else {
+        programFileName = filelist[filelistIndex]
+      }
+      args.append(programFileName)
+    }
+    systemSetup.instanceArgs = args
+    return systemSetup.instanceArgs
+  }
+  
+  /// Add to global background queue
+  
+  func cutMovieInBackground(_ pathToMovieToCut: String, title movieTitle: String, cutter: MovieCutting)
+  {
+    let mcutCommandArgs = getCutsCommandLineArgs()
+
+    DispatchQueue.global(qos: .background).async { [unowned self] in
+      print("This is run on the background queue")
+      let cuttingResult = cutter.movieCutOne(moviePath: pathToMovieToCut, commandArgs: mcutCommandArgs)
+      DispatchQueue.main.async {
+        print("This is run on the main queue, after the previous code in outer block")
+        self.statusField.stringValue = cuttingResult.message
+        self.removeFromCutToolTip(title: movieTitle)
+        // acquire index of program, incase environment has changed whilst cutting movie
+        // only change colour coding on SUCCESS
+        if let index = self.indexOfMovie(of: pathToMovieToCut) {
+            if (cuttingResult.result == 0)  {
+              self.setDropDownColourForIndex(index)
+            }
+            self.changeFile(index)
+            self.statusField.stringValue = cuttingResult.message
+            self.cutButton.isEnabled = true
+        }
+      }
+    }
+  }
+  
+  /// Create Operation for specific movie and add to Cutting Queue
+  func cutMovie(_ pathToMovieToCut:String)
+  {
+    let cutCompletionBlock : MovieCutCompletionBlock = { resultMessage, statusValue, wasCancelled in
+      if (!wasCancelled) {
+      }
+      else {
+        self.removeFromCutToolTip(title: pathToMovieToCut)
+      }
+    }
+    let movieCutter = MovieCuttingOperation(movieToBeCutPath: pathToMovieToCut, sysConfig: systemSetup, onCompletion: cutCompletionBlock)
+    cutterOperationsQueue.addOperation(movieCutter)
+  }
+  
+  /// Append string to cut toolTip button
+  func addToCutToolTip(title: String) {
+    if (cutButton.toolTip != nil) {
+      cutButton.toolTip = cutButton.toolTip! + "\n" + title
+    }
+    else {
+      cutButton.toolTip = title
+    }
+  }
+  
+  /// Remove string from toolTip button
+  /// There is  potential race condition in here but hardly seems worth the effort
+  /// to make atomic.  Detail is ensuring that both "title" or "\ntitle" are removed from the tooltip.
+
+  func removeFromCutToolTip(title: String)
+  {
+    if let currentTip = cutButton.toolTip {
+      var newTip = currentTip.replacingOccurrences(of: title, with: "")
+      newTip = newTip.replacingOccurrences(of: "\n\n", with: "\n")
+      cutButton.toolTip = (newTip == "") ? nil : newTip
+    }
+  }
+  
+  /// Method used in mainQueue callback to ensure that "current" filelist is used not
+  /// a closure "captured" version
+  func indexOfMovie(of movieURLEntry: String) -> Int?
+  {
+    return filelist.index(of: movieURLEntry)
+  }
+  /// perform a live "while you wait" cut.  Based on contents of Advanced
+  /// preferences dialog
+  func movieCutAndWait()
+  {
+    // FIXME: add spinner
+    // FIXME: adjust constraints of status field to have a maximum with and scroll
+    let movieTitle = (currentFile.selectedItem?.title)!
+    let moviePathName = filelist[filelistIndex]
+    addToCutToolTip(title: movieTitle)
+    let mcutSystem = MovieCutting.isRemote(pathName: filelist[filelistIndex]) ? "remotely" : "locally"
+    let messageString = String(format: mcutConsts.pleaseWaitMessage , MovieCutting.programTitleFrom(movieURLPath: moviePathName), mcutSystem)
+    print(messageString)
+    self.statusField.stringValue = messageString
+    actionsSetEnabled(false)
+    let movieCutter = MovieCutting(systemConfig: systemSetup, genPrefs: generalPrefs)
+    cutMovieInBackground(moviePathName, title: movieTitle, cutter: movieCutter)
+  }
+  
+  
+  // MARK: - TableView delegate, datasource and table related functions
   
   // Get the view related to selected cell and populated the data value
   func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView?
   {
     var cellContent : String
+    let cutEntry = cuts.entry(at: row)
     if tableColumn?.identifier == StringsCuts.TABLE_TIME_COLUMN
     {
-      if (self.cuts.cutsArray.count>0)
+      if (self.cuts.count>0)
       {
-       cellContent = CutEntry.timeTextFromPTS(self.cuts.cutsArray[row].cutPts)
+        cellContent = CutEntry.timeTextFromPTS((cutEntry?.cutPts)!)
       }
       else {
        cellContent = "?"
@@ -1746,12 +2472,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else if tableColumn?.identifier == StringsCuts.TABLE_TYPE_COLUMN
     {
-      if (self.cuts.cutsArray.count>0)
+      cellContent = "??"
+      if (self.cuts.count>0)
       {
-       cellContent = (MARK_TYPE(rawValue: self.cuts.cutsArray[row].cutType)?.description())!
-      }
-      else {
-        cellContent = "??"
+        if let markValue = cutEntry?.cutType, let mark = MARK_TYPE(rawValue: markValue)
+        {
+          cellContent = (mark.description())
+        }
       }
     }
     else {
@@ -1771,25 +2498,34 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func tableViewSelectionDidChange(_ notification: Notification) {
     let selectedRow = cutsTable.selectedRow
     // seek to associated cutEntry
-    guard (selectedRow>=0 && selectedRow<cuts.cutsArray.count) else
+    guard (selectedRow>=0 && selectedRow<cuts.count) else
     {
       // out of bounds, silently ignor
+      self.suppressTimedUpdates = false
       return
     }
-    let entry = cuts.cutsArray[selectedRow]
-    if (!suppressPlayerUpdate) { seekPlayerToMark(entry) }
+    if let entry = cuts.entry(at: selectedRow) {
+      
+      if (!suppressPlayerUpdate) {
+        if (debug) { print("Seeking to \(entry.asSeconds())") }
+        seekPlayerToMark(entry)
+        self.suppressTimedUpdates = false
+     }
+    }
   }
 
-// provide "swipe" function to delete rows from table
-  
+/// "swipe" action function to delete rows from table.
+/// Updates model and GUI
   func rowDelete(_ action:NSTableViewRowAction, indexPath:Int)
   {
-    self.cuts.cutsArray.remove(at: indexPath)
-    self.cutsTable.reloadData()
-    cutsModified=true
+    if let cutEntry = self.cuts.entry(at: indexPath)  {
+      _ = cuts.removeEntry(cutEntry)
+      self.cutsTable.reloadData()
+      cuttable = cuts.isCuttable
+    }
   }
   
-// register swipe actions
+/// register swipe actions
   
   func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
     if edge == NSTableRowActionEdge.trailing {
@@ -1806,11 +2542,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // try to change the color of the rowView
     var colour = NSColor.white
     // bounds checking
-    guard row >= 0 && row < self.cuts.cutsArray.count  else { return }
-    
-    if let rowType = MARK_TYPE.lookupOnRawValue(self.cuts.cutsArray[row].cutType)
+    guard row >= 0 && row < self.cuts.count  else { return }
+    if let cutEntry = cuts.entry(at: row),  let markType = MARK_TYPE(rawValue: cutEntry.cutType)
     {
-      switch rowType
+      switch markType
       {
         case MARK_TYPE.IN:
           colour = NSColor.green
@@ -1825,6 +2560,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     rowView.backgroundColor = colour.withAlphaComponent(0.75)
   }
   
+  // beware only called on mouse clicks not keyboard
+  func tableViewSelectionIsChanging(_ notification: Notification) {
+    self.suppressTimedUpdates = true
+    print("Saw tableViewSelectionIsChanging change")
+  }
+  
+  func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
+    // user clicked in table, suppress timed updates
+    self.suppressTimedUpdates = true
+    print("Saw column did Click")
+    
+  }
+  
   /// Given a valid cut entry, find it and select the row in
   /// the cuts table display.  Do nothing on a nil entry or 
   /// entry not found in array
@@ -1833,7 +2581,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func selectCutTableEntry(_ cutEntry: CutEntry?)
   {
     if (cutEntry != nil) {
-      if let indexOfEntry = self.cuts.cutsArray.index(of: cutEntry!)
+      if let indexOfEntry = self.cuts.index(of: cutEntry!)
       {
         self.cutsTable.scrollRowToVisible(indexOfEntry)
         self.cutsTable.selectRowIndexes(IndexSet(integer: indexOfEntry), byExtendingSelection: false)
@@ -1847,7 +2595,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     selectCutTableEntry(cutEntry)
   }
   
-  // MARK: Menu file handling
+  // MARK: - Menu file handling
   
   @IBAction  func openDocument(_ sender: AnyObject)
   {
@@ -1866,42 +2614,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (debug)  { print("returned name is \(fileURL)") }
       appendSingleFileURLToListAndSelect(fileURL)
     }
-
   }
   
-  /// Add bookmarks to the array at a fixed time interval.
-  /// Early simplistic implementation to caculate PTS value from first
-  /// PTS value.  Later may interogate .ap file for nearest PTS value.
-  /// Uses preference value for time interval
-  /// Note that this deliberately avoids a begin boundary bookmark
-  /// Cutting occurs on GOP boundaries and can end up with negative
-  /// bookmarks.
-  
-  func addFixedTimeBookmarks ()
-  {
-    
-    let intervalInSeconds = preferences.generalPreference().spacingModeDurationOfMarks
-    let ptsIncrement = PtsType( intervalInSeconds*Int(CutsTimeConst.PTS_TIMESCALE))
-    // get duration
-    if (firstInCutMark < lastOutCutMark)  // important for UIntXX values
-    {
-      var pts = firstInCutMark + ptsIncrement
-      suppressPlayerUpdate = true
-      while pts < lastOutCutMark
-      {
-        //        print("\(pts)  - \(offset)")
-        let cutPt = CutEntry(cutPts: pts, cutType: MARK_TYPE.BOOKMARK.rawValue)
-        addEntry(cutPt)
-        pts += ptsIncrement
-      }
-      suppressPlayerUpdate = false
-//      seekPlayerToCutEntry(cuts.cutsArray.first)
-      seekPlayerToMark(firstVideoPosition())
-    }
-  }
-  
-  // MARK: cutMark management functions
-  
+  // MARK: - cutMark management functions
+  // TODO: develop more robust bulk addition for multiple in/out pairs
+  // currently fails to create bookmarks before first in and after last out
+  // when recording is cut but with ads marked out
   @IBAction func clearBookMarks(_ send: AnyObject)
   {
     clearAllOfType(.BOOKMARK)
@@ -1912,43 +2630,47 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     clearAllOfType(.LASTPLAY)
   }
   
-  /// Clears the cutsArray of all IN and OUT marks
+  /// Clears the cuts object of all IN and OUT marks
   /// - parameter sender: typically menu Item or Button, not used
   @IBAction func clearCutMarks(_ sender: AnyObject)
   {
-    clearArrayOfTypes([.IN, .OUT])
+    clearCutsOfTypes([.IN, .OUT])
   }
   
   /// Menu item action
   
   @IBAction func add10Bookmarks(_ sender: AnyObject)
   {
+    suppressPlayerUpdate = true
     if (preferences.generalPreference().markMode == MARK_MODE.FIXED_SPACING_OF_MARKS) {
-      addFixedTimeBookmarks()
+      cuts.addFixedTimeBookmarks(interval: preferences.generalPreference().spacingModeDurationOfMarks,
+                                 firstInCutPts: firstInCutPTS,
+                                 lastOutCutPts: lastOutCutPTS)
     }
     else {
-      addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks)
+      cuts.addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks,
+                                  firstInCutPts: firstInCutPTS,
+                                  lastOutCutPts: lastOutCutPTS)
     }
-//    self.cuts.printCutsData()
-//    self.cuts.printCutsDataAsHex()
+    suppressPlayerUpdate = false
+    cutsTable.reloadData()
+    seekPlayerToMark(firstVideoPosition())
   }
   
   @IBAction func clearAllMarks(_ sender: AnyObject)
   {
-    clearArrayOfTypes([.IN, .OUT, .LASTPLAY, .BOOKMARK])
+    clearCutsOfTypes([.IN, .OUT, .LASTPLAY, .BOOKMARK])
   }
   
   func clearAllOfType(_ markType: MARK_TYPE)
   {
     suppressPlayerUpdate = true
-    for entry in self.cuts.cutsArray
-    {
-      removeEntryOfType(entry, type: markType)
-    }
+    cuts.removeEntriesOfType(markType)
+    cutsTable.reloadData()
     suppressPlayerUpdate = false
   }
   
-  func clearArrayOfTypes(_ markArray: [MARK_TYPE])
+  func clearCutsOfTypes(_ markArray: [MARK_TYPE])
   {
     suppressPlayerUpdate = true
     for mark in markArray
@@ -1959,171 +2681,88 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
   }
   
-  // 10% button action
-  @IBAction func addBookMarkSet(_ sender: AnyObject) {
-    addPercentageBookMarks()
-  }
-  
-  func addEntry(_ cutEntry: CutEntry) {
-    // check if already present
-    if (!self.cuts.cutsArray.contains(cutEntry)) {
-      self.cuts.cutsArray.append(cutEntry)
-      self.cuts.cutsArray.sort(by: <)
-      cutsModified = true
-      updateTableGUIEntry(cutEntry)
-    }
-  }
-  
-  func removeEntryOfType(_ cutEntry: CutEntry, type: MARK_TYPE)
+  /// 10% button action
+  /// parameter sender: expect NSButton, but don't care, it is unused
+  @IBAction func addBookMarkSet(_ sender: AnyObject)
   {
-    if (self.cuts.cutsArray.contains(cutEntry))
-    {
-      if (cutEntry.cutType == type.rawValue)
-      {
-        let index = self.cuts.cutsArray.index(of: cutEntry)!
-        self.cuts.cutsArray.remove(at: index)
-        self.cutsTable.reloadData()
-        cutsModified = true
-        if (cuts.cutsArray.count>0)
-        {
-          let nextIndex = (index==0) ? 0 : index-1
-          let nextEntry = cuts.cutsArray[nextIndex]
-          updateTableGUIEntry(nextEntry)
-        }
-        else {
-          updateTableGUIEntry(nil)
-        }
-      }
-    }
+    suppressPlayerUpdate = true
+    cuts.addPercentageBookMarks(firstInCutPts: firstInCutPTS, lastOutCutPts: lastOutCutPTS)
+    cutsTable.reloadData()
+    suppressPlayerUpdate = false
+    seekPlayerToMark(firstVideoPosition())
   }
   
+  /// If present, remove the matching entry from the cut list.
+  /// Update GUI on success
   func removeEntry(_ cutEntry: CutEntry)  {
-    if (self.cuts.cutsArray.contains(cutEntry))
+    if (cuts.removeEntry(cutEntry) )
     {
-      let index = self.cuts.cutsArray.index(of: cutEntry)!
-      self.cuts.cutsArray.remove(at: index)
-      self.cutsTable.reloadData()
-      self.cutsModified = true
+      cutsTable.reloadData()
+      cuttable = cuts.isCuttable
     }
   }
   
   @IBAction func addMark(sender: NSButton) {
-    let markTypeLookup = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT]
-    let mark = markTypeLookup[sender.identifier!]
+    let markType = CutsFile.marksDictionary[sender.identifier!]
     let now = self.playerPositionInPTS()
-    let bookmark = CutEntry(cutPts: now, cutType: mark!.rawValue)
-    addEntry(bookmark)
-  }
-  
-  /// readonly computed var of postion of first IN cutmark in PTS units. If no IN is present
-  /// then return 0 for begining of video
-  var firstInCutMark:UInt64 {
-    get {
-      var pts : UInt64 = 0
-      var found = false
-      var entry : CutEntry!
-      var index = 0
-      while !found && (index != cuts.cutsArray.count)
-      {
-        entry = cuts.cutsArray[index]
-        if (entry.cutType == MARK_TYPE.IN.rawValue)
-        {
-          found = true
-          pts = entry.cutPts
-        }
-        else {
-          index += 1
-        }
-      }
-      return pts
+    let mark = CutEntry(cutPts: now, cutType: markType!.rawValue)
+    cuts.addEntry(mark)
+    updateTableGUIEntry(mark)
+
+    if (markType == .IN || markType == .OUT)  {
+      cuttable = cuts.isCuttable
     }
   }
   
-  /// Readonly computed var of the position of the last OUT pts.  If no OUT is present,
-  /// then return the max of the metadata duration (which for some broadcasters
-  /// can be 0 (!)) and the video duration determined by the AVPlayer
-  
-  var lastOutCutMark: UInt64 {
-    get {
-      var pts : UInt64
-      let metaPTS : UInt64 = UInt64( metadata.duration) ?? UInt64(0)
-      // FIXME: check if first PTS is always 0??
-      let videoPTS : UInt64 = UInt64( videoDurationFromPlayer * Double(CutsTimeConst.PTS_TIMESCALE))
-      
-      if (metaPTS == UInt64(0)) {
-        pts = videoPTS
-      }
-      else {
-        pts = min(metaPTS, videoPTS)
-      }
-//      var pts : UInt64 = max(metaPTS, videoPTS)
-      for entry in cuts.cutsArray
-      {
-        if (entry.cutType == MARK_TYPE.OUT.rawValue)
-        {
-          pts = entry.cutPts
-        }
-      }
-      return pts
-    }
-  }
-  
-  /// Find the earliest position in the video.  This should be
-  /// the first IN mark, failing that, if there are <= 3 bookmarks,
-  /// use the first bookmark - most likely an unedited file.  If there
-  /// are more that 3 book marks, then use then use the initial file position
+  /// Find the earliest position in the video.  This should be;
+  /// the first IN mark not preceed by an out Mark, 
+  /// failing that, if there are <= 3 bookmarks,
+  /// use the first bookmark - most likely an unedited file.
+  /// Otherwise use then use the initial file position
   /// which may have to be fabricated if it does not exist.
-  /// Note that this has become needed since we have stopped trying to put a
-  /// "zero" position bookmark due to cutting side effects
   
   func firstVideoPosition() -> CutEntry
   {
-    if let entry = self.cuts.firstINMark() {
-      return entry
-    }
-    else
-    {
-      if self.cuts.cutsArray.count > 3 || self.cuts.cutsArray.count == 0
+    if let firstInEntry = self.cuts.firstInCutMark {
+      if (self.cuts.index(of: firstInEntry) == 0) {
+        return firstInEntry
+      }
+      else
       {
-        return CutEntry(cutPts: UInt64(0), cutType: MARK_TYPE.IN.rawValue)
-      }
-      else  {
-        return self.cuts.cutsArray.first!
+        if let firstOutEntry = self.cuts.firstOutCutMark
+        {
+          if (self.cuts.index(of: firstInEntry)! < self.cuts.index(of: firstOutEntry)!) {
+            return firstInEntry
+          }
+          else {
+            return CutEntry.InZero
+          }
+        }
       }
     }
-  }
-  
-  /// Note that this deliberately avoids a begin boundary bookmark
-  /// Cutting occurs on GOP boundaries and can end up with negative
-  /// bookmarks.
-  /// Default value give bookmarks at 10 % boundaries
-  
-  func addPercentageBookMarks(_ numberOfMarks: Int = 9)
-  {
-    var countAdded = 0
-    // get duration
-    if (firstInCutMark < lastOutCutMark)  // important for UIntXX values
+    // if there are a set of bookmarks or no bookmarks
+    if self.cuts.count > 3 || self.cuts.count == 0
     {
-      let programLength = lastOutCutMark - firstInCutMark
-      let ptsOffset = programLength / UInt64(numberOfMarks+1)
-      suppressPlayerUpdate = true
-      var ptsPosition = firstInCutMark + ptsOffset
-      while (ptsPosition < lastOutCutMark && countAdded < numberOfMarks)
-      {
-//        print("\(pts)  - \(offset)")
-        let cutPt = CutEntry(cutPts: ptsPosition, cutType: MARK_TYPE.BOOKMARK.rawValue)
-        addEntry(cutPt)
-        ptsPosition += ptsOffset
-        countAdded += 1
+      return CutEntry.InZero
+    }
+    else // >0 && <= 2 bookmarks pick the first bookmark
+    {
+      if let entry = self.cuts.first {
+        return entry
       }
-      suppressPlayerUpdate = false
-      seekPlayerToCutEntry(firstVideoPosition())
+      else { // should be technically impossible, however, belt and braces
+        return CutEntry.InZero
+      }
     }
   }
   
   // MARK: OS utility functions
   
-  func loadRawDataFromFile(_ filename:String) -> Data?
+  /// Binary data loader
+  /// - parameter filename: fully defined file path
+  /// - returns : raw arbitrary data
+  
+  func loadRawDataFrom(file filename:String) -> Data?
   {
     var data:Data?
     
@@ -2135,6 +2774,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (debug)  {
         print("Found file ")
         print("Found file of \((data?.count))! size")
+      }
+      // not interested in empty files.... may as well be missing
+      if (data?.count == 0 ) {
+        data = nil
       }
     }
     return data
@@ -2167,7 +2810,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var bestDuration: Double = 0.0
     // eventinfo table
     if let eitInfo = eit {
-      if (eitInfo.eit.Duration != "00:00:00") {
+      if (eitInfo.eit.Duration != "00:00:00" && eitInfo.eit.Duration != "") {
 //        self.programDuration.stringValue = eitInfo.eit.Duration
         let timeParts = eitInfo.eit.Duration.components(separatedBy: ":")
         eitDuration = Double(timeParts[0])!*3600.0 + Double(timeParts[1])!*60.0+Double(timeParts[2])!
@@ -2223,109 +2866,4 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     return bestDuration
   }
-  
-//  @IBAction func openPreferencePanel(sender: AnyObject) {
-//    print (#function)
-//    self.preferencePanel = CutsPreferencesController()
-//  }
-  
-//  @IBAction func preferenceSorting(sender: AnyObject) {
-//    print(#function)
-//  }
-//  
-//  @IBAction func preferenceSkips(sender: AnyObject) {
-//    print(#function)
-//  }
-  
-}
-
-
-// MARK: file search support class
-
-class FileFindingOperation: Operation
-{
-  var foundfiles = [String]()
-  let foundRootPath : String
-  let finderDialog : ViewController
-  let debug = false
-  
-  // get the passed in starting directory
-  init(foundRootPath : String, finderDialog:ViewController)
-  {
-    self.foundRootPath = foundRootPath
-    self.finderDialog = finderDialog
-  }
-  
-  override func main() {
-    let bouncingDotsMarks = [".  ",".. ","..."," ..","  ."," ..","...",".. "]
-    if (self.isCancelled) {
-//      print("was cancelled by user")
-      return
-    }
-    
-//    print("invoked operation")
-    self.finderDialog.statusField.stringValue = StringsCuts.STARTED_SEARCH
-    let dirWalker = FileManager.default.enumerator(atPath: self.foundRootPath)
-    //        self.statusField.stringValue = StringsCuts.WORKING
-    var lookedAtCount=0
-    while let file = dirWalker?.nextObject() as! String?
-    {
-      // looking for the nominal pattern /xxx/xxx/xxx/xxx/ABC_Oct.26.2014_19.40+56956.70800.tvwiz/header.tvwiz
-      // looking for the nominal pattern /xxx/xxx/xxx/xxx/*.cuts
-//      print ("returned file \(file) look for suffix"+ConstsCuts.CUTS_SUFFIX)
-      if (file.hasSuffix(ConstsCuts.CUTS_SUFFIX) && !file.contains(".Trash") )
-      {
-//        print("matched for \(file)")
-        let fullPath = "\(self.foundRootPath)\(file)"
-        let url = URL(fileURLWithPath: fullPath)
-        lookedAtCount += 1
-        let bounceIndex = lookedAtCount%bouncingDotsMarks.count
-        if (lookedAtCount % 5 == 0)
-        {
-          let stageCount = lookedAtCount%25 == 0 ? lookedAtCount : (lookedAtCount/25 * 25)
-          DispatchQueue.main.async {
-//            self.finderDialog.statusField.stringValue = "passed count is \(stageCount) \(bouncingDotsMarks[bounceIndex]) working"
-            self.finderDialog.statusField.stringValue = "Getting list of programs \(bouncingDotsMarks[bounceIndex]) working"
-            self.finderDialog.progressBar.doubleValue = Double(stageCount)
-          }
-        }
-
-        let remainder = lookedAtCount%25
-  //      print(remainder)
-        if (remainder == 0)
-        {
-          if self.isCancelled {
-//            print("in Cancelled state")
-//            print("was cancelled by user")
-            DispatchQueue.main.async {
-              self.finderDialog.statusField.stringValue = StringsCuts.CANCELLED_BY_USER
-            }
-            return
-          }
-//          let snapshot = lookedAtCount
-//          dispatch_async(dispatch_get_main_queue() ) {
-//            self.finderDialog.statusField.stringValue = "passed count is \(snapshot) \(bouncingDotsMarks[bounceIndex]) working"
-//          }
-        }
-        if (debug)
-        {
-          print("getting fullname of \(file)")
-        }
-        let fullFilename = url.absoluteString
-//        print("adding to foundfiles - \(fullFilename)")
-        self.foundfiles.append(fullFilename)
-//                          dispatch_async(dispatch_get_main_queue()) {
-//                            self.finderDialog.statusField.stringValue = "\(requiredExtension) Count is \(self.foundfiles.count) ... working"
-//                          }
-//        }
-      }
-    }
-    
-    // job done.  Send results back to caller
-    DispatchQueue.main.async {
-//      print(self.foundfiles)
-      self.finderDialog.findFilesFinished (self.foundfiles.count, listOfFiles: self.foundfiles)
-    }
-  }
-  
 }
