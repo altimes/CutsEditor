@@ -22,6 +22,19 @@ class FindFilesOperation: Operation
   var onCompletionBlock: FindCompletionBlock
   let debug = false
   
+  /// Create a operation queue for file finding
+  /// - returns: the queue
+  open static func createQueue() -> OperationQueue
+  {
+    // create the queue
+    let queue = OperationQueue()
+    queue.name = "File Search queue"
+    // make it serial
+    queue.maxConcurrentOperationCount = 1
+    return queue
+  }
+  
+  
   // get the passed in starting directory
   init(foundRootPath : String, withSuffix: String, localMountPoint: String, remoteExportPath: String, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
   {
