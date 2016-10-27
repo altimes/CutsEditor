@@ -12,9 +12,13 @@ protocol AppPreferences {
   func sortPreference() -> sortingPreferences
   func skipPreference() -> skipPreferences
   func generalPreference() -> generalPreferences
+  func videoPlayerPreference() -> videoPlayerPreferences
   func saveSortPreference(_ sortOrder: sortingPreferences)
   func saveSkipPreference(_ skips: skipPreferences)
   func saveGeneralPreference(_ general: generalPreferences)
+  func saveVideoPlayerPreference(_ videoPlayer: videoPlayerPreferences)
+  func cuttingQueue(withTitle title: String) -> CuttingQueue?
+  func cuttingQueueTable() -> [CuttingQueue]
 }
 
 struct sortStringConsts {

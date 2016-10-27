@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		B703C1591D6811F00039981A /* AccessPoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = B703C1581D6811F00039981A /* AccessPoints.swift */; };
+		B71F09E21DBB3B51000B7347 /* CuttingQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F09E11DBB3B51000B7347 /* CuttingQueue.swift */; };
+		B71F0A091DBDC227000B7347 /* QueueViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F0A081DBDC227000B7347 /* QueueViewController.swift */; };
 		B74CE7331D20F7C400EB5DC6 /* CutsEditorMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74CE7321D20F7C400EB5DC6 /* CutsEditorMenu.swift */; };
 		B74CE7351D236D8C00EB5DC6 /* PreferencesTabController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B74CE7341D236D8C00EB5DC6 /* PreferencesTabController.swift */; };
 		B7571F261D594F0E005C9E14 /* GeneralPreferencesViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7571F251D594F0E005C9E14 /* GeneralPreferencesViewController.swift */; };
@@ -52,6 +54,8 @@
 
 /* Begin PBXFileReference section */
 		B703C1581D6811F00039981A /* AccessPoints.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AccessPoints.swift; path = ../AccessPoints.swift; sourceTree = "<group>"; };
+		B71F09E11DBB3B51000B7347 /* CuttingQueue.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CuttingQueue.swift; sourceTree = "<group>"; };
+		B71F0A081DBDC227000B7347 /* QueueViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = QueueViewController.swift; sourceTree = "<group>"; };
 		B74CE7321D20F7C400EB5DC6 /* CutsEditorMenu.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsEditorMenu.swift; sourceTree = "<group>"; };
 		B74CE7341D236D8C00EB5DC6 /* PreferencesTabController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = PreferencesTabController.swift; path = ../PreferencesTabController.swift; sourceTree = "<group>"; };
 		B7571F251D594F0E005C9E14 /* GeneralPreferencesViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GeneralPreferencesViewController.swift; path = ../GeneralPreferencesViewController.swift; sourceTree = "<group>"; };
@@ -154,6 +158,8 @@
 				B7FE54D01CBB102C002407EC /* MetaData.swift */,
 				B7A9BCE51CFC130600E1DDF7 /* EitSupport.swift */,
 				B7FF4FE71D0017900078A986 /* DescriptorDecoder.swift */,
+				B71F09E11DBB3B51000B7347 /* CuttingQueue.swift */,
+				B71F0A081DBDC227000B7347 /* QueueViewController.swift */,
 			);
 			path = CutsEditor;
 			sourceTree = "<group>";
@@ -313,8 +319,10 @@
 			files = (
 				B7A9BCE61CFC130600E1DDF7 /* EitSupport.swift in Sources */,
 				B7B727ED1DA4B45900FC6EFA /* MovieCuttingOperation.swift in Sources */,
+				B71F0A091DBDC227000B7347 /* QueueViewController.swift in Sources */,
 				B7C45BF51CB0D43200DB90FD /* CutsFile.swift in Sources */,
 				B782B4B91CAF77C00046B599 /* ViewController.swift in Sources */,
+				B71F09E21DBB3B51000B7347 /* CuttingQueue.swift in Sources */,
 				B7C45BF31CB0D36B00DB90FD /* CutsData.swift in Sources */,
 				B7B5BCC31D47091B00340B9A /* TxDocument.swift in Sources */,
 				B782B4B71CAF77C00046B599 /* AppDelegate.swift in Sources */,
@@ -380,6 +388,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
@@ -426,6 +435,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;

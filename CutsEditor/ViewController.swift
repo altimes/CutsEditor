@@ -27,7 +27,7 @@ struct StringsCuts {
   static let DERIVING_PROGRAM_STATUS = "Determining Program State"
   static let COLOUR_CODING_CANCELLED = "Colour Coding Cancelled"
   static let FAILED_TRYING_TO_ACCESS = "Failed trying to access %@"
-  static let FAILED_COUNTING_FILES = "Failed counting files on BeyonWiz expected number, got <%@>"
+  static let FAILED_COUNTING_FILES = "Failed counting files expected number, got\n<%@>"
 }
 
 /// Engima file extensions and sundry constants
@@ -93,13 +93,21 @@ public struct mcutConsts {
   static let waiting = "Waiting"
   static let cutOK = "Cut OK"
   static let cutFailed = "Cut Failed"
+  
+  static let  remoteMachineAndLogin = "root@beyonwizt4.local"
+  static let sshPath = "/usr/bin/ssh"
+  static let shPath = "/bin/sh"
+  
+  static let fixedLocalName = "Local"
 }
 
 /// Notification identifiers
 let skipsDidChange = "CutsPreferenceControllerSkipsDidChange"
 let sortDidChange = "SortPreferenceControllerSortDidChange"
 let generalDidChange = "GeneralPreferencesControllerGeneralDidChange"
+let playerDidChange = "PlayerPreferencesControllerDidChange"
 let fileOpenDidChange = "FileToOpenFromMenuDidChange"
+let jobQueueDidChange = "JobQueueDidChange"
 
 /// Pair of Strings touple of diskURL and the extracted recording program name
 struct namePair {
@@ -108,7 +116,7 @@ struct namePair {
 }
 
 /// Configuration parameters for deciding colouring of
-/// list of programs in GUI
+/// list of programs in the popup button
 struct fileColourParameters {
   static let BOOKMARK_THRESHOLD_COUNT = 3        // number of bookmarks that is considered as raw file
   static let PROGRAM_LENGTH_THRESHOLD = 900.0    // 15 minute or less programs do not need cutting
@@ -132,6 +140,18 @@ struct sortingPreferences {
   var sortBy: String = ""
 }
 
+/// Mimics Cocoa
+enum videoControlStyle : Int {
+  case inLine, floating
+}
+
+/// User configuration of player controls
+struct videoPlayerPreferences {
+  var playbackControlStyle : videoControlStyle = .inLine
+  var playbackShowFastForwardControls: Bool = true // iff style is floating
+  var skipCutSections: Bool = true  // play through out/in pairs (alternate is to skip over)
+}
+
 /// User configuration enum for type of bulk entry
 enum MARK_MODE: Int {
   case FIXED_COUNT_OF_MARKS
@@ -147,19 +167,122 @@ struct generalPreferences {
   var countModeNumberOfMarks = 10         // 10 equally spaced bookmarks
   var spacingModeDurationOfMarks = 180    // 180 seconds spaced bookmarks
   // cuts application
+  var systemConfig = systemConfiguration()
+}
+
+/// per pvr preferences
+public struct pvrPreferences {
+  var title = "Beyonwiz Tx"
   var cutReplace = CheckMarkState.checked
   var cutRenamePrograme = CheckMarkState.unchecked
   var cutOutputFile = CheckMarkState.unchecked
   var cutDescription = CheckMarkState.unchecked
+  
   var cutProgramLocalPath = mcutConsts.mcutProgramLocal
   var cutProgramRemotePath = mcutConsts.mcutProgramRemote
   var cutLocalMountRoot = mcutConsts.localMount
   var cutRemoteExport = mcutConsts.remoteExportPath
-  // player related config
-//  var playbackControlStyle = AVPlayerViewControlsStyle.inline
-//  var playbackShowFastForwardControls: Bool = true // iff style is floating
-//  var playInOut: Bool = true  // play through out/in pairs (alt is to skip over)
+  var remoteMachineAndLogin = mcutConsts.remoteMachineAndLogin
+  var sshPath = mcutConsts.sshPath
+  var shPath = mcutConsts.shPath
 }
+
+// based on http://stackoverflow.com/questions/38406457/how-to-save-an-array-of-custom-struct-to-nsuserdefault-with-swift
+extension pvrPreferences {
+  init(title: String) {
+    self.title = title
+  }
+  
+  init?(data: NSData)
+  {
+    if let coding = NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? Encoding
+    {
+      title = coding.title as String
+      cutReplace = CheckMarkState(rawValue: coding.cutReplace)!
+      cutRenamePrograme = CheckMarkState(rawValue: coding.cutRenamePrograme)!
+      cutOutputFile = CheckMarkState(rawValue: coding.cutOutputFile)!
+      cutDescription = CheckMarkState(rawValue: coding.cutDescription)!
+      cutProgramLocalPath = coding.cutProgramLocalPath as String
+      cutProgramRemotePath = coding.cutProgramRemotePath as String
+      cutLocalMountRoot = coding.cutLocalMountRoot as String
+      cutRemoteExport = coding.cutRemoteExport as String
+      remoteMachineAndLogin = coding.remoteMachineAndLogin as String
+      sshPath = coding.sshPath as String
+      shPath = coding.shPath as String
+    } else {
+        return nil
+    }
+  }
+
+    func encode() -> NSData {
+        return NSKeyedArchiver.archivedData(withRootObject: Encoding(self)) as NSData
+    }
+  
+    private class Encoding: NSObject, NSCoding
+    {
+      let title : String
+        let cutReplace : Int
+        let cutRenamePrograme : Int
+        let cutOutputFile : Int
+        let cutDescription : Int
+        let cutProgramLocalPath : String
+        let cutProgramRemotePath : String
+        let cutLocalMountRoot : String
+        let cutRemoteExport : String
+        let remoteMachineAndLogin : String
+        let sshPath : String
+        let shPath : String
+
+        init(_ pvr: pvrPreferences) {
+          title = pvr.title
+          cutReplace = pvr.cutReplace.rawValue
+          cutRenamePrograme = pvr.cutRenamePrograme.rawValue
+          cutOutputFile = pvr.cutOutputFile.rawValue
+          cutDescription = pvr.cutDescription.rawValue
+          cutProgramLocalPath = pvr.cutProgramLocalPath
+          cutProgramRemotePath = pvr.cutProgramRemotePath
+          cutLocalMountRoot = pvr.cutLocalMountRoot
+          cutRemoteExport = pvr.cutRemoteExport
+          remoteMachineAndLogin = pvr.remoteMachineAndLogin
+          sshPath = pvr.sshPath
+          shPath = pvr.shPath
+        }
+
+        @objc required init?(coder aDecoder: NSCoder) {
+          guard aDecoder.containsValue(forKey: "cutReplace") else {
+            return nil
+          }
+          title = aDecoder.decodeObject(forKey: "title") as! String
+          cutReplace = aDecoder.decodeInteger(forKey: "cutReplace")
+          cutRenamePrograme = aDecoder.decodeInteger(forKey: "cutRenamePrograme")
+          cutOutputFile = aDecoder.decodeInteger(forKey: "cutOutputFile")
+          cutDescription = aDecoder.decodeInteger(forKey: "cutDescription")
+          cutProgramLocalPath = aDecoder.decodeObject(forKey: "cutProgramLocalPath") as! String
+          cutProgramRemotePath = aDecoder.decodeObject(forKey: "cutProgramRemotePath") as! String
+          cutLocalMountRoot = aDecoder.decodeObject(forKey: "cutLocalMountRoot") as! String
+          cutRemoteExport = aDecoder.decodeObject(forKey: "cutRemoteExport") as! String
+          remoteMachineAndLogin = aDecoder.decodeObject(forKey: "remoteMachineAndLogin") as! String
+          sshPath = aDecoder.decodeObject(forKey: "sshPath") as! String
+          shPath = aDecoder.decodeObject(forKey: "shPath") as! String
+        }
+
+      @objc func encode(with aCoder: NSCoder) {
+        aCoder.encode(title, forKey: "title")
+        aCoder.encode(cutReplace, forKey: "cutReplace")
+        aCoder.encode(cutRenamePrograme, forKey: "cutRenamePrograme")
+        aCoder.encode(cutOutputFile, forKey: "cutOutputFile")
+        aCoder.encode(cutDescription, forKey: "cutDescription")
+        aCoder.encode(cutProgramLocalPath, forKey: "cutProgramLocalPath")
+        aCoder.encode(cutProgramRemotePath, forKey: "cutProgramRemotePath")
+        aCoder.encode(cutLocalMountRoot, forKey: "cutLocalMountRoot")
+        aCoder.encode(cutRemoteExport, forKey: "cutRemoteExport")
+        aCoder.encode(remoteMachineAndLogin, forKey: "remoteMachineAndLogin")
+        aCoder.encode(sshPath, forKey: "sshPath")
+        aCoder.encode(shPath, forKey: "shPath")
+        }
+    }
+}
+
 
 /// Property that contains the user preferences for /// the skip buttons.  Organized to mirror screen representation
 /// of two columns (rhs/lhs) of 5 buttons
@@ -182,20 +305,21 @@ struct skipPreferences {
 }
 
 /// Configuration of users system and path to sh and ssh
-/// FIXME: add to prefernces panel
+/// FIXME: add to preferences panel
 public struct systemConfiguration {
-  var remoteManchineAndLogin = "root@beyonwizt4.local"
-  var sshPath = "/usr/bin/ssh"
-  var shPath = "/bin/sh"
+  var pvrSettings = [pvrPreferences(title:mcutConsts.fixedLocalName),pvrPreferences(title:"Beyonwiz T4"),pvrPreferences(title: "Beyonwiz T2")]
+  
   /// args for the external "cutter" program
-  var instanceArgs = [String]()
+  var mcutCommandArgs = [String]()
 }
 
 typealias FindCompletionBlock = ( _ URLArray:[String]?,  _ forSuffix: String,  _ didCompleteOK:Bool) -> ()
 typealias MovieCutCompletionBlock  = (_ message: String, _ resultValue: Int, _ wasCancelled: Bool) -> ()
 typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 
-class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
+class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource
+{
+//  class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
   
   @IBOutlet weak var previousButton: NSButton!
   @IBOutlet weak var nextButton: NSButton!
@@ -232,25 +356,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // MARK: model
   
   let debug = false
-  var basestart : clock_t = 0
   var startDate = Date()
   var fileSearchCancelled = false
   var filelist: [String] = []
   var namelist: [String] = []
   var filelistIndex : Int {
     set {
-      setStatusFieldToCurrentSelection()
+      // bounds check before trying to change selection
+      if (filelist.count > 0 && newValue >= 0 && newValue < filelist.count) {
+        setStatusFieldToCurrentSelection()
+        currentFile.selectItem(at: filelistIndex)
+      }
     }
     get {
       return self.currentFile.indexOfSelectedItem
     }
   }
   
-  /// list of files in the cutting queue.
-  /// Moved from the presented list into this array when added to the cutting queue
-  /// moved from here into the presented list when cutting completes
-  var cuttingList : [String] = []
-  
+//  /// list of files in the cutting queue.
+//  /// Moved from the presented list into this array when added to the cutting queue
+//  /// moved from here into the presented list when cutting completes
+//  var cuttingList : [String] = []
+//  
   /// flag if cuts list is coherent, enable CUT button if it is
   var cuttable : Bool {
     set {
@@ -263,6 +390,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// Index into the GUI popup captured during the last MouseDownEvent
   var mouseDownPopUpIndex : Int?
+  
+  /// Current PVR being used for source and for cutting
+  var pvrIndex = 0
+  var isRemote = false
   
   var lastfileIndex : Int = 0
   var fileWorkingName : String = ""
@@ -323,13 +454,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var preferences = NSApplication.shared().delegate as! AppPreferences
   
   var finderOperationsQueue : OperationQueue?
-  var cutterOperationsQueue = { () -> OperationQueue in
-    let queue = OperationQueue()
-    queue.name = "Movie Cutting Queue"
-    queue.maxConcurrentOperationCount = 1
-    return queue
-  } ()
-  
+  var localCutterOperationsQueue = CuttingQueue.localQueue()
   var systemSetup = systemConfiguration()
 
   var currentFileColouringBlock : BlockOperation?
@@ -346,6 +471,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var skips = skipPreferences()
   var sortPrefs = sortingPreferences()
   var generalPrefs = generalPreferences()
+  var playerPrefs = videoPlayerPreferences()
   
   /// Controls if avPlayer is dynamically synced to current cut position selection.
   /// This should action should be suppressed during bulk operations.  If not, then
@@ -369,10 +495,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   var cuttingInQueue = ""
   
+//  var cutterQueues = [OperationQueue]()
+  
   override func viewDidLoad() {
     super.viewDidLoad()
     
     // Do any additional setup after loading the view.
+//    UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
+//    UserDefaults.standard.synchronize()
     
     previousButton.isEnabled = false
     nextButton.isEnabled = false
@@ -388,16 +518,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     skips = preferences.skipPreference()
     sortPrefs = preferences.sortPreference()
     generalPrefs = preferences.generalPreference()
+    systemSetup = generalPrefs.systemConfig
+    playerPrefs = preferences.videoPlayerPreference()
     
     NotificationCenter.default.addObserver(self, selector: #selector(skipsChange(_:)), name: NSNotification.Name(rawValue: skipsDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sortChange(_:)), name: NSNotification.Name(rawValue: sortDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(generalChange(_:)), name: NSNotification.Name(rawValue: generalDidChange), object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(playerChange(_:)), name: NSNotification.Name(rawValue: playerDidChange), object: nil )
     
     NotificationCenter.default.addObserver(self, selector: #selector(fileToOpenChange(_:)), name: NSNotification.Name(rawValue: fileOpenDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(fileSelectPopUpChange(_:)), name: NSNotification.Name.NSPopUpButtonWillPopUp, object: nil )
     
     self.progressBar.controlTint = NSControlTint.clearControlTint
-    self.view.window?.title = "CutsEditor"
+    self.view.window?.title = "CutListEditor"
     
 //    reconstructScAp.do_movie("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts")
 //    reconstructScAp.readFFMeta("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts.ap")
@@ -416,6 +549,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   
   override func viewWillDisappear() {
+    super.viewWillDisappear()
     NotificationCenter.default.removeObserver(self)
   }
   
@@ -511,6 +645,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     // get the changed general settings and update the gui to match
     self.generalPrefs = preferences.generalPreference()
+    self.systemSetup = self.generalPrefs.systemConfig
+  }
+  
+  /// Observer function to handle the "Player Config Preferences" changes that are made
+  /// and saved during changes in the preferences dialog
+  
+  func playerChange(_ notification: Notification)
+  {
+    // get the changed general settings and update the gui to match
+    self.playerPrefs = preferences.videoPlayerPreference()
+    self.monitorView.controlsStyle = playerPrefs.playbackControlStyle == videoControlStyle.inLine ? AVPlayerViewControlsStyle.inline : AVPlayerViewControlsStyle.floating
+    self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
+    self.honourOutInMarks = playerPrefs.skipCutSections
   }
   
   /// Observer function that responds to the selection of
@@ -534,9 +681,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// - parameter fileSuffix: tail of file name, eg .ts, .ts.cuts, etc
   /// - parameter belowPath: root of path to recursively search
   
-  func countFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> Int
+  func countFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> Int?
   {
-    let defaultCount = 100   // use 100 as a dummy value 100% setting
+    let defaultCount: Int? = nil
     var searchPath: String
     // use a task to get a count of the files in the directory
     // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
@@ -544,17 +691,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
     let fileCountTask = Process()
     let outPipe = Pipe()
-    if (belowPath.contains(generalPrefs.cutLocalMountRoot)) {
-      searchPath = belowPath.replacingOccurrences(of: generalPrefs.cutLocalMountRoot, with: generalPrefs.cutRemoteExport)
-      fileCountTask.launchPath = systemSetup.sshPath
-      fileCountTask.arguments = [systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
+    let localMountRoot = isRemote ? generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot : mcutConsts.localMount
+    if (belowPath.contains(localMountRoot) && isRemote) {
+      searchPath = belowPath.replacingOccurrences(of: generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot, with: generalPrefs.systemConfig.pvrSettings[pvrIndex].cutRemoteExport)
+      fileCountTask.launchPath = systemSetup.pvrSettings[pvrIndex].sshPath
+      fileCountTask.arguments = [systemSetup.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
    }
     else {
-      fileCountTask.launchPath = systemSetup.shPath
+      // TODO: look at putting this where the user can change it
+      fileCountTask.launchPath = mcutConsts.shPath
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
       searchPath = belowPath
     }
     fileCountTask.standardOutput = outPipe
+    fileCountTask.standardError = outPipe
     fileCountTask.launch()
     let handle = outPipe.fileHandleForReading
     let data = handle.readDataToEndOfFile()
@@ -624,29 +774,30 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //    return nil
 //  }
   
-  
-  func makeSearchTaskFor(filesWithSuffix: String,  belowPath: String) -> Process
-  {
-    // use a task to get a count of the files in the directory
-    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
-    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-    var searchPath: String
-    let fileCountTask = Process()
-    fileCountTask.standardOutput = Pipe()
-    if (belowPath.contains(self.generalPrefs.cutLocalMountRoot)) {
-      searchPath = belowPath.replacingOccurrences(of: self.generalPrefs.cutLocalMountRoot, with: self.generalPrefs.cutRemoteExport)
-      fileCountTask.launchPath = self.systemSetup.sshPath
-      fileCountTask.arguments = [self.systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
-    }
-    else {
-      fileCountTask.launchPath = self.systemSetup.shPath
-      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
-      searchPath = belowPath
-    }
-    return fileCountTask
-  }
-  
+//  // TODO: ensure that this can work with mulitple PVRs
+//  
+//  func makeSearchTaskFor(filesWithSuffix: String,  belowPath: String) -> Process
+//  {
+//    // use a task to get a count of the files in the directory
+//    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
+//    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
+//    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
+//    var searchPath: String
+//    let fileCountTask = Process()
+//    fileCountTask.standardOutput = Pipe()
+//    if (belowPath.contains(self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot)) {
+//      searchPath = belowPath.replacingOccurrences(of: self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot, with: self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutRemoteExport)
+//      fileCountTask.launchPath = self.systemSetup.pvrSettings[pvrIndex].sshPath
+//      fileCountTask.arguments = [self.systemSetup.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
+//    }
+//    else {
+//      fileCountTask.launchPath = self.systemSetup.pvrSettings[pvrIndex].shPath
+//      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
+//      searchPath = belowPath
+//    }
+//    return fileCountTask
+//  }
+//  
 //  /// Background a potentially slow task.
 //  /// Query the PVR (or directory) for a list of the files with .xxx extension.
 //  /// Written to do a external shell query and then process the resulting message
@@ -920,25 +1071,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     previousNextButtonAction(ProgramChoiceStepDirection.NEXT)
   }
   
-  
   /// with thanks for a shortcut to
   /// http://stackoverflow.com/questions/28362472/is-there-a-simple-input-box-in-cocoa
   ///
-  func getString(title: String, question: String, defaultValue: String) -> String {
+  static func getString(title: String, question: String, defaultValue: String) -> String {
     let msg = NSAlert()
     msg.addButton(withTitle: "OK")      // 1st button
     msg.addButton(withTitle: "Cancel")  // 2nd button
     msg.messageText = title
     msg.informativeText = question
     
-    let txt = NSTextField(frame: NSRect(x: 0, y: 0, width: 400, height: 24))
-    txt.stringValue = defaultValue
+    let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 400, height: 24))
+    textField.stringValue = defaultValue
     
-    msg.accessoryView = txt
+    msg.accessoryView = textField
     let response: NSModalResponse = msg.runModal()
     
     if (response == NSAlertFirstButtonReturn) {
-      return txt.stringValue
+      return textField.stringValue
     } else {
       return ""
     }
@@ -993,34 +1143,27 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     resetSearch()
 
-    // Version 4 user OS excuted task on operation QUEUE
-    
-    basestart = clock()
-    
     let completionBlock : FindCompletionBlock = {  foundList,  forSuffix,  wasCancelled in
       /// Call back function for each completed operation.
       /// Can return list of files, no files and SUCCESS
       /// or nil list and CANCELLED
-      let start = clock()
-        if (!wasCancelled) {
-          if (foundList != nil ) {
-            self.filelist = foundList!
-          }
-          else {
-            // post a nothing found message
-            self.filelist.removeAll()
-            self.statusField.stringValue = "No files found with suffix \(forSuffix)"
-          }
-          print("From "+#function)
-          self.listingOfFilesFinished()
-          self.actionsSetEnabled(true)
-        } else {
-          self.fileSearchCancelled = false
-          self.selectDirectory.isEnabled = true
-          self.statusField.stringValue = "Search Terminated"
+      if (!wasCancelled) {
+        if (foundList != nil ) {
+          self.filelist = foundList!
         }
-      let delta = Double(clock() - start)/Double(CLOCKS_PER_SEC)
-      print("Time in completion block \(delta)")
+        else {
+          // post a nothing found message
+          self.filelist.removeAll()
+          self.statusField.stringValue = "No files found with suffix \(forSuffix)"
+        }
+//        print("From "+#function)
+        self.listingOfFilesFinished()
+        self.actionsSetEnabled(true)
+      } else {
+        self.fileSearchCancelled = false
+        self.selectDirectory.isEnabled = true
+        self.statusField.stringValue = "Search Terminated"
+      }
     }
     
     if (sender.title == StringsCuts.SELECT_DIRECTORY)
@@ -1029,20 +1172,26 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       {
         var rootPath : String
         rootPath = pickedPath + StringsCuts.DIRECTORY_SEPERATOR
-        let foundRootPath = rootPath;
+        let foundRootPath = rootPath
         self.progressBar.isHidden = false
-        self.progressBar.maxValue = Double(countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath))
-        self.finderOperationsQueue = FindFilesOperation.createQueue()
-        let findFilesOperation = FindFilesOperation(foundRootPath: foundRootPath,
-                                                    withSuffix: ConstsCuts.CUTS_SUFFIX,
-                                                    localMountPoint: generalPrefs.cutLocalMountRoot,
-                                                    remoteExportPath: generalPrefs.cutRemoteExport,
-                                                    sysConfig: systemSetup,
-                                                    completion: completionBlock)
-        self.finderOperationsQueue?.addOperation(findFilesOperation)
-        self.statusField.stringValue = "Collecting List of files started ..."
-        sender.title = StringsCuts.CANCEL_SEARCH
-        fileSearchCancelled = false
+        (isRemote, pvrIndex) = pvrLocalMount(containedIn: rootPath)
+        if let maxFiles = countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath)
+        {
+          self.progressBar.maxValue = Double(maxFiles)
+          // check if the message can be converted into a number
+          self.finderOperationsQueue = FindFilesOperation.createQueue()
+          let findFilesOperation = FindFilesOperation(foundRootPath: foundRootPath,
+                                                      withSuffix: ConstsCuts.CUTS_SUFFIX,
+                                                      pvrIndex: pvrIndex,
+                                                      isRemote: isRemote,
+                                                      sysConfig: systemSetup,
+                                                      completion: completionBlock)
+          self.finderOperationsQueue?.addOperation(findFilesOperation)
+          self.statusField.stringValue = "Collecting List of files started ..."
+          sender.title = StringsCuts.CANCEL_SEARCH
+          // work out if local or remote and if remote, the index to the configuation
+          fileSearchCancelled = false
+        }
       }
       else {
         sender.title = StringsCuts.SELECT_DIRECTORY
@@ -1056,8 +1205,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       sender.isEnabled = false
       statusField.stringValue = "Waiting on cancellation of search opertion"
     }
- }
-  
+   }
+
+  func pvrLocalMount(containedIn dirPath: String) -> (isLocal: Bool, configIndex: Int)
+  {
+    // note index 0 is always local cutting configuration
+    // so only look at remote mounts roots
+    for i in 1 ..< self.systemSetup.pvrSettings.count {
+      let pvr = systemSetup.pvrSettings[i]
+      if dirPath.contains(pvr.cutLocalMountRoot)
+      {
+        let isRemote = (pvr.title != mcutConsts.fixedLocalName)
+        return (isRemote, i)
+      }
+    }
+    return (false, 0)
+  }
   /// respond to configured skip buttons
   // TODO: Create the logic to handle honour skipping into Out/In sections
   // TODO: when skipping is to be honoured
@@ -1451,8 +1614,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
 //    statusField.stringValue = "file count is \(filelist.count) ... finished"
     self.selectDirectory.title = StringsCuts.SELECT_DIRECTORY
-    let delta1 = Double(clock() - basestart) / Double(CLOCKS_PER_SEC)
-    print("overall took time \(delta1) seconds")
     guard (filelist.count != 0 ) else
     {
       // FIXME: should reset to all empty state
@@ -1463,39 +1624,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     sortFilelist()
     setCurrentFileListColors()
     setPrevNextButtonState(filelistIndex)
-    let delta = Double(clock() - basestart) / Double(CLOCKS_PER_SEC)
-    print("overall took time \(delta) seconds")
     changeFile(filelistIndex)
   }
 
-//  /// Call back function for each completed operation.
-//  /// Can return list of files, no files and SUCCESS
-//  /// or nil list and CANCELLED
-//  func findFilesOperationCompleted(foundList: [String]?, forSuffix: String, completedFully: Bool)
-//  {
-//    if (completedFully) {
-//      if (foundList != nil ) {
-//        self.filelist = foundList!
-//      }
-//      else {
-//        // post a nothing found message
-//        self.filelist.removeAll()
-//        self.statusField.stringValue = "No files found with suffix \(forSuffix)"
-//      }
-//      print("From "+#function)
-//      self.listingOfFilesFinished()
-//    } else {
-//      self.fileSearchCancelled = false
-//      self.selectDirectory.isEnabled = true
-//      self.statusField.stringValue = "Search Terminated"
-//    }
-//  }
-//  
   override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if (menuItem.action == #selector(clearBookMarks(_:))
       || menuItem.action == #selector(clearCutMarks(_:))
       || menuItem.action == #selector(clearLastPlayMark(_:))
       || menuItem.action == #selector(add10Bookmarks(_:))
+      || menuItem.action == #selector(clearAllMarks(_:))
       )
     {
       return (filelist.count > 0 )
@@ -1506,54 +1643,27 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
 
   
-  @IBAction func trim(sender: AnyObject)
-  {
-    print("hello from Trim")
-    self.monitorView.beginTrimming(completionHandler: nil)
-  }
-  
-
-  func validateUserInterfaceItem(_ anItem: NSValidatedUserInterfaceItem) -> Bool
-  {
-//    if anItem.action == #selector("test:") {
-//      print("validating item \(anItem)")
-//      return true
+//  @IBAction func trim(sender: AnyObject)
+//  {
+//    print("hello from Trim")
+//    self.monitorView.beginTrimming(completionHandler: nil)
+//  }
+//
+//  func validateUserInterfaceItem(_ anItem: NSValidatedUserInterfaceItem) -> Bool
+//  {
+//    let theAction = anItem.action
+//    if ( theAction == #selector(trim)) {
+//      if (self.monitorView.canBeginTrimming) {
+//        self.monitorView.beginTrimming(completionHandler: {result in
+//          if result == .okButton {
+//            print ("Ok trimed")
+//          }
+//          else { print("trim cancelled")
+//          }
+//        })
+//      }
 //    }
-    let theAction = anItem.action
-    if ( theAction == #selector(trim)) {
-      if (self.monitorView.canBeginTrimming) {
-        self.monitorView.beginTrimming(completionHandler: {result in
-          if result == .okButton {
-          print ("Ok trimed")
-          }
-          else {print("trim cancelled")
-          }
-        })
-      }
-    }
-    return true
-  }
-//  - (BOOL) validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)anItem
-//  {
-//  
-//  SEL theAction = [anItem action];
-//  
-//  if(theAction == @selector(trim:)) {
-//  if ([self.playerView canBeginTrimming]) {
-//  [self.playerView beginTrimmingWithCompletionHandler:^(AVPlayerViewTrimResult result) {
-//  if (result == AVPlayerViewTrimOKButton)
-//  {
-//  //                    CMTime inPoint = [AVPlayerItem reversePlaybackEndTime];
-//  }
-//  }];
-//  // handle trim result
-//  
-//  }
-//  else {
-//  return NO;
-//  }
-//  }
-//  return [super validateUserInterfaceItem:anItem];
+//    return true
 //  }
   
   /// set the GUI elements that are dependent on having at least one
@@ -1701,10 +1811,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?)
   {
-    let whatsIt = Mirror(reflecting: object!)
-    if (debug) { print(whatsIt) }
-    for case let (label?, value) in whatsIt.children {
-      print (label, value)
+    if (debug) {
+      let whatsIt = Mirror(reflecting: object!)
+      print(whatsIt)
+      for case let (label?, value) in whatsIt.children {
+        print (label, value)
+      }
     }
     if (debug) { print ("keypath <\(keyPath)> for  \((object as AnyObject).className)") }
     if (keyPath == "tracks") {
@@ -1876,10 +1988,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       samplePlayer.addObserver(self, forKeyPath: "rate", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.isClosedCaptionDisplayEnabled = true
-      self.monitorView.controlsStyle = .floating
+      self.monitorView.controlsStyle = playerPrefs.playbackControlStyle == videoControlStyle.floating ? .floating : .inline
       self.monitorView.player = samplePlayer
       self.monitorView.showsFullScreenToggleButton = true
-      self.monitorView.showsFrameSteppingButtons = false
+      self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
       self.monitorView.player?.seek(to: startTime)
 //      print("number of views under avplayerview \(self.monitorView.subviews.count)")
       self.addPeriodicTimeObserver()
@@ -2104,7 +2216,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       changeFile(movieIndex)
     }
     self.statusField.title = resultMessage
-    print("Saw callback from movie cutting opeations queue")
+    if (debug) {
+      print("Saw callback from movie cutting opeations queue")
+    }
   }
   
   /// Look at user preferences and  collect the
@@ -2113,23 +2227,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     // string args wrapped in " for remote usage
     // double quotes are removed for local usage
+    // TODO: this is just plain bad....
+    var localPVRIndex = 0
     var args = [String]()
-    if (generalPrefs.cutReplace == CheckMarkState.checked) {
+    if (isRemote) { // pick the global
+      localPVRIndex = pvrIndex
+    }
+    if (generalPrefs.systemConfig.pvrSettings[localPVRIndex].cutReplace == CheckMarkState.checked) {
       args.append(mcutConsts.replaceSwitch)
     }
-    if (generalPrefs.cutDescription == CheckMarkState.checked)
+    if (generalPrefs.systemConfig.pvrSettings[localPVRIndex].cutDescription == CheckMarkState.checked)
     {
       args.append((mcutConsts.descriptionSwitch))
-      let programDescription = getString(title: "Description Entry", question: "Enter new Program Description", defaultValue: "-")
+      let programDescription = ViewController.getString(title: "Description Entry", question: "Enter new Program Description", defaultValue: "-")
       args.append(programDescription)
     }
-    if (generalPrefs.cutRenamePrograme == CheckMarkState.checked)
+    if (generalPrefs.systemConfig.pvrSettings[localPVRIndex].cutRenamePrograme == CheckMarkState.checked)
     {
       args.append((mcutConsts.nameSwitch ))
-      let programName = getString(title: "Program Title", question: "Enter new Program Title", defaultValue: "-")
+      let programName = ViewController.getString(title: "Program Title", question: "Enter new Program Title", defaultValue: "-")
       args.append(programName)
     }
-    if (generalPrefs.cutOutputFile == CheckMarkState.checked)
+    if (generalPrefs.systemConfig.pvrSettings[localPVRIndex].cutOutputFile == CheckMarkState.checked)
     {
       var programFileName: String
       args.append((mcutConsts.outputSwitch ))
@@ -2137,15 +2256,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if let fullPathName = basename.replacingOccurrences(of: "file://",
                                                           with: "").removingPercentEncoding
       {
-        programFileName = getString(title: "Recording File", question: "Enter new Program File", defaultValue: fullPathName)
+        programFileName = ViewController.getString(title: "Recording File", question: "Enter new Program File", defaultValue: fullPathName)
       }
       else {
         programFileName = filelist[filelistIndex]
       }
       args.append(programFileName)
     }
-    systemSetup.instanceArgs = args
-    return systemSetup.instanceArgs
+    return args
   }
   
 //  /// Add to global background queue
@@ -2178,50 +2296,87 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //    }
 //  }
   
-  /// Create Operation for specific movie and add to Cutting Queue
+  /// Create Operation for specific movie and add to Cutting Queue to related pvr
   /// - parameter URLToMovieToCut: full path % encoded url of recording file cuts file
   func cutMovie(_ URLToMovieToCut:String)
   {
     let shortTitle = ViewController.programDateTitleFrom(movieURLPath: URLToMovieToCut)
     let startMessage = mcutConsts.started + " " + shortTitle
     let waitMessage = mcutConsts.waiting + " " + shortTitle
-    let cutStartBlock : MovieCutStartBlock = { shortTitle in
-      self.replaceCutToolTip(oldMessage: waitMessage, with: startMessage)
-    }
-    let cutCompletionBlock : MovieCutCompletionBlock = { resultMessage, statusValue, wasCancelled in
-      self.statusField.stringValue = resultMessage
-      self.cutButton.isEnabled = true
-      if (wasCancelled) {
-        // FIXME not sure that this makes sense, but for now ...
-        self.actionsSetEnabled(true)
+    if let cutterQ = preferences.cuttingQueue(withTitle: generalPrefs.systemConfig.pvrSettings[pvrIndex].title)
+    {
+      let cutStartBlock : MovieCutStartBlock = { shortTitle in
+        self.replaceCutToolTip(oldMessage: waitMessage, with: startMessage)
+        cutterQ.jobStarted(moviePath: URLToMovieToCut)
       }
-      else {
-        if (statusValue == 0)  {
-          if let index = self.indexOfMovie(of: URLToMovieToCut) {
-            self.setDropDownColourForIndex(index)
-            // acquire index of program, in case environment has changed whilst cutting the recording
-            // only change colour coding on SUCCESS
+      let cutCompletionBlock : MovieCutCompletionBlock = { resultMessage, statusValue, wasCancelled in
+        self.statusField.stringValue = resultMessage
+        self.cutButton.isEnabled = true
+        if (wasCancelled) {
+          cutterQ.jobCancelled(moviePath: URLToMovieToCut, result: statusValue, resultMessage: resultMessage)
+        }
+        else {
+          cutterQ.jobCompleted(moviePath: URLToMovieToCut, result: statusValue, resultMessage: resultMessage)
+          if (statusValue == 0)  {
             if let index = self.indexOfMovie(of: URLToMovieToCut) {
-              if (statusValue == 0)  {
-                self.setDropDownColourForIndex(index)
-                (self.currentFile.item(at: index))?.isEnabled = true
+              self.setDropDownColourForIndex(index)
+              // acquire index of program, in case environment has changed whilst cutting the recording
+              // only change colour coding on SUCCESS
+              if let index = self.indexOfMovie(of: URLToMovieToCut) {
+                if (statusValue == 0)  {
+                  self.setDropDownColourForIndex(index)
+                  (self.currentFile.item(at: index))?.isEnabled = true
+                }
               }
-//              self.changeFile(index)
             }
           }
+          let successString = (statusValue == 0) ? mcutConsts.cutOK : mcutConsts.cutFailed
+          let completedMessage = "\(successString) \(shortTitle)"
+          self.replaceCutToolTip(oldMessage: startMessage, with: completedMessage)
         }
-        let successString = (statusValue == 0) ? mcutConsts.cutOK : mcutConsts.cutFailed
-        let completedMessage = "\(successString) \(shortTitle)"
-        self.replaceCutToolTip(oldMessage: startMessage, with: completedMessage)
       }
+      let mcutCommandArgs = getCutsCommandLineArgs()
+      systemSetup.mcutCommandArgs = mcutCommandArgs
+
+      let movieCutter = MovieCuttingOperation(movieToBeCutPath: URLToMovieToCut,
+                                              sysConfig: systemSetup,
+                                              pvrIndex: pvrIndex,
+                                              isRemote: isRemote,
+                                              onCompletion: cutCompletionBlock,
+                                              onStart: cutStartBlock)
+      addToCutToolTip(message: waitMessage)
+      cutterQ.jobAdd(op: movieCutter)
+      let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
+      print("\(timestamp): Added  \(shortTitle) to Queue \(cutterQ.queue.name!)")
     }
-    let mcutCommandArgs = getCutsCommandLineArgs()
-    let movieCutter = MovieCuttingOperation(movieToBeCutPath: URLToMovieToCut, sysConfig: systemSetup, commandArgs: mcutCommandArgs,  onCompletion: cutCompletionBlock, onStart: cutStartBlock)
-    addToCutToolTip(message: waitMessage)
-    (currentFile.item(at: filelistIndex))?.isEnabled = false
-    cutterOperationsQueue.addOperation(movieCutter)
-    let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
-    print("\(timestamp): Added to Queue \(shortTitle)")
+  }
+  
+//  func queueForPath(URLPath: String) -> CuttingQueue?
+//  {
+//    // get the title of the PVR which as the matching root path
+//    guard let diskPathName = URLPath.replacingOccurrences(of: "file://",
+//                                                            with: "").removingPercentEncoding else {
+//                                                              return nil
+//    }
+//    
+//    for entry in self.systemSetup.pvrSettings
+//    {
+//      if diskPathName.contains(entry.cutLocalMountRoot) {
+//        // we have a winner
+//        let queue = preferences.cuttingQueue(withTitle: entry.title)
+//        return queue
+//      }
+//    }
+//    return nil
+//  }
+//  
+  /// Get the queue associated with the configuration index
+  func queueForPVR(index: Int) -> CuttingQueue?
+  {
+    // bounds check
+    guard (systemSetup.pvrSettings.count > 0 && index >= 0 && index < systemSetup.pvrSettings.count) else { return nil }
+    let queue = preferences.cuttingQueue(withTitle: systemSetup.pvrSettings[index].title)
+    return queue
   }
   
   /// Append string to cut toolTip button
@@ -2399,13 +2554,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // beware only called on mouse clicks not keyboard
   func tableViewSelectionIsChanging(_ notification: Notification) {
     self.suppressTimedUpdates = true
-    print("Saw tableViewSelectionIsChanging change")
+    if (debug) { print("Saw tableViewSelectionIsChanging change") }
   }
   
   func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
     // user clicked in table, suppress timed updates
     self.suppressTimedUpdates = true
-    print("Saw column did Click")
+    if (debug) { print("Saw column did Click") }
     
   }
   
@@ -2453,50 +2608,43 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
 
   // MARK: - utility functions
-  /// Extract the short movie title from the file path
-  open static func programTitleFrom(movieURLPath: String) -> String
+  
+  /// Extract selected fields from expected "dateTime - channel - programTitle" formated string
+  fileprivate static func getFieldsFromCutsFilename(movieURLPath: String, dateTime: Bool, channelName: Bool, programTitle: Bool) -> String
   {
     let fileNameSeperator = "-"
-    var programName = "Undetermined"
+    var programName = ""
     let basename = movieURLPath.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
     if let fullPathName = basename.replacingOccurrences(of: "file://",
                                                         with: "").removingPercentEncoding {
       if let title = fullPathName.components(separatedBy: "/").last {
         programName = title
         let fileElements = programName.components(separatedBy: fileNameSeperator)
-        if fileElements.count >= 3 // typically expect "date - channel - program name"
-        {
-          programName = fileElements[2 ..< fileElements.count].joined(separator: fileNameSeperator)
-          programName = programName.trimmingCharacters(in: CharacterSet(charactersIn: " "))
+        var conjuction = ""
+        if (fileElements.count >= 3) { // this is the expected format else return full title
+          programName = ""
+          programName += dateTime ? fileElements[0] : ""
+          if (programName != "" ) { conjuction = fileNameSeperator }
+          programName += channelName ? conjuction+fileElements[1] : ""
+          if (programName != "" ) { conjuction = fileNameSeperator }
+          programName += programTitle ? conjuction+fileElements[2 ..< fileElements.count].joined(separator: fileNameSeperator) : ""
         }
-      }
-    }
-    return programName
-  }
-
-  /// Extract the short movie title from the file path
-  open static func programDateTitleFrom(movieURLPath: String) -> String
-  {
-    let fileNameSeperator = "-"
-    var programName = "Undetermined"
-    let basename = movieURLPath.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-    if let fullPathName = basename.replacingOccurrences(of: "file://",
-                                                        with: "").removingPercentEncoding {
-      if let title = fullPathName.components(separatedBy: "/").last {
-        programName = title
-        let fileElements = programName.components(separatedBy: fileNameSeperator)
-        if fileElements.count >= 3 // typically expect "date - channel - program name"
-        {
-          programName = fileElements[0]+fileNameSeperator
-          programName += fileElements[2 ..< fileElements.count].joined(separator: fileNameSeperator)
-          programName = programName.trimmingCharacters(in: CharacterSet(charactersIn: " "))
-        }
-      
       }
     }
     return programName
   }
   
+  /// Extract the short movie title from the file path
+  public static func programTitleFrom(movieURLPath: String) -> String
+  {
+    return getFieldsFromCutsFilename(movieURLPath: movieURLPath, dateTime: false, channelName: false, programTitle: true)
+  }
+
+  /// Extract the short movie title from the file path
+  public static func programDateTitleFrom(movieURLPath: String) -> String
+  {
+    return getFieldsFromCutsFilename(movieURLPath: movieURLPath, dateTime: true, channelName: false, programTitle: true)
+  }
 
   // MARK: - cutMark management functions
   // TODO: develop more robust bulk addition for multiple in/out pairs

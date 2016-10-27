@@ -10,7 +10,6 @@ import Cocoa
 
 // MARK: - file search support class
 
-
 class FindFilesOperation: Operation
 {
   var foundfiles = [String]()
@@ -18,6 +17,8 @@ class FindFilesOperation: Operation
   var foundRootPath : String
   var localMountPoint: String
   var remoteExportPath: String
+  var pvrIndex: Int
+  var isRemote: Bool
   var sysConfig: systemConfiguration
   var onCompletionBlock: FindCompletionBlock
   let debug = false
@@ -36,41 +37,49 @@ class FindFilesOperation: Operation
   
   
   // get the passed in starting directory
-  init(foundRootPath : String, withSuffix: String, localMountPoint: String, remoteExportPath: String, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
+//  init(foundRootPath : String, withSuffix: String, localMountPoint: String, remoteExportPath: String, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
+  init(foundRootPath : String, withSuffix: String, pvrIndex: Int, isRemote: Bool, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
   {
     self.foundRootPath = foundRootPath
     self.suffixRequired = withSuffix
-    self.localMountPoint = localMountPoint
-    self.remoteExportPath = remoteExportPath
+    if (isRemote) {
+      self.localMountPoint = sysConfig.pvrSettings[pvrIndex].cutLocalMountRoot
+      self.remoteExportPath = sysConfig.pvrSettings[pvrIndex].cutRemoteExport
+    }
+    else {
+      self.localMountPoint = mcutConsts.localMount
+      self.remoteExportPath = mcutConsts.remoteExportPath
+    }
     self.onCompletionBlock = completion
     self.sysConfig = sysConfig
+    self.pvrIndex = pvrIndex
+    self.isRemote = isRemote
   }
   
   override func main()
   {
     // check if killed before starting
     if (self.isCancelled) {
-      //      print("was cancelled by user")
       return
     }
     // use a task to get a count of the files in the directory
     // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
     // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
     // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-    let start = clock()
     var searchPath: String
     let fileCountTask = Process()
     let outPipe = Pipe()
-    if (self.foundRootPath.contains(self.localMountPoint)) {
+    if (self.foundRootPath.contains(self.localMountPoint) && isRemote) {
       searchPath = self.foundRootPath.replacingOccurrences(of: self.localMountPoint, with: self.remoteExportPath)
-      fileCountTask.launchPath = sysConfig.sshPath
-      fileCountTask.arguments = [sysConfig.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
+      fileCountTask.launchPath = sysConfig.pvrSettings[pvrIndex].sshPath
+      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
     }
     else {
-      fileCountTask.launchPath = sysConfig.shPath
+      fileCountTask.launchPath = mcutConsts.shPath
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
       searchPath = self.foundRootPath
     }
+//    print(fileCountTask.arguments)
     fileCountTask.standardOutput = outPipe
     fileCountTask.launch()
     let handle = outPipe.fileHandleForReading
@@ -86,16 +95,13 @@ class FindFilesOperation: Operation
         let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: self.remoteExportPath, with: self.localMountPoint)})
         builtURLArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
         //
-        // All done dispatch results back to application
+        // All done send results back to interactive code thread
         //
         DispatchQueue.main.async(execute:  {
           self.onCompletionBlock(builtURLArray, self.suffixRequired, self.isCancelled)
         })
       }
     }
-    
-    let delta = Double(clock() - start) / Double(CLOCKS_PER_SEC)
-    print("took time \(delta) seconds")
   }
 }
 

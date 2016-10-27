@@ -15,43 +15,76 @@ class MovieCuttingOperation: Operation
   var targetPathName = ""
   var mcutCommand = ""
   var mcutSystem = ""
-  var mcutCommandArgs = [String]()
   let debug = false
   var sysConfig: systemConfiguration
   let onCompletion : MovieCutCompletionBlock
   let onStart : MovieCutStartBlock
+  var pvrIndex : Int
+  var isRemote = true
+  let FAILED_TO_NORMALIZE_MESSAGE = "Failed to normalize movie path name \"%@\""
+  let FAILED_TO_READ_RESULT = "Failed Reading process result"
+  let UNKNOWN_ERROR_CODE = "Unknown error code %@ for \"%@\""
+  let ABORTED_MESSAGE = "Cutting was cancelled for movie \"%@\""
+  // messaged mirrored from mcut.cpp source code
+  var global_mcut_errors = ["The movie \"%@\" is successfully cut",
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Bad arguments"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ts file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .cuts file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ap file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ts file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .cuts file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ap file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Empty .ap file"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("No cuts specified"),
+                            ("Cutting failed for movie \"%@\"")+":\n"+("Read/write error (disk full?)")
+//    ,
+//                            (ABORTED_MESSAGE),
+//                            (FAILED_TO_READ_RESULT),
+//                            (FAILED_TO_NORMALIZE_MESSAGE),
+//                            (UNKNOWN_ERROR_CODE)
+  ]
+  
   
   // get the passed in starting directory
-  init(movieToBeCutPath : String, sysConfig: systemConfiguration, commandArgs: [String], onCompletion: @escaping MovieCutCompletionBlock, onStart: @escaping MovieCutStartBlock)
+  init(movieToBeCutPath : String, sysConfig: systemConfiguration, pvrIndex: Int, isRemote: Bool, onCompletion: @escaping MovieCutCompletionBlock, onStart: @escaping MovieCutStartBlock)
   {
     self.moviePath = movieToBeCutPath
+    // call back closures
     self.onCompletion = onCompletion
     self.onStart = onStart
+    // global refs
     self.sysConfig = sysConfig
-    self.mcutCommandArgs = commandArgs
+    self.pvrIndex = pvrIndex
+    self.isRemote = isRemote
+    
+    super.init()
+    name = movieToBeCutPath
+    global_mcut_errors.append(ABORTED_MESSAGE)
+    global_mcut_errors.append(FAILED_TO_READ_RESULT)
+    global_mcut_errors.append(FAILED_TO_NORMALIZE_MESSAGE)
+    global_mcut_errors.append(UNKNOWN_ERROR_CODE)
+
+  }
+  
+  /// Intercept the Operation  cancel function to update logs and queue tables
+  
+  override func cancel() {
+    // our main executes a remote job that has no means of being stopped once started.
+    // Our main only checks for isCancelled status once on startup
+    let shouldLogCancelled = !self.isCancelled && !self.isExecuting
+    super.cancel()
+    // prevent double logging with before and after check
+    if (self.isCancelled && shouldLogCancelled) {
+      let cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
+      let shortTitle = ViewController.programDateTitleFrom(movieURLPath: moviePath)
+      resultMessage = String.init(format: global_mcut_errors[cutResultStatusValue], shortTitle)
+      DispatchQueue.main.async {
+        self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
+      }
+    }
   }
   
   override func main() {
-    let FAILED_TO_NORMALIZE_MESSAGE = "Failed to normalize movie path name \"%@\""
-    let FAILED_TO_READ_RESULT = "Failed Reading process result"
-    let UNKNOWN_ERROR_CODE = "Unknown error code %@ for \"%@\""
-    let ABORTED_MESSAGE = "Cutting was aborted for movie \"%@\""
-    let global_mcut_errors = ["The movie \"%@\" is successfully cut",
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Bad arguments"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ts file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .cuts file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open input .ap file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ts file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .cuts file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Couldn't open output .ap file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Empty .ap file"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("No cuts specified"),
-                              ("Cutting failed for movie \"%@\"")+":\n"+("Read/write error (disk full?)"),
-                              (ABORTED_MESSAGE),
-                              (FAILED_TO_READ_RESULT),
-                              (FAILED_TO_NORMALIZE_MESSAGE),
-                              (UNKNOWN_ERROR_CODE)]
-    
     var cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
     
     // have we been cancelled ?
@@ -79,11 +112,11 @@ class MovieCuttingOperation: Operation
     
     // MARK:  remote / detached task fabricated here
     let outPipe = Pipe()
-    if let cutTask = buildCutTaskFrom(movieDiskPath: diskPathName, withArgs: mcutCommandArgs)
+    if let cutTask = buildCutTaskFrom(movieDiskPath: diskPathName, withArgs: sysConfig.mcutCommandArgs)
     {
       cutTask.standardOutput = outPipe
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
-      print("\(timestamp) Launching for >\(shortTitle)<")
+      if(debug) {print("\(timestamp) Launching for >\(shortTitle)<")}
       DispatchQueue.main.async { [unowned self] in
         // callback that job has been started for name returned (update tooltip entry)
         self.onStart(shortTitle)
@@ -96,13 +129,12 @@ class MovieCuttingOperation: Operation
       let result = cutTask.terminationStatus
       cutResultStatusValue = Int(result)
       if let resultString = String(data: data, encoding: String.Encoding.utf8) {
-        print( resultString)
-//        print("got result of \(result)")
+        if (debug) { print( resultString) }
         // bounds limit message lookup - remote program may change and introduce unknown result values
         
         let messageIndex = (cutResultStatusValue >= 0 && cutResultStatusValue < global_mcut_errors.count) ? cutResultStatusValue : global_mcut_errors.count-1
         resultMessage = String.init(format: global_mcut_errors[messageIndex], shortTitle)
-        print(resultMessage)
+        if (debug) { print(resultMessage) }
         // TODO: add code to to handle "new output file case"
       }
     }
@@ -130,10 +162,11 @@ class MovieCuttingOperation: Operation
     // local has multiple args, remote has program and args passed as single arg to be interpretted by
     // the remote system
     
-    if (isRemote(pathName: targetPathName)) {
-      targetPathName = targetPathName.replacingOccurrences(of: mcutConsts.localMount, with: mcutConsts.remoteExportPath)
+    if (isRemote)
+    {
+      targetPathName = targetPathName.replacingOccurrences(of: sysConfig.pvrSettings[pvrIndex].cutLocalMountRoot, with: sysConfig.pvrSettings[pvrIndex].cutRemoteExport)
       mcutCommand = mcutConsts.mcutProgramRemote
-      cutTask.launchPath = sysConfig.sshPath
+      cutTask.launchPath = sysConfig.pvrSettings[pvrIndex].sshPath
     }
     else {  // local processing
       mcutCommand = mcutConsts.mcutProgramLocal
@@ -155,23 +188,15 @@ class MovieCuttingOperation: Operation
       // FIXME: check handling of apostrophe's in local directories
       targetPathName = targetPathName.replacingOccurrences(of: "'", with: "\\'")
       mcutCommandArgs.append(targetPathName.replacingOccurrences(of: " ", with: "\\ ") )
-      cutTask.arguments = [sysConfig.remoteManchineAndLogin, mcutCommandArgs.joined(separator: " ")]
+      cutTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, mcutCommandArgs.joined(separator: " ")]
     }
     if (debug) {
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
-      print("\(timestamp) Creating launch >\(cutTask.launchPath)<")
-      print("with args:< \(cutTask.arguments)>")
+      if (debug) {
+        print("\(timestamp) Creating launch >\(cutTask.launchPath)<")
+        print("with args:< \(cutTask.arguments)>")
+      }
     }
     return cutTask
-  }
-
-  /// Return is pathname contains a remote mount point.
-  /// That is, guess if we are looking a a local or a remote file
-  /// where remote means on the PVR.  This get bamboozled with networked
-  /// drives.  For now we cut local files locally and assume remote files
-  /// are on a machine that has mcut
-  func isRemote(pathName: String) -> Bool
-  {
-    return  (pathName.contains(mcutConsts.localMount)) ? true : false
   }
 }

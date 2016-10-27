@@ -554,7 +554,7 @@ open class CutsFile: NSObject {
     
     let fileWritten = fileMgr.createFile(atPath: fullFileName, contents: item as Data, attributes: nil)
     
-    if (fileWritten) {
+    if (fileWritten && debug) {
       print(MessageStrings.DID_WRITE_FILE)
     }
     modified = false

@@ -9,7 +9,15 @@
 
 import Cocoa
 
-class CutsPreferencesController: NSViewController,NSTextFieldDelegate, NSControlTextEditingDelegate {
+struct playerStringConsts {
+  static let inLineRadio = "In Line"
+  static let floatingRadio = "Floating"
+  
+  static let fastButtonsRadio = "Fastforward Buttons"
+  static let steppingButtonsRadio = "Stepping Buttons"
+}
+
+class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSControlTextEditingDelegate {
 
   @IBOutlet weak var lh1Text: NSTextField!
   @IBOutlet weak var lh2Text: NSTextField!
@@ -35,21 +43,40 @@ class CutsPreferencesController: NSViewController,NSTextFieldDelegate, NSControl
   @IBOutlet weak var rh4Value: NSTextField!
   @IBOutlet weak var rh5Value: NSTextField!
   
+  @IBOutlet weak var inLineLabel: NSButton!
+  @IBOutlet weak var floatingLabel: NSButton!
+  @IBOutlet weak var fastforwardLabel: NSButton!
+  @IBOutlet weak var steppingLabel: NSButton!
+  
+  @IBOutlet weak var honourOutIn: NSButton!
+  
   var preferences = NSApplication.shared().delegate as! AppPreferences
   var skips = skipPreferences()
+  var videoPlayerConfig = videoPlayerPreferences()
+  var skipsChanged = false
+  var playerChanged = false
   
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do view setup here.
       loadCurrentSkips()
+      loadCurrentVideoPlayerConfig()
     }
     
   @IBAction func saveAction(_ sender: NSButton)
   {
     // force text field to loose focus and end
     self.view.window?.makeFirstResponder(nil)
-    preferences.saveSkipPreference(skips)
-    NotificationCenter.default.post(name: Notification.Name(rawValue: skipsDidChange), object: nil)
+    if skipsChanged {
+      preferences.saveSkipPreference(skips)
+      NotificationCenter.default.post(name: Notification.Name(rawValue: skipsDidChange), object: nil)
+      skipsChanged = false
+    }
+    if playerChanged {
+      preferences.saveVideoPlayerPreference(videoPlayerConfig)
+      NotificationCenter.default.post(name: Notification.Name(rawValue: playerDidChange), object: nil)
+      playerChanged = false
+    }
   }
   
   func loadCurrentSkips()
@@ -78,18 +105,79 @@ class CutsPreferencesController: NSViewController,NSTextFieldDelegate, NSControl
     rh5Value.stringValue = String(skips.rhs[4].value)
   }
   
+  func secondaryPlayerButtons(showsSteppingControls: Bool) {
+    // set Radio button state to match prefs
+    fastforwardLabel.state = showsSteppingControls ? NSOffState : NSOnState
+    steppingLabel.state = showsSteppingControls ? NSOnState : NSOffState
+  }
+  
+  func loadCurrentVideoPlayerConfig()
+  {
+    videoPlayerConfig = preferences.videoPlayerPreference()
+    if (videoPlayerConfig.playbackControlStyle == videoControlStyle.floating) {
+      fastforwardLabel.isEnabled = true
+      steppingLabel.isEnabled = true
+      inLineLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.inLine) ? NSOnState : NSOffState
+      floatingLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.floating) ? NSOnState : NSOffState
+      // set Radio button state to match prefs
+      secondaryPlayerButtons(showsSteppingControls: !videoPlayerConfig.playbackShowFastForwardControls)
+    }
+    else {
+      fastforwardLabel.isEnabled = false
+      steppingLabel.isBordered = false
+    }
+    setupRadioButtonNames()
+    honourOutIn.state = (videoPlayerConfig.skipCutSections ? NSOnState : NSOffState)
+    
+  }
+  
+  func setupRadioButtonNames ()
+  {
+    inLineLabel.title = playerStringConsts.inLineRadio
+    floatingLabel.title = playerStringConsts.floatingRadio
+    
+    fastforwardLabel.title = playerStringConsts.fastButtonsRadio
+    steppingLabel.title = playerStringConsts.steppingButtonsRadio
+  }
+  
   @IBAction func reloadButton(_ sender: NSButton)
   {
     // reload values from delegate
     loadCurrentSkips()
+    loadCurrentVideoPlayerConfig()
+    playerChanged = false
   }
   
-//  func control(control: NSControl, textShouldEndEditing fieldEditor: NSText) -> Bool {
-////    print("Saw on tag \(fieldEditor.tag)")
-////    let text = fieldEditor.string
-////    print("save text of \(text)")
-//    return true
-//  }
+  /// Update from checkbox change of to player control to skip the Cut Out sections
+  @IBAction func changeHonourOutIn(_ sender: NSButton)
+  {
+    videoPlayerConfig.skipCutSections = (sender.state == NSOnState)
+    playerChanged = true
+  }
+  
+  @IBAction func playerControlStyle(_ sender: NSButton)
+  {
+    if sender.title == playerStringConsts.inLineRadio {
+      fastforwardLabel.isEnabled = false
+      steppingLabel.isEnabled = false
+      videoPlayerConfig.playbackControlStyle = videoControlStyle.inLine
+    }
+    if sender.title == playerStringConsts.floatingRadio {
+      fastforwardLabel.isEnabled = true
+      steppingLabel.isEnabled = true
+      videoPlayerConfig.playbackControlStyle = videoControlStyle.floating
+      // set Radio button state to match prefs
+      secondaryPlayerButtons(showsSteppingControls: !videoPlayerConfig.playbackShowFastForwardControls)
+    }
+    playerChanged = true
+  }
+  
+  @IBAction func controlButtonType(_ sender: NSButton) {
+    videoPlayerConfig.playbackShowFastForwardControls = (sender.title == playerStringConsts.fastButtonsRadio)
+    playerChanged = true
+  }
+  
+  /// handle changes to text fields
   override func controlTextDidEndEditing(_ obj: Notification)
   {
     let textField = obj.object as! NSTextField
@@ -122,9 +210,11 @@ class CutsPreferencesController: NSViewController,NSTextFieldDelegate, NSControl
         skips.lhs[index].value = textField.doubleValue
       }
     }
+    skipsChanged = true
 //    print(skips)
   }
   
+  /// Close this model dialog
   @IBAction func done(_ sender: NSButton) {
     self.presenting?.dismiss(sender)
   }
