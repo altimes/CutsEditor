@@ -42,9 +42,11 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
       // Do view setup here.
     queuesTable.delegate = self
     queuesTable.dataSource = self
-    NotificationCenter.default.addObserver(self, selector: #selector(queuesChanged(_:)), name: NSNotification.Name(rawValue: jobQueueDidChange), object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(queuesContentChanged(_:)), name: NSNotification.Name(rawValue: jobQueueDidChange), object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(queuesConfigChanged(_:)), name: NSNotification.Name(rawValue: generalDidChange), object: nil )
     queuesTable.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-//    queuesTable.sizeLastColumnToFit()
+    queuesTable.sizeLastColumnToFit()
+    refreshTable()
   }
   
   func setup() {
@@ -271,15 +273,36 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     for entry in preferences.cuttingQueueTable()
     {
       let count = entry.queue.operationCount
-      jobQueueCount.append("\(entry.queue.name!):\(count)")
+      jobQueueCount.append("\(entry.queue.name!):[\(count)]")
     }
-    queueJobCount.stringValue = jobQueueCount.joined(separator: " ")
+    queueJobCount.stringValue = jobQueueCount.joined(separator: "  ")
     let lastRow = jobsListing.count-1
     queuesTable.scrollRowToVisible(lastRow)
   }
   
-  func queuesChanged(_ notification: Notification)
+  func queuesContentChanged(_ notification: Notification)
   {
+    refreshTable()
+  }
+  
+  func queuesConfigChanged(_ notification: Notification)
+  {
+    // check to see if the configuration of the queues has changed
+    let newQueues = preferences.cuttingQueueTable()
+    if (newQueues.count != queues.count) {
+      // definite change
+      queues = newQueues
+    }
+    else {
+      // same count, but may have added and deleted
+      // get a list of queue names from each, sort and then compare
+      let oldQueueNameList = queues.map{$0.queue.name!}.sorted()
+      let newQueueNameList = newQueues.map{$0.queue.name!}.sorted()
+      if (oldQueueNameList != newQueueNameList) {
+        queues = newQueues
+      }
+    }
+    // for good measure
     refreshTable()
   }
   

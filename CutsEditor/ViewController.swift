@@ -125,6 +125,9 @@ struct fileColourParameters {
   static let readyToCutColor = NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 1.0)
 }
 
+/// Dictionary that maps mark types to GUI button identifier strings
+let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT, "addLastPlay":MARK_TYPE.LASTPLAY]
+
 /// Pair of String and Double for association with a GUI "skip" button.
 /// The String is the text used on the button and the double is the skip
 /// duration in seconds
@@ -355,6 +358,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // MARK: model
   
+  var movie = Recording()
   let debug = false
   var startDate = Date()
   var fileSearchCancelled = false
@@ -384,7 +388,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cutButton.isEnabled = newValue
     }
     get {
-      return cuts.isCuttable
+      return movie.cuts.isCuttable
     }
   }
   
@@ -418,7 +422,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var firstInCutPTS:UInt64 {
     get {
       var pts : UInt64 = 0
-      if let entry = cuts.firstInCutMark
+      if let entry = movie.cuts.firstInCutMark
       {
         pts = entry.cutPts
       }
@@ -427,6 +431,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// Readonly computed var of the position of the last OUT pts.  If no OUT is present,
+  /// or it is followed by and IN
   /// then return the max of the metadata duration (which for some broadcasters
   /// can be 0 (!)) and the video duration determined by the AVPlayer
   
@@ -443,9 +448,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       else {
         pts = min(metaPTS, videoPTS)
       }
-      if let entry = cuts.lastOutCutMark
+      //
+      // get in/out pairs only
+      let inOut = movie.cuts.inOutOnly
+      if let entry = inOut.last
       {
-        pts = entry.cutPts
+        if entry.cutType == MARK_TYPE.OUT.rawValue {
+          pts = entry.cutPts
+        }
       }
       return pts
     }
@@ -458,10 +468,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var systemSetup = systemConfiguration()
 
   var currentFileColouringBlock : BlockOperation?
-  var cuts = CutsFile()
+//  var cuts = CutsFile()
   var cutsModified : Bool {
     get {
-      return cuts.isModified
+      return movie.cuts.isModified
     }
   }
   var eit = EITInfo()
@@ -886,9 +896,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let index = (indexSelector == FileToHandle.current) ? filelistIndex : lastfileIndex
     var proceedWithWrite = true
-    let validCuts = self.cuts.validateInOut()
-    guard (validCuts.result) else {
-      self.statusField.stringValue = validCuts.errorMessage
+    let validCuts = movie.cuts.isCuttable
+    guard (validCuts) else {
+      self.statusField.stringValue = movie.cuts.lastValidationMessage
       return false
     }
     if (cutsModified ) {
@@ -910,13 +920,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       // autowrite is enabled, so just get on with it
       if (proceedWithWrite) {
         // rewrite cuts file
-        let (fileMgr, found, fullFileName) = getFileManagerForFile(filelist[index])
-        if (found) {
-          self.cuts.saveCutsToFile(fullFileName, using: fileMgr)
+        if movie.saveCuts() {
+//    
+//        let (fileMgr, found, fullFileName) = Recording.getFileManagerForFile(filelist[index])
+//        if (found) {
+//          let cutsData = movie.cuts.encodeCutsData()
+//          let fileWritten = fileMgr.createFile(atPath: fullFileName, contents: cutsData, attributes: nil)
+          if ( debug) {
+            print(MessageStrings.DID_WRITE_FILE)
+          }
+//          self.cuts.saveCutsToFile(fullFileName, using: fileMgr)
           setDropDownColourForIndex(index)
         }
         else {
           self.statusField.stringValue = StringsCuts.FILE_SAVE_FAILED
+          // TODO:  needs some sort of try again/ give up options
           return true
         }
       }
@@ -957,21 +975,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let actualFileName = filelist[filelistIndex].components(separatedBy: CharacterSet(charactersIn: "/")).last
     fileWorkingName = actualFileName!.removingPercentEncoding!
     let baseName = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
+    movie = Recording(rootProgramName: baseName)
     
-    let cutsData = loadRawDataFrom(file: filelist[filelistIndex])
-    if cutsData != nil {
-      cuts = CutsFile(data: cutsData!)
-    }
-    else { // empty table
-      cuts = CutsFile()
-    }
-    if (debug) { cuts.printCutsData() }
+//    let cutsData = Recording.loadRawDataFrom(file: filelist[filelistIndex])
+//    if cutsData != nil {
+//      cuts = CutsFile(data: cutsData!)
+//    }
+//    else { // empty table
+//      cuts = CutsFile()
+//    }
+    if (debug) { movie.cuts.printCutsData() }
     self.cutsTable.reloadData()
     
     // select begining of file or earliest bookmark if just a few
-    if (cuts.count>0 && cuts.count<=3)
+    if (movie.cuts.count>0 && movie.cuts.count<=3)
     {
-      let startPTS = Int64(cuts.first!.cutPts)
+      let startPTS = Int64(movie.cuts.first!.cutPts)
       startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
     }
     else {
@@ -980,7 +999,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     // process eit file
     let EitName = baseName+ConstsCuts.EIT_SUFFIX
-    let EITData = loadRawDataFrom(file: EitName)
+    let EITData = Recording.loadRawDataFrom(file: EitName)
     if (EITData != nil ) {
       eit=EITInfo(data: EITData!)
       if (debug) { print(eit.description()) }
@@ -1529,11 +1548,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var thisProgramDuration = 0.0
     
     // work through the set of files
-    let cutsData = loadRawDataFrom(file: filelist[index])
+    let cutsData = Recording.loadRawDataFrom(file: filelist[index])
     let metaName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.META_SUFFIX))!
     let metaData = MetaData(fromFilename: metaName)
     let eitName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.EIT_SUFFIX))!
-    let EITData = loadRawDataFrom(file: eitName.path)
+    let EITData = Recording.loadRawDataFrom(file: eitName.path)
     var eitdata : EITInfo?
     if (EITData != nil  && (EITData?.count)! > 0) {
       eitdata=EITInfo(data: EITData!)
@@ -1731,9 +1750,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func resetCurrentModel()
   {
-    cuts.removeAll()
+    movie.cuts.removeAll()
     eit = EITInfo()
-    cuts = CutsFile()
+    movie.cuts = CutsFile()
     wasPlaying = false
     metadata = MetaData()
   }
@@ -1907,7 +1926,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               print("metadata duration = \(metadata.duration)")
             }
             self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(metadata.duration)!)
-            let startTime = (self.cuts.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
+            let startTime = (movie.cuts.count>=1) ? movie.cuts.firstMarkTime : CMTime(seconds: 0, preferredTimescale: 1)
             if (self.monitorView.player?.status == .readyToPlay)
             {
               self.monitorView.player?.seek(to: startTime, completionHandler: seekCompletedOK)
@@ -2000,24 +2019,29 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.statusField.stringValue = "Invalid Time duration cannot work with"
     }
   }
-  func getFileManagerForFile( _ fullFileName : String) -> (FileManager, Bool, String)
-  {
-    var pathName : String
-    let fileMgr : FileManager = FileManager.default
-    if (debug) { print (fullFileName) }
-    
-    pathName = ""
-    if let checkIsURLFormat = URL.init(string: fullFileName)
-    {
-        pathName = checkIsURLFormat.path
-    }
-    else // assume file system format
-    {
-      pathName = fullFileName
-    }
-    let fileExists = fileMgr.fileExists(atPath: pathName)
-    return (fileMgr, fileExists, pathName)
-  }
+  
+//  /// Utility function that unpacks the file name and check that the file is exists
+//  /// and is accessible.
+//  /// - parameter fullFileName: path to the file
+//  /// - returns : touple of a filemanager, status of files existence and the resolved path to file
+//  func getFileManagerForFile( _ fullFileName : String) -> (FileManager, Bool, String)
+//  {
+//    var pathName : String
+//    let fileMgr : FileManager = FileManager.default
+//    if (debug) { print (fullFileName) }
+//    
+//    pathName = ""
+//    if let checkIsURLFormat = URL.init(string: fullFileName)
+//    {
+//        pathName = checkIsURLFormat.path
+//    }
+//    else // assume file system format
+//    {
+//      pathName = fullFileName
+//    }
+//    let fileExists = fileMgr.fileExists(atPath: pathName)
+//    return (fileMgr, fileExists, pathName)
+//  }
   
   /// Common function to write the status field GUI entry to match
   /// the current user selection
@@ -2100,7 +2124,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func highlightCutTableEntryBefore(currentTime: Double)
   {
-    if let (entry,index) = cuts.entryBeforeTime(Double(currentTime))
+    if let (entry,index) = movie.cuts.entryBeforeTime(Double(currentTime))
     {
       let cutSecs = entry.asSeconds()
       if (debug) { print("returned cuts table index of \(index) for time \(cutSecs)") }
@@ -2147,7 +2171,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
         self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
         if (self?.honourOutInMarks)! {
-          if let afterAdTime = self?.cuts.programTimeAfter(currentCMTime!)
+          if let afterAdTime = self?.movie.cuts.programTimeAfter(currentCMTime!)
           {
             // ensure we seek AFTER the current time, ie don't seek backwards!!
             if (afterAdTime.seconds > (currentCMTime?.seconds)!)
@@ -2450,10 +2474,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView?
   {
     var cellContent : String
-    let cutEntry = cuts.entry(at: row)
+    let cutEntry = movie.cuts.entry(at: row)
     if tableColumn?.identifier == StringsCuts.TABLE_TIME_COLUMN
     {
-      if (self.cuts.count>0)
+      if (self.movie.cuts.count>0)
       {
         cellContent = CutEntry.timeTextFromPTS((cutEntry?.cutPts)!)
       }
@@ -2464,7 +2488,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else if tableColumn?.identifier == StringsCuts.TABLE_TYPE_COLUMN
     {
       cellContent = "??"
-      if (self.cuts.count>0)
+      if (self.movie.cuts.count>0)
       {
         if let markValue = cutEntry?.cutType, let mark = MARK_TYPE(rawValue: markValue)
         {
@@ -2483,19 +2507,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func numberOfRows(in tableView: NSTableView) -> Int
   {
-    return self.cuts.count
+    return self.movie.cuts.count
   }
   
   func tableViewSelectionDidChange(_ notification: Notification) {
     let selectedRow = cutsTable.selectedRow
     // seek to associated cutEntry
-    guard (selectedRow>=0 && selectedRow<cuts.count) else
+    guard (selectedRow>=0 && selectedRow<movie.cuts.count) else
     {
       // out of bounds, silently ignor
       self.suppressTimedUpdates = false
       return
     }
-    if let entry = cuts.entry(at: selectedRow) {
+    if let entry = movie.cuts.entry(at: selectedRow) {
       
       if (!suppressPlayerUpdate) {
         if (debug) { print("Seeking to \(entry.asSeconds())") }
@@ -2509,10 +2533,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 /// Updates model and GUI
   func rowDelete(_ action:NSTableViewRowAction, indexPath:Int)
   {
-    if let cutEntry = self.cuts.entry(at: indexPath)  {
-      _ = cuts.removeEntry(cutEntry)
+    if let cutEntry = self.movie.cuts.entry(at: indexPath)  {
+      _ = movie.cuts.removeEntry(cutEntry)
       self.cutsTable.reloadData()
-      cuttable = cuts.isCuttable
+      cuttable = movie.cuts.isCuttable
     }
   }
   
@@ -2533,18 +2557,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // try to change the color of the rowView
     var colour = NSColor.white
     // bounds checking
-    guard row >= 0 && row < self.cuts.count  else { return }
-    if let cutEntry = cuts.entry(at: row),  let markType = MARK_TYPE(rawValue: cutEntry.cutType)
+    guard row >= 0 && row < self.movie.cuts.count  else { return }
+    if let cutEntry = movie.cuts.entry(at: row),  let markType = MARK_TYPE(rawValue: cutEntry.cutType)
     {
       switch markType
       {
-        case MARK_TYPE.IN:
+        case .IN:
           colour = NSColor.green
-        case MARK_TYPE.OUT:
+        case .OUT:
           colour = NSColor.red
-        case MARK_TYPE.LASTPLAY:
+        case .LASTPLAY:
           colour = NSColor.blue
-        case MARK_TYPE.BOOKMARK:
+        case .BOOKMARK:
           colour = NSColor.yellow
       }
     }
@@ -2572,7 +2596,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func selectCutTableEntry(_ cutEntry: CutEntry?)
   {
     if (cutEntry != nil) {
-      if let indexOfEntry = self.cuts.index(of: cutEntry!)
+      if let indexOfEntry = self.movie.cuts.index(of: cutEntry!)
       {
         self.cutsTable.scrollRowToVisible(indexOfEntry)
         self.cutsTable.selectRowIndexes(IndexSet(integer: indexOfEntry), byExtendingSelection: false)
@@ -2672,14 +2696,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func add10Bookmarks(_ sender: AnyObject)
   {
     suppressPlayerUpdate = true
+    let firstPTS =  (movie.cuts.count != 0) ? ((movie.cuts.first!.cutType == MARK_TYPE.IN.rawValue) ? movie.cuts.first!.cutPts : PtsType(0)) : PtsType(0)
     if (preferences.generalPreference().markMode == MARK_MODE.FIXED_SPACING_OF_MARKS) {
-      cuts.addFixedTimeBookmarks(interval: preferences.generalPreference().spacingModeDurationOfMarks,
-                                 firstInCutPts: firstInCutPTS,
+      movie.cuts.addFixedTimeBookmarks(interval: preferences.generalPreference().spacingModeDurationOfMarks,
+                                 firstInCutPts: firstPTS,
                                  lastOutCutPts: lastOutCutPTS)
     }
     else {
-      cuts.addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks,
-                                  firstInCutPts: firstInCutPTS,
+      movie.cuts.addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks,
+                                  firstInCutPts: firstPTS,
                                   lastOutCutPts: lastOutCutPTS)
     }
     suppressPlayerUpdate = false
@@ -2695,7 +2720,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func clearAllOfType(_ markType: MARK_TYPE)
   {
     suppressPlayerUpdate = true
-    cuts.removeEntriesOfType(markType)
+    movie.cuts.removeEntriesOfType(markType)
     cutsTable.reloadData()
     suppressPlayerUpdate = false
   }
@@ -2716,7 +2741,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func addBookMarkSet(_ sender: AnyObject)
   {
     suppressPlayerUpdate = true
-    cuts.addPercentageBookMarks(firstInCutPts: firstInCutPTS, lastOutCutPts: lastOutCutPTS)
+    let firstPTS =  (movie.cuts.count != 0) ? ((movie.cuts.first!.cutType == MARK_TYPE.IN.rawValue) ? movie.cuts.first!.cutPts : PtsType(0)) : PtsType(0)
+    movie.cuts.addPercentageBookMarks(firstInCutPts: firstPTS, lastOutCutPts: lastOutCutPTS)
     cutsTable.reloadData()
     suppressPlayerUpdate = false
     seekPlayerToMark(firstVideoPosition())
@@ -2725,22 +2751,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// If present, remove the matching entry from the cut list.
   /// Update GUI on success
   func removeEntry(_ cutEntry: CutEntry)  {
-    if (cuts.removeEntry(cutEntry) )
+    if (movie.cuts.removeEntry(cutEntry) )
     {
       cutsTable.reloadData()
-      cuttable = cuts.isCuttable
+      cuttable = movie.cuts.isCuttable
     }
   }
   
   @IBAction func addMark(sender: NSButton) {
-    let markType = CutsFile.marksDictionary[sender.identifier!]
+    let markType = marksDictionary[sender.identifier!]
     let now = self.playerPositionInPTS()
     let mark = CutEntry(cutPts: now, cutType: markType!.rawValue)
-    cuts.addEntry(mark)
+    movie.cuts.addEntry(mark)
     updateTableGUIEntry(mark)
 
     if (markType == .IN || markType == .OUT)  {
-      cuttable = cuts.isCuttable
+      cuttable = movie.cuts.isCuttable
     }
   }
   
@@ -2753,15 +2779,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func firstVideoPosition() -> CutEntry
   {
-    if let firstInEntry = self.cuts.firstInCutMark {
-      if (self.cuts.index(of: firstInEntry) == 0) {
+    if let firstInEntry = self.movie.cuts.firstInCutMark {
+      if (self.movie.cuts.index(of: firstInEntry) == 0) {
         return firstInEntry
       }
       else
       {
-        if let firstOutEntry = self.cuts.firstOutCutMark
+        if let firstOutEntry = self.movie.cuts.firstOutCutMark
         {
-          if (self.cuts.index(of: firstInEntry)! < self.cuts.index(of: firstOutEntry)!) {
+          if (self.movie.cuts.index(of: firstInEntry)! < self.movie.cuts.index(of: firstOutEntry)!) {
             return firstInEntry
           }
           else {
@@ -2771,13 +2797,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
     }
     // if there are a set of bookmarks or no bookmarks
-    if self.cuts.count > 3 || self.cuts.count == 0
+    if self.movie.cuts.count > 3 || self.movie.cuts.count == 0
     {
       return CutEntry.InZero
     }
     else // >0 && <= 2 bookmarks pick the first bookmark
     {
-      if let entry = self.cuts.first {
+      if let entry = self.movie.cuts.first {
         return entry
       }
       else { // should be technically impossible, however, belt and braces
@@ -2788,30 +2814,30 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // MARK: OS utility functions
   
-  /// Binary data loader
-  /// - parameter filename: fully defined file path
-  /// - returns : raw arbitrary data
-  
-  func loadRawDataFrom(file filename:String) -> Data?
-  {
-    var data:Data?
-    
-    let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
-    
-    if (foundFile)
-    {
-      data = fileMgr.contents(atPath: fullFileName)
-      if (debug)  {
-        print("Found file ")
-        print("Found file of \((data?.count))! size")
-      }
-      // not interested in empty files.... may as well be missing
-      if (data?.count == 0 ) {
-        data = nil
-      }
-    }
-    return data
-  }
+//  /// Binary data loader
+//  /// - parameter filename: fully defined file path
+//  /// - returns : raw arbitrary data
+//  
+//  func loadRawDataFrom(file filename:String) -> Data?
+//  {
+//    var data:Data?
+//    
+//    let (fileMgr, foundFile, fullFileName) = Recording.getFileManagerForFile(filename)
+//    
+//    if (foundFile)
+//    {
+//      data = fileMgr.contents(atPath: fullFileName)
+//      if (debug)  {
+//        print("Found file ")
+//        print("Found file of \((data?.count))! size")
+//      }
+//      // not interested in empty files.... may as well be missing
+//      if (data?.count == 0 ) {
+//        data = nil
+//      }
+//    }
+//    return data
+//  }
   
   /// Inspect metadata, eit and player to get a best guess of the program duration
   /// in seconds.  metaData can have 0 entry, eit can refer to a later program

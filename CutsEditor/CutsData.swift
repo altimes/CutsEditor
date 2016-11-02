@@ -5,9 +5,11 @@
 //  Created by Alan Franklin on 3/04/2016.
 //  Copyright © 2016 Alan Franklin. All rights reserved.
 //
+//  Defines a single entry in the .cuts file
 
 import Foundation
 /*
+ from the NET
  == .cut FILES ==
  
  Also network ordered, they contain a 64bit value (PTS) and 32bit value
@@ -32,12 +34,15 @@ import Foundation
  - use the .ap file, find discontinuities, and interpolate between the APs
  - or just use the first PTS value as an offset, and work around PTS
  wraparounds. (simple method)
- */
+*/
 
+/// Constants for working with PTS time units
 public struct CutsTimeConst {
   public static let PTS_DURATION : Double = (1.0/90000.0) // seconds
   public static let PTS_TIMESCALE : Int32 = 90000
 }
+
+/// Text string associated with enum MARK_TYPE
 struct FieldStrings {
   static let IN = "IN"
   static let OUT = "OUT"
@@ -48,14 +53,14 @@ struct FieldStrings {
 /// Enum to capture the current set of marks that the cuts file can contain
 public enum MARK_TYPE : UInt32
 {
-  // note: UInt32 is doco--- swift thinks it knows better and uses 1 byte !!!
+  // note: UInt32 is doco --- swift thinks it knows better and uses 1 byte !!!
   // hence later convoluted code to ensure serialized file entry is 32 bits
   case IN  = 0
   case OUT = 1
   case BOOKMARK = 2
   case LASTPLAY = 3
   
-  /// return a textural value for the enum I18N'able
+  /// Return a textural value for the enum I18N'able
   
   func description () -> String {
     switch self
@@ -89,6 +94,20 @@ public enum MARK_TYPE : UInt32
 public struct  CutEntry {
   var cutPts  : UInt64
   var cutType : UInt32
+  
+  /// designated initializer
+  init(cutPts:UInt64, cutType: UInt32)
+  {
+    self.cutPts = cutPts
+    self.cutType = cutType
+  }
+  
+  /// Constructor that masks underlying values for cut types
+  init(cutPts: UInt64, mark: MARK_TYPE)
+  {
+    self.cutPts = cutPts
+    self.cutType = mark.rawValue
+  }
   
   /// A useful "0" entry for IN marks - ie start of recording
   static var InZero: CutEntry {
@@ -142,7 +161,7 @@ public struct  CutEntry {
       result = String.init(format: "%2.2d:%@", intHours, result)
     }
     if (intDays>0) {
-      result = String.init(format: "%:%@", intDays, result)
+      result = String.init(format: "%d:%@", intDays, result)
     }
     return result
   }
@@ -160,40 +179,35 @@ public struct  CutEntry {
     else {
       return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
     }
-  }
-  
-  /// designated initializer
-  init(cutPts:UInt64, cutType:UInt32)
-  {
-    self.cutPts = cutPts
-    self.cutType = cutType
-  }
+  }  
 }
 
 // this seems a nonsense if struct are "Value Type" they ought to be
-// implicitly equatable ..... but there you go.... new languages take time to get "sensible"
+// inherently equatable ..... but there you go.... new languages take time to get "sensible"
 extension CutEntry: Equatable {}
 
+/// Operator equals
 public func == (lhs: CutEntry, rhs: CutEntry) -> Bool
 {
-//  return lhs == rhs
   return lhs.cutPts == rhs.cutPts && lhs.cutType == rhs.cutType
 }
 
+/// Operator not Equals
 public func != (c1: CutEntry, c2: CutEntry) -> Bool
 {
   return c1.cutPts != c2.cutPts || c1.cutType != c2.cutType
 }
 
-// operators for ordering by time, ordering by type is not useful
-
+/// operators for ordering by time, ordering by type is not useful
 extension CutEntry: Comparable {}
 
+/// Operator less than
 public func < (c1: CutEntry, c2: CutEntry) -> Bool
 {
   return c1.cutPts < c2.cutPts
 }
 
+/// Operator greater than
 public func > (c1: CutEntry, c2: CutEntry) -> Bool
 {
   return c1.cutPts > c2.cutPts

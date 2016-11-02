@@ -24,7 +24,8 @@ class AccessPoints {
   /// Derived PTS value of last GOP seen if any
   var lastPTS: PtsType { return (m_access_points_array.count>0) ? m_access_points_array[m_access_points_array.count-1].pts : PtsType(0)}
   
-  var debug = false
+  var debug = true
+  var apFileName = ""
   
   /// given full path filename, open related file
   /// which in this context means the .ts.ap
@@ -32,10 +33,12 @@ class AccessPoints {
   /// Intializer where filename is the full path to the file
   /// - parameter fullpath : full pathname to zzzzzzzz.ts.ap file
   
-  init?( fullpath: URL) {
+  convenience init?( fullpath: URL) {
+    self.init()
     if (!self.loadAP(fullpath)) {
       return nil
     }
+    apFileName = fullpath.path
   }
   
   /// Open and decode the file into the internal structures
@@ -128,7 +131,7 @@ class AccessPoints {
   func durationInPTS() -> PtsType {
     var returnDuration = PtsType(0)
     if firstPTS > lastPTS {
-      if (debug) { print("saw discontinuity \(firstPTS) vs \(lastPTS)") }
+      if (debug) { print("saw discontinuity \(firstPTS) vs \(lastPTS) :\(apFileName)") }
       var cummulativeDuration = PtsType(0)
       // we have discontinuity to deal with find the highest PTS from start
       let result = highestPTSFrom(0)

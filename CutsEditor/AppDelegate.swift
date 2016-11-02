@@ -11,17 +11,16 @@ import Cocoa
 @NSApplicationMain
 
 class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
-
   
   var defaultSkips = skipPreferences()
   var defaultSorting = sortingPreferences()
   var defaultGeneral = generalPreferences()
   var defaultVideoPlayerPrefs = videoPlayerPreferences()
   var defaults : UserDefaults?
-  var skipDisplayArray      = [String](repeating: "", count: 10)  // display 1..10
+  var skipDisplayArray      = [String](repeating: "", count: 10)   // display 1..10
   var skipValueArray        = [Double](repeating: 0.0, count: 10)  // values 1..10
   var fileToOpen: String?
-//  var cutsEditorLog = OSLog(subsystem: "local.franklin.cutseditor", category: "general")
+  
   public var cuttingQueues = [CuttingQueue]()
   
   func applicationDidFinishLaunching(_ notification: Notification)
@@ -228,7 +227,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       let queueTitle = entry.queue.name!
       if (!newPVRArray.contains(where: {$0.title == queueTitle}))
       {
-        // pvr removed - kill all jobs in queue and delete queue
+        // pvr removed - kill all pending jobs in queue and delete queue
         entry.queue.cancelAllOperations()
         let entryIndex = cuttingQueues.index(of: entry)
         cuttingQueues.remove(at: entryIndex!)

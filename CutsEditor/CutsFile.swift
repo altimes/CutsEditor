@@ -1,19 +1,11 @@
 //
 //  CutsFile.swift
-//  CutsEditor
-//
-//  Created by Alan Franklin on 3/04/2016.
-//  Copyright © 2016 Alan Franklin. All rights reserved.
-//
-
-//
-//  CutsFile.swift
 //
 //  Created by Alan Franklin on 31/03/2016.
 //  Copyright © 2016 Alan Franklin. All rights reserved.
 //
+//  Models the Beyonwiz (Enigma2) .cuts file
 
-import Cocoa
 import AVFoundation
 
 struct MessageStrings {
@@ -21,13 +13,15 @@ struct MessageStrings {
   static let FOUND_FILE = "Found File"
   static let CAN_CREATE_FILE = "Success on file creation"
   static let DID_WRITE_FILE = "Success of replacement"
+  static let sequentialInMarks = "Sequential IN cut Marks"
+  static let sequentialOutMarks = "Sequential OUT cut Marks"
 }
 
+/// Models the collections of cut/book/lastplay marks associated with a recording
 
-open class CutsFile: NSObject {
+class CutsFile: NSObject {
   
-  // model: array of cuts data
-  
+  /// Known cut mark cases
   fileprivate enum cutStates {
     case
       unknown,
@@ -37,19 +31,26 @@ open class CutsFile: NSObject {
       lastplay
   }
   
-  var cutsArray = [CutEntry]()
-  open var count : Int
+  /// collection of cut marks, internally maintained to be in time (pts) order
+  // TODO: check what happens with discontinuities with PTS values
+  fileprivate var cutsArray = [CutEntry]()
+  
+  /// Return number of elements in cuts collection
+  public var count : Int
     {
     get { return cutsArray.count }
   }
   
-  var firstBookmark : CMTime {
+  /// Accessor to Parent container
+  var delegate : RecordingResources?
+  
+  /// Get the CoreMedia time of the first mark in the cuts collection.
+  /// If the collection is empty then return zero time.
+  var firstMarkTime : CMTime {
     get {
       var startTime: CMTime
-      if (cutsArray.count>0)
-      {
-        let startPTS = Int64(cutsArray[0].cutPts)
-        startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
+      if let firstMark = self.first {
+        startTime = CMTimeMake(Int64(firstMark.cutPts), CutsTimeConst.PTS_TIMESCALE)
       }
       else {
         startTime = CMTime(seconds: 0.0, preferredTimescale: 1)
@@ -58,62 +59,77 @@ open class CutsFile: NSObject {
     }
   }
   
+  /// Get earliest (pts time based) cut entry in the collection or nil if there is none
   open var first: CutEntry? {
     get {
       return cutsArray.first
     }
   }
   
-  open var last: CutEntry? {
+  /// Get latest (pts time based) cut entry in collection or nil if there is none
+  public var last: CutEntry? {
     get {
       return cutsArray.last
     }
   }
   
-  
-  /// Get the last OUT mark
-  open var lastOutCutMark: CutEntry? {
+  /// Get the last OUT mark (pts time based) cut entry in collection or nil if there is none
+  public var lastOutCutMark: CutEntry? {
     get {
       let OUTArray = cutsArray.filter() {$0.cutType == MARK_TYPE.OUT.rawValue}
       return OUTArray.last
     }
   }
   
-  /// Get the first IN mark
-  open var firstInCutMark: CutEntry? {
+  /// Get the first IN mark (pts time based) cut entry in collection or nil if there is none
+  public var firstInCutMark: CutEntry? {
     get {
       let INArray = cutsArray.filter() {$0.cutType == MARK_TYPE.IN.rawValue}
       return INArray.first
     }
   }
   
-  /// Get the first OUT mark
-  open var firstOutCutMark: CutEntry? {
+  /// Get the first OUT mark (pts time based) cut entry in collection or nil if there is none
+  public var firstOutCutMark: CutEntry? {
     get {
       let OUTArray = cutsArray.filter() {$0.cutType == MARK_TYPE.OUT.rawValue}
       return OUTArray.first
     }
   }
   
-  var isCuttable : Bool {
+  public var inOutOnly: [CutEntry] {
+    get {
+      let inOut = cutsArray.filter{$0.cutType == MARK_TYPE.IN.rawValue || $0.cutType == MARK_TYPE.OUT.rawValue}
+      return inOut
+    }
+  }
+  
+  /// Returns the result of checking the cuts list for consistency.
+  /// That is, ensure OUTs and INs are always alternating
+  /// - returns: changed state
+  public var isCuttable : Bool {
     get {
       let validation = self.validateInOut()
+      lastValidationMessage = validation.errorMessage
       return validation.result
     }
   }
   
-  var isModified : Bool {
+  /// Message string from the last validation performed
+  public private(set) var lastValidationMessage: String = ""
+  
+  /// Has the list of cuts been changed
+  /// - returns: changed state
+  public var isModified : Bool {
      get {
       return modified
     }
   }
   
+  /// internal flag if any change is made to the collection
   fileprivate var modified = false
   
-  
   var debug = false
-  
-  public static let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT, "addLastPlay":MARK_TYPE.LASTPLAY]
   
   // MARK: Initializers
   
@@ -125,12 +141,11 @@ open class CutsFile: NSObject {
   
   // supporting functions
   
-  open static func makeCutEntry(_ cutPts : UInt64, type : MARK_TYPE) -> CutEntry
-  {
-    return CutEntry(cutPts: cutPts, cutType: type.rawValue)
-  }
-  
-  open func entry(at index: Int) -> CutEntry?
+  /// Get a copy of the cutEntry at requested sequence position in the collection.
+  /// - Returns: cutEntry or nil on invalid sequence position
+  /// - parameter at: sequential position in the collection
+  ///
+  public func entry(at index: Int) -> CutEntry?
   {
     // validate index
     if (index >= 0 && index < cutsArray.count) {
@@ -141,30 +156,94 @@ open class CutsFile: NSObject {
     }
   }
   
-  open func contains(_ entry: CutEntry) -> Bool
+  /// Check if array has a matching (==) entry
+  /// Wrapper function to detach implementation detail
+  /// - parameter cutEntry: entry to search for
+  public func contains(_ entry: CutEntry) -> Bool
   {
     return cutsArray.contains(entry)
   }
   
-  /// Add cut entry to array
-  /// FIXME: should return SUCCESS or FAILURE ?
-  func addEntry(_ cutEntry: CutEntry) {
+  /// Add cut entry to array if it is not already present.
+  /// If it is present, then simply ignor the request
+  /// - parameter cutEntry: entry to add to the collection
+  public func addEntry(_ cutEntry: CutEntry) {
     // check if already present
     if (!cutsArray.contains(cutEntry)) {
       insert(cutEntry)
     }
   }
   
-  /// Append cutEntry to the cuts Storage and
-  /// resort the storage.
+  /// Append cutEntry to the cuts collection and
+  /// re-sort the collection.
+  /// Allows duplicate entries.
   /// Maintains storage in ascending order
-  open func insert(_ entry: CutEntry)
+  /// - parameter cutEntry: entry to add to the collection
+  public func insert(_ entry: CutEntry)
   {
     modified = true
     cutsArray.append(entry)
     cutsArray.sort(by: <)
   }
-
+  
+  /// Add bookmarks to the array at a fixed time interval.
+  /// Early simplistic implementation to caculate PTS value from first
+  /// PTS value.  Later may interogate .ap file for nearest PTS value.
+  /// Honour out/in marks, the interval is a program interval (as defined by OUT/IN)
+  /// markers, not simple recording duration
+  /// Note that this deliberately avoids a begin boundary bookmark
+  /// Cutting occurs on GOP boundaries and can end up with negative
+  /// bookmarks.
+  
+  /// - parameter interval: interval between bookmarks in seconds
+  /// - parameter firstInCutPts: pts value of the start position
+  /// - parameter lastOutCutPts: pts value of the end position
+  
+  func addFixedIntervalBookmarks (interval: PtsType, firstInCutPts: PtsType, lastOutCutPts: PtsType)
+  {
+    // get duration
+    if (firstInCutPts < lastOutCutPts)  // important for UIntXX values
+    {
+      // alogrithm is to create a temporary table of only INs and OUTs
+      // that is a balanced IN/OUT sequence
+      // and then process the IN/OUT pairs
+      
+      var inOut = inOutOnly
+      
+      // no marks, generate a pair
+      if (inOut.count == 0 ) {
+        inOut.append(CutEntry(cutPts: firstInCutPts, mark: .IN))
+        inOut.append(CutEntry(cutPts: lastOutCutPts, mark: .OUT))
+      }
+      
+      // assert inOut is NOT emptry
+      
+      // first mark is OUT, generate an IN at the begining
+      if (inOut.first!.cutType == MARK_TYPE.OUT.rawValue) {
+        inOut.insert(CutEntry(cutPts: firstInCutPts, mark: MARK_TYPE.IN), at: 0)
+      }
+      
+      // last mark is IN, generate an OUT at the end
+      if (inOut.last!.cutType != MARK_TYPE.OUT.rawValue) {
+        inOut.append(CutEntry(cutPts: lastOutCutPts, mark: .OUT))
+      }
+      
+      // assert inOut is now always IN/OUT, [IN/OUT], .... in the inOut array
+      
+      var index = 0
+      var used = UInt64(0)
+      while (index < inOut.count)
+      {
+        let nextInMark = inOut[index]
+        let nextOutMark = inOut[index+1]
+        let startPts = nextInMark.cutPts-used
+        if (debug) {print ("used: \(Double(used)*CutsTimeConst.PTS_DURATION) in: \(nextInMark.asSeconds()), start:\(Double(startPts)*CutsTimeConst.PTS_DURATION), out:\(nextOutMark.asSeconds())")}
+        used = addMarks(fromPos: startPts, upToPos: nextOutMark.cutPts, spacing: interval)
+        index += 2
+      }
+      modified = true
+    }
+  }
   
   /// Add bookmarks to the array at a fixed time interval.
   /// Early simplistic implementation to caculate PTS value from first
@@ -174,56 +253,103 @@ open class CutsFile: NSObject {
   /// Cutting occurs on GOP boundaries and can end up with negative
   /// bookmarks.
   
+  /// - parameter interval: interval between bookmarks in seconds
+  /// - parameter firstInCutPts: pts value of the start position
+  /// - parameter lastOutCutPts: pts value of the end position
+  
   func addFixedTimeBookmarks (interval: Int, firstInCutPts: PtsType, lastOutCutPts: PtsType)
   {
-    
     let intervalInSeconds = interval
     let ptsIncrement = PtsType( intervalInSeconds*Int(CutsTimeConst.PTS_TIMESCALE))
-    // get duration
-    if (firstInCutPts < lastOutCutPts)  // important for UIntXX values
-    {
-      var pts = firstInCutPts + ptsIncrement
-      while pts < lastOutCutPts
-      {
-        let cutPt = CutEntry(cutPts: pts, cutType: MARK_TYPE.BOOKMARK.rawValue)
-        addEntry(cutPt)
-        pts += ptsIncrement
-      }
-      modified = true
-    }
+    addFixedIntervalBookmarks(interval: ptsIncrement, firstInCutPts: firstInCutPts, lastOutCutPts: lastOutCutPts)
   }
 
-  /// Note that this deliberately avoids a begin boundary bookmark
-  /// Cutting occurs on GOP boundaries and can end up with negative
-  /// bookmarks.
-  /// Default value give bookmarks at 10 % boundaries
-  
-  func addPercentageBookMarks(_ numberOfMarks: Int = 9, firstInCutPts: PtsType, lastOutCutPts: PtsType)
+
+  /// Add bookmarks to the collection at the spacing from the given start position
+  /// up to the given end position. calculates and returns the last "used" part of the spacing
+  /// to enable the next bookmark create to compensate for unused portion and ensure even
+  /// bookmarks in relation to program content
+  /// - parameter fromPos: start value
+  /// - parameter upToPos: value not to create bookmarks beyond
+  /// - parameter spacing: spacing of bookmarks
+  /// - returns : remainder of unused spacing
+  fileprivate func addMarks(fromPos: PtsType, upToPos: PtsType, spacing: PtsType) -> PtsType
   {
-    var countAdded = 0
-    // get duration
-    if (firstInCutPts < lastOutCutPts)  // important for UIntXX values
-    {
-      let programLength = lastOutCutPts - firstInCutPts
-      let ptsOffset = programLength / UInt64(numberOfMarks+1)
-      var ptsPosition = firstInCutPts + ptsOffset
-      while (ptsPosition < lastOutCutPts && countAdded < numberOfMarks)
-      {
-        //        print("\(pts)  - \(offset)")
-        let cutPt = CutEntry(cutPts: ptsPosition, cutType: MARK_TYPE.BOOKMARK.rawValue)
-        addEntry(cutPt)
-        ptsPosition += ptsOffset
-        countAdded += 1
-      }
-      modified = true
+    var bookmarkPosition: PtsType
+    if (debug) { print("received start at: \(Double(fromPos)*CutsTimeConst.PTS_DURATION)") }
+    bookmarkPosition = fromPos + spacing
+    while bookmarkPosition < upToPos {
+      if (debug) { print("Creating entry at \(Double(bookmarkPosition)*CutsTimeConst.PTS_DURATION) for spacing of \(Double(spacing)*CutsTimeConst.PTS_DURATION)") }
+      addEntry(CutEntry(cutPts: bookmarkPosition, mark: .BOOKMARK))
+      bookmarkPosition += spacing
     }
+    let used = spacing - (bookmarkPosition - upToPos)
+    if (debug) { print("returning remainder of \(Double(used)*CutsTimeConst.PTS_DURATION)") }
+    return used
   }
   
+  /// Add fixed NUMBER of bookmarks
+  /// Note that this deliberately avoids adding bookmarks
+  /// on the begin and end boundaries.
+  /// Due to the observation that when cutting is done after bookmarks
+  /// are inserted and that cutting seems to occur
+  /// on GOP boundaries, then it can end up with negative
+  /// bookmarks that cause all sorts of grief to avplayers
+  /// Default value gives bookmarks at 10 % spacing
+  
+  /// - parameter numberOfMarks: how many bookmarks to interpolate between begin and end positions
+  /// - parameter firstInCutPts: pts value of the begin position
+  /// - parameter lastOutCutPts: pts value of the end position
+  
+  public func addPercentageBookMarks(_ numberOfMarks: Int = 9, firstInCutPts: PtsType, lastOutCutPts: PtsType)
+  {
+    // get duration
+    let programLength =  playable(startPTS: firstInCutPts, endPTS: lastOutCutPts)
+    let ptsOffset = programLength / UInt64(numberOfMarks+1)
+    addFixedIntervalBookmarks(interval: ptsOffset, firstInCutPts: firstInCutPts, lastOutCutPts: lastOutCutPts)
+  }
+
+  
+  /// return the recording duration with respect to OUT / IN markers
+  /// return duration from movie otherwise
+  private func playable(startPTS: PtsType, endPTS: PtsType) -> PtsType
+  {
+    var playableDurationInPts = (endPTS - startPTS)
+    guard  (isCuttable) else { return playableDurationInPts }
+    
+    let inOut = inOutOnly
+    if inOut.count != 0
+    {
+      var index = 0
+      // prime the loop - deal with leading IN marker
+      if inOut[index].cutType == MARK_TYPE.IN.rawValue {
+        let leadingOutCut = (inOut[index].cutPts - startPTS)
+        playableDurationInPts -= leadingOutCut
+        index += 1
+      }
+      
+      // loop invar inOut[index] is an OUT marker && index+1 is valid
+      while (index < inOut.count-1)
+      {
+        let outInDurationInPts = (inOut[index+1].cutPts - inOut[index].cutPts)
+        playableDurationInPts -= outInDurationInPts
+        index += 2
+      }
+      
+      // finalize the loop  - deal with trailing OUT marker
+      if (inOut.last!.cutType == MARK_TYPE.OUT.rawValue) {
+        let trailingOutCut = (endPTS - inOut.last!.cutPts)
+        playableDurationInPts -= trailingOutCut
+      }
+    }
+    return playableDurationInPts
+  }
 
   /// Remove the given cutEntry from the cuts storage.
-  /// Silently ignor missing entry.
+  /// Missing entry is acceptable
   /// - parameter cutEntry: entry structure to remove
-  open func removeEntry(_ cutEntry: CutEntry) -> Bool
+  /// - returns : true if entry was found, false if not
+  public func removeEntry(_ cutEntry: CutEntry) -> Bool
   {
     guard let index = cutsArray.index(of: cutEntry) else {
       return false
@@ -233,110 +359,72 @@ open class CutsFile: NSObject {
     return true
   }
   
-  /// Wrapper function to abstract implementation
-  open func removeAll() {
+  /// Remove all marks from the collection
+  public func removeAll() {
     cutsArray.removeAll()
     modified = true
   }
 
-  /// Wrapper function
-  open func remove(at index: Int)
+  /// Remove the mark a the given place in the collection sequence
+  /// Silently ignor out of bounds index
+  /// - parameter at: sequential position in the collection
+  public func remove(at index: Int)
   {
     guard (cutsArray.count > 0 && index>=0 && index < cutsArray.count) else { return }
     cutsArray.remove(at: index)
     modified = true
   }
   
-  open func removeEntriesOfType(_ type: MARK_TYPE)
+  /// Remove all entries matching the given mark type from the collection
+  /// - parameter type: mark type to remove
+  public func removeEntriesOfType(_ type: MARK_TYPE)
   {
     // replace with array with all marks except "type"
     cutsArray = cutsArray.filter() {!($0.cutType == type.rawValue)}
     modified = true
   }
   
-  open func index(of entry: CutEntry) -> Int?
+  /// Get the sequence position of the first entry that matches
+  /// the given entry.  Return nil on failure to find
+  /// - parameter cutEntry: entry get index of
+  /// - returns : sequence position or nil
+  public func index(of entry: CutEntry) -> Int?
   {
     return cutsArray.index(of: entry)
   }
 
   /// Find the cut entry that preceeds the current time or is within the provivded tolerance of the
   /// time.  That is, if time is 15.99, return the 16.0 cut entry
-  open func entryBeforeTime(_ secs: Double, tolerance: Double = 0.05) -> (entry :CutEntry, index: Int)?
+  /// - parameter secs: target time in seconds
+  /// - parameter tolerance: in seconds
+  /// - returns : valid entry and sequence position or nil
+  public func entryBeforeTime(_ secs: Double, tolerance: Double = 0.05) -> (entry :CutEntry, index: Int)?
   {
     var found: CutEntry? = nil
+    
+    // Simple serial search.  Record the highwater mark compared to target time
+    // until we get a mark later than the target time
     for entry in cutsArray {
       let entrySecs = entry.asSeconds()
       if ((entrySecs - secs) <= tolerance) {
         found = entry
       }
-      else {  // now is less than this mark
-        if let mark = found
-        { // there was a previous mark
-          return (mark, cutsArray.index(of: mark)!)
-        }
-        else {
-          break
-        }
+      else {
+        break
       }
     }
-    if let mark = found
-    { // there was a previous mark
-      return (mark, cutsArray.index(of: mark)!)
+    if found != nil
+    {
+      return (found!, cutsArray.index(of: found!)!)
     }
     return nil
   }
   
-  // core accessors decode/encode
-  
-  // see if file exists or if we can create one
-  
-//  public func openCreateCutsFile(name:String)  -> Bool {
-//    
-//    let (fileMgr, didFindFile, pathName) = cutsfileDelegate!.getFileManagerForFile(name)
-//    if (didFindFile)
-//    {
-//      print(MessageStrings.FOUND_FILE)
-//    }
-//    else
-//    {
-//      print(MessageStrings.NO_SUCH_FILE)
-//      var dummy = CutEntry(cutPts: 0, cutType: 0)
-//      let databuffer = NSData(bytes: &dummy, length: sizeof(CutEntry))
-//      let success = fileMgr.createFileAtPath(pathName, contents: databuffer, attributes: nil)
-//      
-//      if (success) {
-//        print(MessageStrings.CAN_CREATE_FILE)
-//        deleteCutsFile(name)
-//      }
-//    }
-//    return didFindFile
-//  }
-  
-//  public func deleteCutsFile(name:String) -> Bool
-//  {
-//    var success : Bool
-//    let (fileMgr, foundFile, fullFileName) = cutsfileDelegate!.getFileManagerForFile(name)
-//    if (foundFile)
-//    {
-//      do {
-//        try fileMgr.removeItemAtPath(fullFileName)
-//        success = true
-//      }
-//      catch { // argh!!
-//        print(error)
-//        success = false
-//      }
-//    }
-//    else { // some process has deleted the file
-//      success = true
-//    }
-//    return success
-//  }
-
-  
-  /// Routine that looks at the program time and decide if it is in
-  /// a "cut me out" section and if so, return the next IN time or nil
-  open func programTimeAfter(_ now: CMTime) -> CMTime?
+  /// Routine that looks at the given program time and decide if it is in
+  /// a "cut me out" section of the program and if so, return the next IN time or nil
+  /// - parameter now: Core Media time structure
+  /// - returns : valid IN mark time or nil
+  public func programTimeAfter(_ now: CMTime) -> CMTime?
   {
     var skipCandidate = false
     let nowInSecs = now.seconds
@@ -344,8 +432,6 @@ open class CutsFile: NSObject {
       var markInSecs = entry.asSeconds()
       if (entry.cutType == MARK_TYPE.IN.rawValue || entry.cutType == MARK_TYPE.OUT.rawValue)
       {
-//        let type = MARK_TYPE(rawValue: entry.cutType)!
-//        print("seeing now as \(nowInSecs) and mark as \(markInSecs) with mark \(type.description()) and candidate = \(skipCandidate)")
         var markTime = CMTimeMake(Int64(entry.cutPts), CutsTimeConst.PTS_TIMESCALE)
         
         if (nowInSecs > markInSecs && entry.cutType == MARK_TYPE.OUT.rawValue)
@@ -356,11 +442,8 @@ open class CutsFile: NSObject {
         }
         
         if (nowInSecs < markInSecs && entry.cutType == MARK_TYPE.IN.rawValue && skipCandidate) {
-//          print (" comp \(nowInSecs) vs \(markInSecs)")
-//          print ("\(markTime) - \(now)")
           markInSecs += 0.25
           markTime = CMTimeMake(Int64(markInSecs*1000.0)*Int64(CutsTimeConst.PTS_TIMESCALE/1000), CutsTimeConst.PTS_TIMESCALE)
-//          markTime = CMTimeConvertScale(markTime, now.timescale, .roundAwayFromZero)
           return markTime
         }
         else {
@@ -371,9 +454,10 @@ open class CutsFile: NSObject {
     return nil
   }
   
-  open func decodeCutsData(_ data: Data)
+  /// Unravels the binary chunk of data into the required local format
+  /// - parameter data: the Binary lump to be decoded
+  private func decodeCutsData(_ data: Data)
   {
-    
       if (debug)  {
         print("Found file ")
         print("Found file of \((data.count))! size")
@@ -381,14 +465,15 @@ open class CutsFile: NSObject {
       
       let entries = (data.count) / MemoryLayout<CutEntry>.size
       cutsArray = [CutEntry](repeating: CutEntry(cutPts: 0, cutType: 0 ), count: entries)
-      
+    
       // nibble through the data buffer and populate array
       var startOffset = 0
-      for i in 0..<entries
+      for i in 0 ..< entries
       {
         var tempCutEntry = CutEntry(cutPts: 0, cutType: 0)
         let itemRange = NSRange.init(location: startOffset, length: MemoryLayout<CutEntry>.size)
         startOffset += MemoryLayout<CutEntry>.size
+        // pass the byte into a the temporary structure and then byte swap the chunks
         (data as NSData).getBytes(&tempCutEntry, range: itemRange)
         cutsArray[i].cutPts = UInt64(bigEndian: tempCutEntry.cutPts)
         cutsArray[i].cutType = UInt32(bigEndian: tempCutEntry.cutType)
@@ -397,64 +482,29 @@ open class CutsFile: NSObject {
       modified = false
   }
   
-//  public func loadCutsDataFromFile(name:String)
-//  {
-//    let debug = true
-//    
-//    let (fileMgr, foundFile, fullFileName) = cutsfileDelegate!.getFileManagerForFile(name)
-//    
-//    if (foundFile)
-//    {
-//      let foundData = fileMgr.contentsAtPath(fullFileName)
-//      if (debug)  {
-//        print("Found file ")
-//        print("Found file of \((foundData?.length))! size")
-//      }
-//      
-//      let entries = (foundData?.length)! / sizeof(CutEntry)
-//      cutsArray = [CutEntry](count: entries, repeatedValue: CutEntry(cutPts: 0, cutType: 0 ))
-//      
-//      // nibble through the data buffer and populate array
-//      var startOffset = 0
-//      for i in 0..<entries
-//      {
-//        var tempCutEntry = CutEntry(cutPts: 0, cutType: 0)
-//        let itemRange = NSRange.init(location: startOffset, length: sizeof(CutEntry))
-//        startOffset += sizeof(CutEntry)
-//        foundData?.getBytes(&tempCutEntry, range: itemRange)
-//        cutsArray[i].cutPts = UInt64(bigEndian: tempCutEntry.cutPts)
-//        cutsArray[i].cutType = UInt32(bigEndian: tempCutEntry.cutType)
-//        //        print("--> \(i) -- " + cutsArray[i].asString())
-//      }
-////      cutsArray.sortInPlace(orderByPTS)
-////      cutsArray.sortInPlace({(c1:CutEntry, c2:CutEntry) in  return c1.cutPts < c2.cutPts})
-////      cutsArray.sortInPlace({c1, c2 in return c1.cutPts < c2.cutPts})
-////      cutsArray.sortInPlace( {$0.cutPts < $1.cutPts} )
-////      cutsArray.sortInPlace() {$0.cutPts < $1.cutPts}
-//      cutsArray.sortInPlace(<)
-////      if (debug) {
-////        printCutsData()
-////      }
-//    }
-//  }
-  
-  func orderByPTSAscending(_ cut1: CutEntry, _ cut2: CutEntry) -> Bool {
-    return cut1.cutPts < cut2.cutPts
+  /// Encoder for collection. Encodes into binary form suitable for PVR
+  /// - returns : data binary blob ready to writing to file
+  open func encodeCutsData() -> Data
+  {
+    var data = Data()
+    for entry in cutsArray
+    {
+      var entryCopy = CutEntry(cutPts: entry.cutPts.bigEndian, cutType: entry.cutType.bigEndian)
+      data.append(Data(bytes: &entryCopy, count: MemoryLayout<CutEntry>.size))
+    }
+    return data
   }
   
-  func orderByPTSDescending(_ cut1: CutEntry, _ cut2: CutEntry) -> Bool {
-    return cut1.cutPts > cut2.cutPts
-  }
-  
-  func orderByType(_ cut1: CutEntry, _ cut2: CutEntry) -> Bool {
-    return cut1.cutType < cut2.cutType
-  }
-  
+  /// Test if collection has an IN or OUT Marker
+  /// - returns : true or false
   func containsINorOUT() -> Bool
   {
     return contains(.IN) || contains(.OUT)
   }
   
+  /// Test if collection has a marker of the given type
+  /// - parameter cutOfType: case from emum (.IN, .OUT, .LASTPLAY, .BOOKMARK)
+  /// - returns : true or false
   func contains(_ cutOfType: MARK_TYPE) -> Bool
   {
     var found = false
@@ -470,17 +520,7 @@ open class CutsFile: NSObject {
     return found
   }
   
-//  func firstINMark() -> CutEntry?
-//  {
-//    let INArray = cutsArray.filter() {$0.cutType == MARK_TYPE.IN.rawValue}
-//    return INArray.first
-//  }
-  
-//  public func appendEntry(item : CutEntry)
-//  {
-//    cutsArray.append(item)
-//  }
-  
+  /// Utility debug to verify order and contents of collection
   open func printCutsData()
   {
     var lineNumber = 0
@@ -490,6 +530,7 @@ open class CutsFile: NSObject {
     }
   }
   
+  /// Utility debug to verify order and contents of collection
   open func printCutsDataAsHex()
   {
     var lineNumber = 0
@@ -499,8 +540,8 @@ open class CutsFile: NSObject {
     }
   }
   
-  
-  // print in/out list from array
+  /// Utility debug to verify order and contents of collection.
+  ///  Print to console  in/out list from array
   
   open func printInOut()
   {
@@ -508,7 +549,8 @@ open class CutsFile: NSObject {
     printSetOfType(inOutSet)
   }
   
-  // print bookmark list from array
+  /// Utility debug to verify order and contents of collection.
+  /// Print to console bookmark list from array
   
   open func printBookmark()
   {
@@ -516,8 +558,9 @@ open class CutsFile: NSObject {
     printSetOfType(bookMarkSet)
   }
   
-  // print items that match the set member type
-  
+  /// Utility debug to verify order and contents of collection
+  ///  Print to console  items that match the set member type
+  /// - parameter markSet: Set of required mark types
   func printSetOfType(_ markSet : Set<MARK_TYPE>) {
     var lineNumber = 0
     for entry in cutsArray {
@@ -529,8 +572,9 @@ open class CutsFile: NSObject {
     }
   }
   
-  // optional return formatted string of entry that if of any type in the set of cut types
-  
+  /// Get a formatted string of the entry if that entry is of any type that is in the set of cut types given
+  /// - parameter cutEntry: entry to be formatted if it matches the condition
+  /// - parameter markSet: Set of required mark types
   func cutDataMarkOfTypeAsString(_ cutEntry: CutEntry, markSet : Set<MARK_TYPE>) -> String?
   {
     var result : String? = nil
@@ -541,29 +585,27 @@ open class CutsFile: NSObject {
     return result
   }
   
-  open func saveCutsToFile(_ fullFileName :String, using fileMgr: FileManager)
+  /// Save the cuts data back to disk and return result
+  /// parameter filenamePath: full path to file
+  /// returns: success or failure of save
+  func saveAs(filenamePath: String) -> Bool
   {
-    
-    let item = NSMutableData()
-    
-    for entry in cutsArray
-    {
-      var entryCopy = CutEntry(cutPts: entry.cutPts.bigEndian, cutType: entry.cutType.bigEndian)
-      item.append(&entryCopy, length: MemoryLayout<CutEntry>.size)
+    let (fileMgr, found, fullFileName) = Recording.getFileManagerForFile(filenamePath)
+    if (found) {
+      let cutsData = encodeCutsData()
+      let fileWritten = fileMgr.createFile(atPath: fullFileName, contents: cutsData, attributes: nil)
+      if (fileWritten && debug) {
+        print(MessageStrings.DID_WRITE_FILE)
+      }
+      return fileWritten
     }
-    
-    let fileWritten = fileMgr.createFile(atPath: fullFileName, contents: item as Data, attributes: nil)
-    
-    if (fileWritten && debug) {
-      print(MessageStrings.DID_WRITE_FILE)
-    }
-    modified = false
+    return false
   }
   
   /// check that there are no IN, IN or OUT, OUT sequences present
   /// - returns: result of validation and message if flaw was found or empty string if good
   
-  open func validateInOut() -> (result: Bool, errorMessage: String) {
+  fileprivate func validateInOut() -> (result: Bool, errorMessage: String) {
     // check in/out pairing
     var currentState = cutStates.unknown
     var goodList = true
@@ -578,7 +620,7 @@ open class CutsFile: NSObject {
         }
         else {
           goodList = false
-          message = "Sequential IN cut Marks"
+          message = MessageStrings.sequentialInMarks
           break
         }
       case .OUT :
@@ -588,7 +630,7 @@ open class CutsFile: NSObject {
         }
         else {
           goodList = false
-          message = "Sequential OUT cut Marks"
+          message = MessageStrings.sequentialOutMarks
           break
         }
       case .BOOKMARK : fallthrough
@@ -597,7 +639,6 @@ open class CutsFile: NSObject {
         goodList = goodList && true
       }
     }
-    
     return (goodList, message)
   }
 }
