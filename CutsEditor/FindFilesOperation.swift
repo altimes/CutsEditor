@@ -10,6 +10,11 @@ import Cocoa
 
 // MARK: - file search support class
 
+/// This creates and detaches a remote/local system query to build a list of files
+/// and return it the program without doing all the file traversal work within the
+/// program.   This is optimization that removes large network delays incurred with
+/// programmatic directory traversal.  It is less generic but much quicker.
+
 class FindFilesOperation: Operation
 {
   var foundfiles = [String]()
@@ -36,8 +41,6 @@ class FindFilesOperation: Operation
   }
   
   
-  // get the passed in starting directory
-//  init(foundRootPath : String, withSuffix: String, localMountPoint: String, remoteExportPath: String, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
   init(foundRootPath : String, withSuffix: String, pvrIndex: Int, isRemote: Bool, sysConfig: systemConfiguration, completion: @escaping FindCompletionBlock)
   {
     self.foundRootPath = foundRootPath
@@ -79,7 +82,6 @@ class FindFilesOperation: Operation
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
       searchPath = self.foundRootPath
     }
-//    print(fileCountTask.arguments)
     fileCountTask.standardOutput = outPipe
     fileCountTask.launch()
     let handle = outPipe.fileHandleForReading

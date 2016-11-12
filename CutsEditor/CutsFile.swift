@@ -17,7 +17,7 @@ struct MessageStrings {
   static let sequentialOutMarks = "Sequential OUT cut Marks"
 }
 
-/// Models the collections of cut/book/lastplay marks associated with a recording
+/// Models the collection of cut/book/lastplay marks associated with a recording
 
 class CutsFile: NSObject {
   
@@ -42,7 +42,7 @@ class CutsFile: NSObject {
   }
   
   /// Accessor to Parent container
-  var delegate : RecordingResources?
+  var container : Recording?
   
   /// Get the CoreMedia time of the first mark in the cuts collection.
   /// If the collection is empty then return zero time.
@@ -97,6 +97,7 @@ class CutsFile: NSObject {
     }
   }
   
+  /// Array of only the IN and OUT cutmarks in time order
   public var inOutOnly: [CutEntry] {
     get {
       let inOut = cutsArray.filter{$0.cutType == MARK_TYPE.IN.rawValue || $0.cutType == MARK_TYPE.OUT.rawValue}
@@ -186,13 +187,23 @@ class CutsFile: NSObject {
     cutsArray.sort(by: <)
   }
   
+  /// Derives and returns first and last position in a video file
+  /// from the cutmarks and video information
+  /// - returns : firstIN and lastOut mark points as PtsType
+  func startEnd() -> (firstIN: PtsType, lastOUT: PtsType)
+  {
+    let firstInCutPts =  (count != 0) ? ((first!.cutType == MARK_TYPE.IN.rawValue) ? first!.cutPts : PtsType(0)) : PtsType(0)
+    let lastPTS =   ((inOutOnly.count > 0) && (inOutOnly.last!.cutType == MARK_TYPE.OUT.rawValue)) ? inOutOnly.last!.cutPts : container!.lastOutCutPTS
+    return(firstInCutPts, lastPTS)
+  }
+  
   /// Add bookmarks to the array at a fixed time interval.
   /// Early simplistic implementation to caculate PTS value from first
   /// PTS value.  Later may interogate .ap file for nearest PTS value.
   /// Honour out/in marks, the interval is a program interval (as defined by OUT/IN)
   /// markers, not simple recording duration
   /// Note that this deliberately avoids a begin boundary bookmark
-  /// Cutting occurs on GOP boundaries and can end up with negative
+  /// Cutting appears to occur on GOP boundaries and can end up with negative
   /// bookmarks.
   
   /// - parameter interval: interval between bookmarks in seconds
@@ -201,11 +212,26 @@ class CutsFile: NSObject {
   
   func addFixedIntervalBookmarks (interval: PtsType, firstInCutPts: PtsType, lastOutCutPts: PtsType)
   {
-    // get duration
+    var lastPts = lastOutCutPts
+    
     if (firstInCutPts < lastOutCutPts)  // important for UIntXX values
     {
-      // alogrithm is to create a temporary table of only INs and OUTs
-      // that is a balanced IN/OUT sequence
+      // get duration from meta and compare to first / last pts range
+      // editted file will result in a substantial mismatch
+      if let metaDuration = Double((container?.meta.duration)!) {
+        let ptsDuration = Double(lastOutCutPts - firstInCutPts)
+        let durationDiff = abs(ptsDuration-metaDuration)
+        // is the diffrence > 30 secs ?
+        if metaDuration != 0 && durationDiff > 30.0*Double(CutsTimeConst.PTS_TIMESCALE) {
+          // file has had advertisements removed, check that last matches the ap data
+            lastPts = firstInCutPts + (container?.ap.runtimePTS)!
+          // FIXME: this algorithm is broken for edited file (in/outs) are missing
+          // might be fixable by finding gaps and inserting temp in/out at gap boundaries
+        }
+      }
+      
+      // alogrithm is to: create a temporary table of only INs and OUTs.
+      // balance IN/OUT sequence to ensure that we start IN and end OUT
       // and then process the IN/OUT pairs
       
       var inOut = inOutOnly
@@ -213,7 +239,7 @@ class CutsFile: NSObject {
       // no marks, generate a pair
       if (inOut.count == 0 ) {
         inOut.append(CutEntry(cutPts: firstInCutPts, mark: .IN))
-        inOut.append(CutEntry(cutPts: lastOutCutPts, mark: .OUT))
+        inOut.append(CutEntry(cutPts: lastPts, mark: .OUT))
       }
       
       // assert inOut is NOT emptry
@@ -225,7 +251,7 @@ class CutsFile: NSObject {
       
       // last mark is IN, generate an OUT at the end
       if (inOut.last!.cutType != MARK_TYPE.OUT.rawValue) {
-        inOut.append(CutEntry(cutPts: lastOutCutPts, mark: .OUT))
+        inOut.append(CutEntry(cutPts: lastPts, mark: .OUT))
       }
       
       // assert inOut is now always IN/OUT, [IN/OUT], .... in the inOut array
@@ -254,16 +280,14 @@ class CutsFile: NSObject {
   /// bookmarks.
   
   /// - parameter interval: interval between bookmarks in seconds
-  /// - parameter firstInCutPts: pts value of the start position
-  /// - parameter lastOutCutPts: pts value of the end position
   
-  func addFixedTimeBookmarks (interval: Int, firstInCutPts: PtsType, lastOutCutPts: PtsType)
+  func addFixedTimeBookmarks (interval: Int)
   {
     let intervalInSeconds = interval
+    let (first, last) = startEnd()
     let ptsIncrement = PtsType( intervalInSeconds*Int(CutsTimeConst.PTS_TIMESCALE))
-    addFixedIntervalBookmarks(interval: ptsIncrement, firstInCutPts: firstInCutPts, lastOutCutPts: lastOutCutPts)
+    addFixedIntervalBookmarks(interval: ptsIncrement, firstInCutPts: first, lastOutCutPts: last)
   }
-
 
   /// Add bookmarks to the collection at the spacing from the given start position
   /// up to the given end position. calculates and returns the last "used" part of the spacing
@@ -298,15 +322,14 @@ class CutsFile: NSObject {
   /// Default value gives bookmarks at 10 % spacing
   
   /// - parameter numberOfMarks: how many bookmarks to interpolate between begin and end positions
-  /// - parameter firstInCutPts: pts value of the begin position
-  /// - parameter lastOutCutPts: pts value of the end position
   
-  public func addPercentageBookMarks(_ numberOfMarks: Int = 9, firstInCutPts: PtsType, lastOutCutPts: PtsType)
+  public func addPercentageBookMarks(_ numberOfMarks: Int = 9)
   {
+    let (first, last) = startEnd()
     // get duration
-    let programLength =  playable(startPTS: firstInCutPts, endPTS: lastOutCutPts)
+    let programLength =  playable(startPTS: first, endPTS: last)
     let ptsOffset = programLength / UInt64(numberOfMarks+1)
-    addFixedIntervalBookmarks(interval: ptsOffset, firstInCutPts: firstInCutPts, lastOutCutPts: lastOutCutPts)
+    addFixedIntervalBookmarks(interval: ptsOffset, firstInCutPts: first, lastOutCutPts: last)
   }
 
   
@@ -344,6 +367,49 @@ class CutsFile: NSObject {
     }
     return playableDurationInPts
   }
+  
+  /// Find the earliest position in the video.  This should be;
+  /// the first IN mark not preceed by an out Mark,
+  /// failing that, if there are <= 3 bookmarks,
+  /// use the first bookmark - most likely an unedited file.
+  /// Otherwise use then use the initial file position
+  /// which may have to be fabricated if it does not exist.
+  
+  func firstVideoPosition() -> CutEntry
+  {
+    if let firstInEntry = firstInCutMark {
+      if (index(of: firstInEntry) == 0) {
+        return firstInEntry
+      }
+      else
+      {
+        if let firstOutEntry = firstOutCutMark
+        {
+          if (index(of: firstInEntry)! < index(of: firstOutEntry)!) {
+            return firstInEntry
+          }
+          else {
+            return CutEntry.InZero
+          }
+        }
+      }
+    }
+    // if there are a set of bookmarks or no bookmarks
+    if count > 3 || count == 0
+    {
+      return CutEntry.InZero
+    }
+    else // >0 && <= 2 bookmarks pick the first bookmark
+    {
+      if let entry = first {
+        return entry
+      }
+      else { // should be technically impossible, however, belt and braces
+        return CutEntry.InZero
+      }
+    }
+  }
+  
 
   /// Remove the given cutEntry from the cuts storage.
   /// Missing entry is acceptable
@@ -454,8 +520,10 @@ class CutsFile: NSObject {
     return nil
   }
   
+  // TODO: update to Swift 3 Data unpacking functions. replacing bridged NSData functions
   /// Unravels the binary chunk of data into the required local format
   /// - parameter data: the Binary lump to be decoded
+  
   private func decodeCutsData(_ data: Data)
   {
       if (debug)  {

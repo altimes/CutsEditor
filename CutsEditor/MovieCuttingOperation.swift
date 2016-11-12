@@ -37,15 +37,10 @@ class MovieCuttingOperation: Operation
                             ("Cutting failed for movie \"%@\"")+":\n"+("Empty .ap file"),
                             ("Cutting failed for movie \"%@\"")+":\n"+("No cuts specified"),
                             ("Cutting failed for movie \"%@\"")+":\n"+("Read/write error (disk full?)")
-//    ,
-//                            (ABORTED_MESSAGE),
-//                            (FAILED_TO_READ_RESULT),
-//                            (FAILED_TO_NORMALIZE_MESSAGE),
-//                            (UNKNOWN_ERROR_CODE)
   ]
   
   
-  // get the passed in starting directory
+  // designated initializer
   init(movieToBeCutPath : String, sysConfig: systemConfiguration, pvrIndex: Int, isRemote: Bool, onCompletion: @escaping MovieCutCompletionBlock, onStart: @escaping MovieCutStartBlock)
   {
     self.moviePath = movieToBeCutPath
@@ -76,7 +71,7 @@ class MovieCuttingOperation: Operation
     // prevent double logging with before and after check
     if (self.isCancelled && shouldLogCancelled) {
       let cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
-      let shortTitle = ViewController.programDateTitleFrom(movieURLPath: moviePath)
+      let shortTitle = Recording.programDateTitleFrom(movieURLPath: moviePath)
       resultMessage = String.init(format: global_mcut_errors[cutResultStatusValue], shortTitle)
       DispatchQueue.main.async {
         self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
@@ -88,7 +83,7 @@ class MovieCuttingOperation: Operation
     var cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
     
     // have we been cancelled ?
-    let shortTitle = ViewController.programDateTitleFrom(movieURLPath: moviePath)
+    let shortTitle = Recording.programDateTitleFrom(movieURLPath: moviePath)
     guard (!self.isCancelled) else {
       //      print("was cancelled by user")
       resultMessage = String.init(format: global_mcut_errors[cutResultStatusValue], shortTitle)
@@ -135,7 +130,6 @@ class MovieCuttingOperation: Operation
         let messageIndex = (cutResultStatusValue >= 0 && cutResultStatusValue < global_mcut_errors.count) ? cutResultStatusValue : global_mcut_errors.count-1
         resultMessage = String.init(format: global_mcut_errors[messageIndex], shortTitle)
         if (debug) { print(resultMessage) }
-        // TODO: add code to to handle "new output file case"
       }
     }
   

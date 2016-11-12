@@ -20,15 +20,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   var skipDisplayArray      = [String](repeating: "", count: 10)   // display 1..10
   var skipValueArray        = [Double](repeating: 0.0, count: 10)  // values 1..10
   var fileToOpen: String?
+  /// development flag, may become a "reset to default" function
+  var needToClearOutUserPreferences = false
+  var debug = false
   
   public var cuttingQueues = [CuttingQueue]()
   
   func applicationDidFinishLaunching(_ notification: Notification)
   {
-//    let dict = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier!)
-//    print(dict)
-//    UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
-//    UserDefaults.standard.synchronize()
+    if (debug) {
+      if let dict = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier!) {
+        print(dict)
+      }
+    }
+    if (needToClearOutUserPreferences) {
+    UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
+    UserDefaults.standard.synchronize()
+    }
     // Insert code here to initialize your application
     // load up the user preferences or fabricate default settings
     defaults = UserDefaults.standard
@@ -102,6 +110,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     
   }
   
+  
+  /// fabricate the cuting queue for each pvr configuration
   func makeQueues()
   {
     // create the array of queues for cutting jobs
@@ -112,12 +122,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     }
 
   }
+  
+  /// Lifecycle calls
   func applicationWillTerminate(aNotification: NSNotification) {
     // Insert code here to tear down your application
     // TODO: send cancel to any jobs pending in Queues
   }
   
-  /// create entries in bookmarks menu
+  /// setup entries in bookmarks menu
   func setInsertBookmarksMenuItemText()
   {
     let appMenu = NSApplication.shared().mainMenu
@@ -126,6 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     let insertText = defaultGeneral.markMode == MARK_MODE.FIXED_COUNT_OF_MARKS ? "\(defaultGeneral.countModeNumberOfMarks) Bookmarks" : "\(defaultGeneral.spacingModeDurationOfMarks) sec Bookmarks"
     insertItem?.title = "Insert "+insertText
   }
+  
   /// create a system default sorting preferences
   func initSortPreferences()
   {
@@ -138,13 +151,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   func initSkipSettings()
   {
     let lh1 = skipPair(display: "-1s", value: -1.0)
-    let lh2 = skipPair(display: "-5s", value: -5.0)
+    let lh2 = skipPair(display: "-15s", value: -15.0)
     let lh3 = skipPair(display: "-1m", value: -60.0)
     let lh4 = skipPair(display: "-15m", value: -15.0*60.0)
     let lh5 = skipPair(display: "-60m", value: -60.0*60.0)
     
     let rh1 = skipPair(display: "+1s", value: 1.0)
-    let rh2 = skipPair(display: "+5s", value: 5.0)
+    let rh2 = skipPair(display: "+15s", value: 15.0)
     let rh3 = skipPair(display: "+1m", value: 60.0)
     let rh4 = skipPair(display: "+15m", value: 15.0*60.0)
     let rh5 = skipPair(display: "+60m", value: 60.0*60.0)
@@ -258,7 +271,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     }
   }
   
-  
+  /// Get the array of cutting queues
   func cuttingQueueTable() -> [CuttingQueue]
   {
     return self.cuttingQueues

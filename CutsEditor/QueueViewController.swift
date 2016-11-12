@@ -78,7 +78,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
       case queueTableStringConsts.queueColumnIdentifier:
         cellContent = logEntry.queue
       case queueTableStringConsts.movienameColumnIdentifier:
-        cellContent = ViewController.programDateTitleFrom(movieURLPath:  logEntry.entry.moviePathURL)
+        cellContent = Recording.programDateTitleFrom(movieURLPath:  logEntry.entry.moviePathURL)
       case queueTableStringConsts.timestampColumnIdentifier:
         cellContent = logEntry.entry.timeStamp
       case queueTableStringConsts.statusColumnIdentifier:
@@ -111,16 +111,8 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     return rowCount
   }
   
-//  func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
-//    // don't care about the column trigger a reload
-//    jobsListing = combineQueues()
-//    queuesTable.reloadData()
-//  }
-  
   func tableViewSelectionDidChange(_ notification: Notification) {
     let selectedRow = queuesTable.selectedRow
-//    let rowSet = IndexSet(integer: selectedRow)
-//    queuesTable.selectRowIndexes(rowSet, byExtendingSelection: false)
     guard (selectedRow>=0 && selectedRow<tablelength) else
     {
       // out of bounds, silently ignor
@@ -179,36 +171,6 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     resultCell.textField?.drawsBackground = true
     resultCell.textField?.backgroundColor = colour.withAlphaComponent(0.45)
   }
-  
-//  func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-//    if (jobsListing[row].1.currentState.state == CuttingState.onqueue)
-//    {
-//      let thisQueue = jobsListing[row].0
-//      let thisMovieName = jobsListing[row].1.moviePathURL
-//      // check that there is no related cancelled, completed or executing
-//      let relatedEntries = jobsListing.filter { ($0.queue == thisQueue) && ($0.entry.currentState.state == CuttingState.completed || $0.entry.currentState.state == CuttingState.running || $0.entry.currentState.state == CuttingState.completed) && ($0.entry.moviePathURL == thisMovieName) }
-//        if (relatedEntries.count == 0) {
-//          return true
-//        } // end filter
-//    }
-//    return false
-//  }
- 
-  
-//  // beware only called on mouse clicks not keyboard
-//  // only rows where jobs are in the waiting state are selectable
-//  func tableViewSelectionIsChanging(_ notification: Notification) {
-//    // enable the cancel button
-//    cancelJobButton.isEnabled = true
-//  }
-  
-  
-//  func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
-//    // user clicked in table, suppress timed updates
-//    self.suppressTimedUpdates = true
-//    if (debug) { print("Saw column did Click") }
-//    
-//  }
 
   func cutEntryFor(tableRow: Int) -> (compositeLog)
   {

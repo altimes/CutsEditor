@@ -194,42 +194,101 @@ struct DVBTextString
   }
 }
 
-//--------------------------------------------------------------------------------------------
+// extract a type with given length from the blob of data
+extension Data {
+  /// Extract the type T which has given byte length
+  /// - parameter from: starting offset in the data
+  /// - parameter length: number of bytes to use for referred to type
+  func decodeValue<T>(from: Int, length: Int) -> T
+  {
+    return self.subdata(in: from..<from+length).withUnsafeBytes{$0.pointee}
+  }
+  /// Extract the unsigned byte array
+  /// - parameter from: starting offset in the data
+  /// - parameter length: number of bytes to use for array
+  func decodeByteArray(from: Int, length: Int) -> [UInt8]
+  {
+    return Array(self.subdata(in: from..<from+length))
+  }
+}
 
+// MARK: Class Info
 class EITInfo
 {
   
   // MARK: Model
   var eit = EventInfomationTable()
   let debug = false
+  var container: Recording?
   
   // MARK: Initializers
-  
-  convenience init(data: Data)
+  /// Failable. Decode the raw data, typically from file.
+  /// Empty file unacceptable.
+  convenience init?(data: Data)
   {
+    guard data.count != 0 else { return nil }
     self.init()
     decodeEITData(data)
   }
   
-  // MARK: Support function
+  // MARK: Support functions
   
-  func decodeEITData(_ foundData: Data)
+//  /// Get a UInt8 from a Data buffer at index
+//  /// - parameter from: a Data<UInt8> object to extract element from
+//  /// - parameter at: starting offset in the data of the element
+//  /// - returns : the element
+//  func getUInt8(from rawData: Data, at index: Int) -> UInt8
+//  {
+//    let itemRange = Range(index ..< index+MemoryLayout<UInt8>.size)
+//    return rawData.subdata(in: itemRange).withUnsafeBytes{$0.pointee}
+//  }
+//  
+//  /// Get a UInt8 Array from a Data buffer starting at index
+//  /// - parameter from: a Data<UInt8> object to extract element from
+//  /// - parameter at: starting offset in the data of the element
+//  /// - parameter length: size of array
+//  /// - returns : the array element
+//  func getUInt8Array(from rawData: Data, at index: Int, length: Int) -> [UInt8]
+//  {
+////    var buffer = [UInt8].init(repeating: 0, count: Int(length))
+//    let itemRange = Range(index ..< index+length*MemoryLayout<UInt8>.size)
+//    let buffer:[UInt8] =  Array(rawData.subdata(in: itemRange))
+//    return buffer
+//  }
+//  
+//  /// Get a UInt16 from a Data buffer at index
+//  /// - parameter from: a Data<UInt8> object to extract element from
+//  /// - parameter at: starting offset in the data of the element
+//  /// - returns : the element
+//  func getUInt16(from rawData: Data, at index: Int) -> UInt16
+//  {
+//    let itemRange = Range(index ..< index+MemoryLayout<UInt16>.size)
+//    return rawData.subdata(in: itemRange).withUnsafeBytes{$0.pointee}
+//  }
+//  
+  
+  /// Decode the raw data into the workable structures
+  func decodeEITData(_ rawData: Data)
   {
-    // nibble through the data buffer and populate array
+    let uInt16Size = MemoryLayout<UInt16>.size
+    let uInt8Size = MemoryLayout<UInt8>.size
+    
+    // nibble through the data buffer and populate structures
     
     // decode first 12 bytes bigEndian
     // two shorts, 6 chars, 1 short
     var start = 0
-    var itemRange = NSRange.init(location: start,  length:MemoryLayout<UInt16>.size)
     var eventID:UInt16 = 0
-    (foundData as NSData).getBytes(&eventID, range: itemRange)
+    eventID = rawData.decodeValue(from: start, length: uInt16Size)
+    start += uInt16Size
+    
     var eventDate:UInt16 = 0
-    start += MemoryLayout<UInt16>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt16>.size)
-    (foundData as NSData).getBytes(&eventDate, range: itemRange)
+    eventDate = rawData.decodeValue(from: start, length: uInt16Size)
+    start += uInt16Size
     if (debug) {
       print("eventID \(eventID) bigEndian \(eventID.bigEndian)")
     }
+    
     eit.EventID = "\(eventID)"
     //        print("eventDate \(eventDate) bigEndian \(eventDate.bigEndian)")
     // decode date
@@ -239,26 +298,23 @@ class EITInfo
     // decode time HH MM SS
     var temp :UInt8 = 0
     
-    start += MemoryLayout<UInt16>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventTimeHH = unBCD(temp)
     
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventTimeMM = unBCD(temp)
     
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventTimeSS = unBCD(temp)
     //        print("Event start time \(eventTimeHH):\(eventTimeMM):\(eventTimeSS) UTC")
     let datetimeString = String.init(format: "%4.4d-%02.2d-%02.2d %02d:%02d:%02d",
                                      MJD.year, MJD.month, MJD.day, eventTimeHH, eventTimeMM, eventTimeSS)
     
     // having picked the bits apart, build an internal datetime representation,
-    // note that the file internal date time it GMT based, so we need to convert it to
+    // note that the file internal date time is GMT based, so we need to convert it to
     // local time
     
     let dateCreator = DateFormatter()
@@ -279,29 +335,25 @@ class EITInfo
     
     // decode duration HH MM SS
     
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventDurationHH = unBCD(temp)
     
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventDurationMM = unBCD(temp)
     
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt8>.size)
-    (foundData as NSData).getBytes(&temp, range: itemRange)
+    temp = rawData.decodeValue(from: start, length: uInt8Size)
+    start += uInt8Size
     let eventDurationSS = unBCD(temp)
     eit.Duration = String(format:"%2.2d:%02.2d:%02.2d",eventDurationHH, eventDurationMM, eventDurationSS)
     //        print("Event Duration time \(eventDurationHH):\(eventDurationMM):\(eventDurationSS)")
     //        print (eit.Duration)
     
     // pull the next short apart for status, encryption and descriptor block length
-    start += MemoryLayout<UInt8>.size
-    itemRange = NSRange.init(location: start, length: MemoryLayout<UInt16>.size)
     var statusShort : UInt16 = 0
-    (foundData as NSData).getBytes(&statusShort, range: itemRange)
+    statusShort = rawData.decodeValue(from: start, length: uInt16Size)
+    start += uInt16Size
     //        let shortText = String.init(format: "%08.8x", statusShort.bigEndian)
     //        print(shortText)
     
@@ -334,34 +386,24 @@ class EITInfo
     // we only see 0x4d and 0x4e tags currently
     
     //      let blockLength = (foundData?.length)!
-    start += MemoryLayout<UInt16>.size
     var blockIndex = 0
     while blockIndex < descriptorLength {
       var index = start+blockIndex
       //      while index < blockLength {
       // next a tag - descriptor type
       
-      itemRange = NSRange.init(location: index, length: MemoryLayout<UInt8>.size)
-      (foundData as NSData).getBytes(&temp, range: itemRange)
+      temp = rawData.decodeValue(from: index, length: uInt8Size)
+      index += uInt8Size
       let tag = temp
       
       // next the descriptor item length
-      index += 1
-      itemRange = NSRange.init(location: index, length: MemoryLayout<UInt8>.size)
-      (foundData as NSData).getBytes(&temp, range: itemRange)
-      let itemLength = temp
+
+      temp = rawData.decodeValue(from: index, length: uInt8Size)
+      index += uInt8Size
+      let itemLength = Int(temp)
       
-      //          let descriptorLookup = [ 0x4d:"short_event_descriptor", 0x4e:"extended_event_descriptor"]
-      //          let descriptorType =  descriptorLookup.keys.contains(Int(tag)) ? descriptorLookup[Int(tag)]! : "unavailable"
-      //          let tagStringHex = String.init(format: "%02.2x", tag)
-      //          print("descriptor tag \(tagStringHex) - means <\(descriptorType)>")
-      //          print("descriptor text Length = \(itemLength)")
-      
-      index += 1
-      var buffer = [UInt8].init(repeating: 0, count: Int(itemLength))
-      itemRange = NSRange.init(location: index, length: Int(itemLength))
-      (foundData as NSData).getBytes(&buffer, range: itemRange)
-      //          decodeDescriptor(buffer)
+      let buffer = rawData.decodeByteArray(from: index, length: itemLength)
+      blockIndex += Int(itemLength) + 2*uInt8Size  // allow for bytecount of tag, itemLength and item
       if (tag == EITConst.SHORT_EVENT_DESCRIPTOR_TAG) {
         let shortEventDescriptor = Short_Event_Descriptor.init(buffer: buffer)
         if (eit.shortDescriptors == nil ) {
@@ -375,7 +417,6 @@ class EITInfo
         }
         eit.extendedDescriptors?.append(extendedEventDescriptor)
       }
-      blockIndex += Int(itemLength) + 2  // allow for bytecount of tag, itemLength and item
     }
 //    print(self.description())
   }
@@ -391,7 +432,8 @@ class EITInfo
   // if this is "Engima" or "BeyonWiz" peculiartiy.  As I only have BeyonWiz
   // recordings.  I work with that apparent convention
   
-  // nominally pick out the eventName field of the first short descriptor
+  /// nominally pick out the eventName field of the first short descriptor
+  /// return: program name as text
   func programNameText() -> String
   {
     var program = ""
@@ -413,8 +455,8 @@ class EITInfo
     return program
   }
   
-  // nominally pick out the eventText field of the second short descriptor
-  
+  /// nominally pick out the eventText field of the second short descriptor
+  /// return : episode text
   func episodeText() -> String
   {
     var title = ""
@@ -452,7 +494,6 @@ class EITInfo
   
   /// Return contents of EIT in ordered printable form
   /// - returns: multiline string
-  
   func description() -> String
   {
     let d1 = "EventID        : \(eit.EventID)\n"
@@ -509,8 +550,9 @@ class EITInfo
 
 // MARK: support decoders
 
-// unpack by "ETSI" "Modified Julian Date" algorithm
-
+/// unpack with "ETSI" "Modified Julian Date" algorithm
+/// - parameter packed: 16 bit packed date
+/// - return: touple of year, month, day as Ints
 func parseMJD(_ packed:UInt16) -> (year:Int, month:Int, day:Int)
 {
   let packedDate = Double(packed)
@@ -523,8 +565,9 @@ func parseMJD(_ packed:UInt16) -> (year:Int, month:Int, day:Int)
   return ((1900+YY+K),(MM-1-K*12),Int(D))
 }
 
-// extract Values from BCD packing
-
+/// extract Values from BCD packing
+/// - parameter byte: 8 bit Unsigned value
+/// - returns : unpacked value as Int
 func unBCD(_ byte:UInt8) -> Int
 {
   var digit = 0
@@ -533,8 +576,8 @@ func unBCD(_ byte:UInt8) -> Int
   return digit
 }
 
-// debugging hex dump of buffer
-
+/// debugging hex print of buffer
+/// - parameter: array of unsigned bytes
 func decodeDescriptor(_ buffer:[UInt8])
 {
   for i in 0 ..< (buffer.count)

@@ -54,7 +54,7 @@ class CuttingEntry : NSObject {
   
   func contents() -> String
   {
-    let movieIDString = ViewController.programDateTitleFrom(movieURLPath: moviePathURL)
+    let movieIDString = Recording.programDateTitleFrom(movieURLPath: moviePathURL)
     let results = (resultValue == -1 ) ? "" : " \(resultValue)" + " " + resultMessage
     return timeStamp + " " + movieIDString + " " + currentState.stringValue + results
   }

@@ -10,312 +10,6 @@ import Cocoa
 import AVFoundation
 import AVKit
 
-
-struct StringsCuts {
-  static let WORKING = "Working getting file list"
-  static let NO_DIRECTORY_SELECTED = "No directory Selected"
-  static let DIRECTORY_SEPERATOR = "/"
-  static let NO_FILE_CHOOSEN = "No file selected"
-  static let SELECT_DIRECTORY = "Select Directory"
-  static let CANCEL_SEARCH = "Cancel Search"
-  static let NO_PROGRAMS_FOUND = "No programs found at location"
-  static let TABLE_TIME_COLUMN = "Time"
-  static let TABLE_TYPE_COLUMN = "Type"
-  static let FILE_SAVE_FAILED = "Failed to save file"
-  static let STARTED_SEARCH = "Started Search"
-  static let CANCELLED_BY_USER = "Cancelled by User"
-  static let DERIVING_PROGRAM_STATUS = "Determining Program State"
-  static let COLOUR_CODING_CANCELLED = "Colour Coding Cancelled"
-  static let FAILED_TRYING_TO_ACCESS = "Failed trying to access %@"
-  static let FAILED_COUNTING_FILES = "Failed counting files expected number, got\n<%@>"
-}
-
-/// Engima file extensions and sundry constants
-struct ConstsCuts {
-  static let filelistSize = 200  // starting size for list of files
-  static let CUTS_SUFFIX = ".ts.cuts"
-  static let META_SUFFIX = ".ts.meta"
-  static let EIT_SUFFIX = ".eit"
-  static let TS_SUFFIX = ".ts"
-  static let AP_SUFFIX = ".ts.ap"
-}
-
-/// lookup code for tags of GUI buttons
-
-enum skipButtons:Int {
-  case PLUS_A = 501
-  case PLUS_B = 502
-  case PLUS_C = 503
-  case PLUS_D = 504
-  case PLUS_E = 505
-  case MINUS_A = -501
-  case MINUS_B = -502
-  case MINUS_C = -503
-  case MINUS_D = -504
-  case MINUS_E = -505
-}
-
-enum CheckMarkState: Int {
-  case checked = 99
-  case unchecked = 100
-  
-  static func lookup(_ raw : Int?) -> CheckMarkState
-  {
-    guard raw != nil else { return .unchecked }
-    switch (raw!)
-    {
-      case checked.rawValue : return .checked
-      case unchecked.rawValue : return .unchecked
-      default : return .unchecked
-    }
-  }
-}
-
-/// Control which file to process "selected" or just worked on
-enum FileToHandle {
-  case current, previous
-}
-
-/// strings for configuring the remote call to the mcut programs
-public struct mcutConsts {
-  static let replaceSwitch = "-r"
-  static let outputSwitch = "-o"
-  static let nameSwitch = "-n"
-  static let descriptionSwitch = "-d"
-  static let cutsSwitch = "-c"
-  static let localMount = "/Volumes/Harddisk"
-  static let remoteExportPath = "/media/hdd"
-  static let mcutProgramRemote = "/usr/lib/enigma2/python/Plugins/Extensions/MovieCut/bin/mcut"
-  static let mcutProgramLocal = "/usr/local/bin/mcut2"
-  
-  static let pleaseWaitMessage = "Cutting <%@> %@ please wait..."
-  static let started = "Started"
-  static let waiting = "Waiting"
-  static let cutOK = "Cut OK"
-  static let cutFailed = "Cut Failed"
-  
-  static let  remoteMachineAndLogin = "root@beyonwizt4.local"
-  static let sshPath = "/usr/bin/ssh"
-  static let shPath = "/bin/sh"
-  
-  static let fixedLocalName = "Local"
-}
-
-/// Notification identifiers
-let skipsDidChange = "CutsPreferenceControllerSkipsDidChange"
-let sortDidChange = "SortPreferenceControllerSortDidChange"
-let generalDidChange = "GeneralPreferencesControllerGeneralDidChange"
-let playerDidChange = "PlayerPreferencesControllerDidChange"
-let fileOpenDidChange = "FileToOpenFromMenuDidChange"
-let jobQueueDidChange = "JobQueueDidChange"
-
-/// Pair of Strings touple of diskURL and the extracted recording program name
-struct namePair {
-  var diskURL: String = ""
-  var programeName: String = ""
-}
-
-/// Configuration parameters for deciding colouring of
-/// list of programs in the popup button
-struct fileColourParameters {
-  static let BOOKMARK_THRESHOLD_COUNT = 3        // number of bookmarks that is considered as raw file
-  static let PROGRAM_LENGTH_THRESHOLD = 900.0    // 15 minute or less programs do not need cutting
-  static let allDoneColor = NSColor(red: 0.2, green: 0.5, blue: 0.2, alpha: 1.0)
-  static let noBookmarksColor = NSColor(red: 0.5, green: 0.2, blue: 0.2, alpha: 1.0)
-  static let readyToCutColor = NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 1.0)
-}
-
-/// Dictionary that maps mark types to GUI button identifier strings
-let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT, "addLastPlay":MARK_TYPE.LASTPLAY]
-
-/// Pair of String and Double for association with a GUI "skip" button.
-/// The String is the text used on the button and the double is the skip
-/// duration in seconds
-
-struct skipPair {
-  var display : String = ""
-  var value : Double = 0.0
-}
-
-/// User configuration of sorting for popupbutton display
-struct sortingPreferences {
-  var isAscending: Bool = true
-  var sortBy: String = ""
-}
-
-/// Mimics Cocoa
-enum videoControlStyle : Int {
-  case inLine, floating
-}
-
-/// User configuration of player controls
-struct videoPlayerPreferences {
-  var playbackControlStyle : videoControlStyle = .inLine
-  var playbackShowFastForwardControls: Bool = true // iff style is floating
-  var skipCutSections: Bool = true  // play through out/in pairs (alternate is to skip over)
-}
-
-/// User configuration enum for type of bulk entry
-enum MARK_MODE: Int {
-  case FIXED_COUNT_OF_MARKS
-  case FIXED_SPACING_OF_MARKS
-}
-
-let kHyphen = " - "
-
-/// User configuration general preferences
-struct generalPreferences {
-  var autoWrite = CheckMarkState.checked
-  var markMode = MARK_MODE.FIXED_COUNT_OF_MARKS
-  var countModeNumberOfMarks = 10         // 10 equally spaced bookmarks
-  var spacingModeDurationOfMarks = 180    // 180 seconds spaced bookmarks
-  // cuts application
-  var systemConfig = systemConfiguration()
-}
-
-/// per pvr preferences
-public struct pvrPreferences {
-  var title = "Beyonwiz Tx"
-  var cutReplace = CheckMarkState.checked
-  var cutRenamePrograme = CheckMarkState.unchecked
-  var cutOutputFile = CheckMarkState.unchecked
-  var cutDescription = CheckMarkState.unchecked
-  
-  var cutProgramLocalPath = mcutConsts.mcutProgramLocal
-  var cutProgramRemotePath = mcutConsts.mcutProgramRemote
-  var cutLocalMountRoot = mcutConsts.localMount
-  var cutRemoteExport = mcutConsts.remoteExportPath
-  var remoteMachineAndLogin = mcutConsts.remoteMachineAndLogin
-  var sshPath = mcutConsts.sshPath
-  var shPath = mcutConsts.shPath
-}
-
-// based on http://stackoverflow.com/questions/38406457/how-to-save-an-array-of-custom-struct-to-nsuserdefault-with-swift
-extension pvrPreferences {
-  init(title: String) {
-    self.title = title
-  }
-  
-  init?(data: NSData)
-  {
-    if let coding = NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? Encoding
-    {
-      title = coding.title as String
-      cutReplace = CheckMarkState(rawValue: coding.cutReplace)!
-      cutRenamePrograme = CheckMarkState(rawValue: coding.cutRenamePrograme)!
-      cutOutputFile = CheckMarkState(rawValue: coding.cutOutputFile)!
-      cutDescription = CheckMarkState(rawValue: coding.cutDescription)!
-      cutProgramLocalPath = coding.cutProgramLocalPath as String
-      cutProgramRemotePath = coding.cutProgramRemotePath as String
-      cutLocalMountRoot = coding.cutLocalMountRoot as String
-      cutRemoteExport = coding.cutRemoteExport as String
-      remoteMachineAndLogin = coding.remoteMachineAndLogin as String
-      sshPath = coding.sshPath as String
-      shPath = coding.shPath as String
-    } else {
-        return nil
-    }
-  }
-
-    func encode() -> NSData {
-        return NSKeyedArchiver.archivedData(withRootObject: Encoding(self)) as NSData
-    }
-  
-    private class Encoding: NSObject, NSCoding
-    {
-      let title : String
-        let cutReplace : Int
-        let cutRenamePrograme : Int
-        let cutOutputFile : Int
-        let cutDescription : Int
-        let cutProgramLocalPath : String
-        let cutProgramRemotePath : String
-        let cutLocalMountRoot : String
-        let cutRemoteExport : String
-        let remoteMachineAndLogin : String
-        let sshPath : String
-        let shPath : String
-
-        init(_ pvr: pvrPreferences) {
-          title = pvr.title
-          cutReplace = pvr.cutReplace.rawValue
-          cutRenamePrograme = pvr.cutRenamePrograme.rawValue
-          cutOutputFile = pvr.cutOutputFile.rawValue
-          cutDescription = pvr.cutDescription.rawValue
-          cutProgramLocalPath = pvr.cutProgramLocalPath
-          cutProgramRemotePath = pvr.cutProgramRemotePath
-          cutLocalMountRoot = pvr.cutLocalMountRoot
-          cutRemoteExport = pvr.cutRemoteExport
-          remoteMachineAndLogin = pvr.remoteMachineAndLogin
-          sshPath = pvr.sshPath
-          shPath = pvr.shPath
-        }
-
-        @objc required init?(coder aDecoder: NSCoder) {
-          guard aDecoder.containsValue(forKey: "cutReplace") else {
-            return nil
-          }
-          title = aDecoder.decodeObject(forKey: "title") as! String
-          cutReplace = aDecoder.decodeInteger(forKey: "cutReplace")
-          cutRenamePrograme = aDecoder.decodeInteger(forKey: "cutRenamePrograme")
-          cutOutputFile = aDecoder.decodeInteger(forKey: "cutOutputFile")
-          cutDescription = aDecoder.decodeInteger(forKey: "cutDescription")
-          cutProgramLocalPath = aDecoder.decodeObject(forKey: "cutProgramLocalPath") as! String
-          cutProgramRemotePath = aDecoder.decodeObject(forKey: "cutProgramRemotePath") as! String
-          cutLocalMountRoot = aDecoder.decodeObject(forKey: "cutLocalMountRoot") as! String
-          cutRemoteExport = aDecoder.decodeObject(forKey: "cutRemoteExport") as! String
-          remoteMachineAndLogin = aDecoder.decodeObject(forKey: "remoteMachineAndLogin") as! String
-          sshPath = aDecoder.decodeObject(forKey: "sshPath") as! String
-          shPath = aDecoder.decodeObject(forKey: "shPath") as! String
-        }
-
-      @objc func encode(with aCoder: NSCoder) {
-        aCoder.encode(title, forKey: "title")
-        aCoder.encode(cutReplace, forKey: "cutReplace")
-        aCoder.encode(cutRenamePrograme, forKey: "cutRenamePrograme")
-        aCoder.encode(cutOutputFile, forKey: "cutOutputFile")
-        aCoder.encode(cutDescription, forKey: "cutDescription")
-        aCoder.encode(cutProgramLocalPath, forKey: "cutProgramLocalPath")
-        aCoder.encode(cutProgramRemotePath, forKey: "cutProgramRemotePath")
-        aCoder.encode(cutLocalMountRoot, forKey: "cutLocalMountRoot")
-        aCoder.encode(cutRemoteExport, forKey: "cutRemoteExport")
-        aCoder.encode(remoteMachineAndLogin, forKey: "remoteMachineAndLogin")
-        aCoder.encode(sshPath, forKey: "sshPath")
-        aCoder.encode(shPath, forKey: "shPath")
-        }
-    }
-}
-
-
-/// Property that contains the user preferences for /// the skip buttons.  Organized to mirror screen representation
-/// of two columns (rhs/lhs) of 5 buttons
-struct skipPreferences {
-  var lhs = [skipPair]()
-  var rhs = [skipPair]()
-  
-  /// Default initializer
-  init() {
-   lhs = [skipPair](repeating: skipPair(), count: 5)
-   rhs = [skipPair](repeating: skipPair(), count: 5)
-  }
-  
-  /// Initializer to set values from user preferences
-  init(lhs:[skipPair], rhs:[skipPair])
-  {
-    self.lhs = lhs
-    self.rhs = rhs
-  }
-}
-
-/// Configuration of users system and path to sh and ssh
-/// FIXME: add to preferences panel
-public struct systemConfiguration {
-  var pvrSettings = [pvrPreferences(title:mcutConsts.fixedLocalName),pvrPreferences(title:"Beyonwiz T4"),pvrPreferences(title: "Beyonwiz T2")]
-  
-  /// args for the external "cutter" program
-  var mcutCommandArgs = [String]()
-}
-
 typealias FindCompletionBlock = ( _ URLArray:[String]?,  _ forSuffix: String,  _ didCompleteOK:Bool) -> ()
 typealias MovieCutCompletionBlock  = (_ message: String, _ resultValue: Int, _ wasCancelled: Bool) -> ()
 typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
@@ -377,12 +71,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-//  /// list of files in the cutting queue.
-//  /// Moved from the presented list into this array when added to the cutting queue
-//  /// moved from here into the presented list when cutting completes
-//  var cuttingList : [String] = []
-//  
-  /// flag if cuts list is coherent, enable CUT button if it is
+  /// flag if cuts list is coherent, enable CUT button, and bookmark bulk insertion if it is
+  /// TODO: better done as a KVO oberserver of the movie.isCuttable property setting both button and menu item, for now, this works
+  
   var cuttable : Bool {
     set {
       cutButton.isEnabled = newValue
@@ -401,7 +92,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   var lastfileIndex : Int = 0
   var fileWorkingName : String = ""
-  var videoDurationFromPlayer: Double = 0.0
+//  var videoDurationFromPlayer: Double = 0.0
   var programDurationInSecs: Double = 0.0
   /// Flag for completion handler to resume playing after seek
   var wasPlaying: Bool = false
@@ -418,48 +109,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// readonly computed var of postion of first IN cutmark in PTS units. If no IN is present
-  /// then return 0 for begining of video
+  /// or IN is preceed by OUT, then return 0 for begining of video
   var firstInCutPTS:UInt64 {
     get {
       var pts : UInt64 = 0
       if let entry = movie.cuts.firstInCutMark
       {
-        pts = entry.cutPts
-      }
-      return pts
-    }
-  }
-  
-  /// Readonly computed var of the position of the last OUT pts.  If no OUT is present,
-  /// or it is followed by and IN
-  /// then return the max of the metadata duration (which for some broadcasters
-  /// can be 0 (!)) and the video duration determined by the AVPlayer
-  
-  var lastOutCutPTS: UInt64 {
-    get {
-      var pts : UInt64
-      let metaPTS : UInt64 = UInt64( metadata.duration) ?? UInt64(0)
-      // FIXME: check if first PTS is always 0??
-      let videoPTS : UInt64 = UInt64( videoDurationFromPlayer * Double(CutsTimeConst.PTS_TIMESCALE))
-      
-      if (metaPTS == UInt64(0)) {
-        pts = videoPTS
-      }
-      else {
-        pts = min(metaPTS, videoPTS)
-      }
-      //
-      // get in/out pairs only
-      let inOut = movie.cuts.inOutOnly
-      if let entry = inOut.last
-      {
-        if entry.cutType == MARK_TYPE.OUT.rawValue {
-          pts = entry.cutPts
+        if movie.cuts.inOutOnly.index(of: entry) == 0 {
+         pts = entry.cutPts
         }
       }
       return pts
     }
   }
+  
+  /// opaque var used by video player timed callback
+  private var timeObserverToken: Any?
   
   var preferences = NSApplication.shared().delegate as! AppPreferences
   
@@ -468,15 +133,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var systemSetup = systemConfiguration()
 
   var currentFileColouringBlock : BlockOperation?
-//  var cuts = CutsFile()
   var cutsModified : Bool {
     get {
       return movie.cuts.isModified
     }
   }
-  var eit = EITInfo()
-  var metadata = MetaData()
-  var accessPointData : AccessPoints?
   
   var skips = skipPreferences()
   var sortPrefs = sortingPreferences()
@@ -503,9 +164,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// var used to maintain ordered list of movie cuttting jobs added to the cutting queue.
   /// Used as a lightweight queue monitor.  Displayed as "tooltip" on Cut button
   
-  var cuttingInQueue = ""
-  
-//  var cutterQueues = [OperationQueue]()
   
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -542,22 +200,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.progressBar.controlTint = NSControlTint.clearControlTint
     self.view.window?.title = "CutListEditor"
     
-//    reconstructScAp.do_movie("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts")
-//    reconstructScAp.readFFMeta("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts.ap")
-//    reconstructScAp.pyProcessScAp("/Users/alanf/Movies/20160324 1850 - ABC - Clarke And Dawe.ts")
   }
   
+  /// Housekeeping Things to do on window closure
   override func viewDidDisappear() {
         super.viewDidDisappear()
     
-        if let token = timeObserverToken {
+        if let token = timeObserverToken
+        {
           self.monitorView.player?.removeTimeObserver(token)
           self.timeObserverToken = nil
         }
         self.monitorView.player?.pause()
   }
   
-  
+  /// Housekeeping Things to do after window closure
+ 
   override func viewWillDisappear() {
     super.viewWillDisappear()
     NotificationCenter.default.removeObserver(self)
@@ -604,7 +262,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return (itemTitles, menuItemArray)
   }
  
-  /// Restore the saved attributed strings to the popUpButton
+  /// Restore the saved attributed strings to the popUpButton.
+  /// find the index of the old string in the new popup button and
+  /// transcribe the related tooltip and attributed title string
+  /// - parameter popUp: the button to work with
+  /// - parameter itemTitles: array of Strings of the program titles used in the button
+  /// - parameter menuItems: array of the old menuitems, which contains the original attributed strings
   
   func restoreAttributedStringList(_ popUp: NSPopUpButton, itemTitles: [String], menuItems:[NSMenuItem])
   {
@@ -733,138 +396,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return defaultCount
   }
   
-//  /// Query the PVR (or directory) for a list of the files with .xxx extension.
-//  /// Written to do a external shell query and then process the resulting message
-//  /// eg. countFilesWithSuffix(".ts", "/hdd/media/movie")
-//  /// - parameter fileSuffix: tail to match including  leading "."
-//  /// - parameter belowPath: absolute root path to start from 
-//  /// - returns: array of filename strings in URL format
-//  
-//  func getListOfFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> [String]?
-//  {
-//    var searchPath: String
-//    
-//    // use a task to get a count of the files in the directory
-//    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
-//    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-//    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-//    let fileCountTask = Process()
-//    let outPipe = Pipe()
-//    if (belowPath.contains(generalPrefs.cutLocalMountRoot)) {
-//      searchPath = belowPath.replacingOccurrences(of: generalPrefs.cutLocalMountRoot, with: generalPrefs.cutRemoteExport)
-//      fileCountTask.launchPath = systemSetup.sshPath
-//      fileCountTask.arguments = [systemSetup.remoteManchineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | grep -v \\.Trash"]
-//    }
-//    else {
-//      fileCountTask.launchPath = systemSetup.shPath
-//      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(fileSuffix)$\""]
-//      searchPath = belowPath
-//    }
-//    fileCountTask.standardOutput = outPipe
-//    fileCountTask.launch()
-//    let handle = outPipe.fileHandleForReading
-//    let data = handle.readDataToEndOfFile()
-//    
-//    if let resultString = String(data: data, encoding: String.Encoding.utf8)
-//    {
-//      // build array from string result
-//      let trimmedString = resultString.trimmingCharacters(in: CharacterSet(charactersIn:" \n"))
-//      if (trimmedString.isEmpty ) {
-//        return nil
-//      }
-//      else {
-//        let fileNameArray = trimmedString.components(separatedBy: "\n")
-////        var reducedFileNameArray = fileNameArray.filter({!$0.contains(".Trash")})
-//        // typicall replace the /hdd/media with /Volumes/Harddisk for local handling
-//        let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: generalPrefs.cutRemoteExport, with: generalPrefs.cutLocalMountRoot)})
-//        let URLStringArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
-//        return URLStringArray
-//      }
-//    }
-//    return nil
-//  }
-  
-//  // TODO: ensure that this can work with mulitple PVRs
-//  
-//  func makeSearchTaskFor(filesWithSuffix: String,  belowPath: String) -> Process
-//  {
-//    // use a task to get a count of the files in the directory
-//    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
-//    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-//    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-//    var searchPath: String
-//    let fileCountTask = Process()
-//    fileCountTask.standardOutput = Pipe()
-//    if (belowPath.contains(self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot)) {
-//      searchPath = belowPath.replacingOccurrences(of: self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot, with: self.generalPrefs.systemConfig.pvrSettings[pvrIndex].cutRemoteExport)
-//      fileCountTask.launchPath = self.systemSetup.pvrSettings[pvrIndex].sshPath
-//      fileCountTask.arguments = [self.systemSetup.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
-//    }
-//    else {
-//      fileCountTask.launchPath = self.systemSetup.pvrSettings[pvrIndex].shPath
-//      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(filesWithSuffix)$\" | grep -v \\.Trash"]
-//      searchPath = belowPath
-//    }
-//    return fileCountTask
-//  }
-//  
-//  /// Background a potentially slow task.
-//  /// Query the PVR (or directory) for a list of the files with .xxx extension.
-//  /// Written to do a external shell query and then process the resulting message
-//  /// eg. backgroundGetListOfFiles(withSuffix: ".ts", belowPath: "/hdd/media/movie")
-//  /// - parameter fileSuffix: tail to match including  leading "."
-//  /// - parameter belowPath: absolute root path to start from
-//  
-//  func backgroundGetListOfFiles(withSuffix: String, belowPath: String)
-//  {
-//    
-//    let userQueue = DispatchQueue.global(qos: .userInitiated)
-//    
-//    let fileCountTask = makeSearchTaskFor(filesWithSuffix: withSuffix, belowPath: belowPath)
-//    userQueue.async(execute: { [unowned self] in
-//    // use a task to get a count of the files in the directory
-//    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
-//    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-//    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-//    fileCountTask.launch()
-//    let handle = (fileCountTask.standardOutput as! Pipe).fileHandleForReading
-//    let data = handle.readDataToEndOfFile()
-//    var builtURLArray: [String]?
-//    if let resultString = String(data: data, encoding: String.Encoding.utf8)
-//    {
-//      // build array from string result
-//      let trimmedString = resultString.trimmingCharacters(in: CharacterSet(charactersIn:" \n"))
-//      if (!trimmedString.isEmpty ) {
-//        let fileNameArray = trimmedString.components(separatedBy: "\n")
-//        //  var reducedFileNameArray = fileNameArray.filter({!$0.contains(".Trash")})
-//        // typically replace the /hdd/media with /Volumes/Harddisk for local handling
-//        let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: self.generalPrefs.cutRemoteExport, with: self.generalPrefs.cutLocalMountRoot)})
-//        builtURLArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
-//        // 
-//        // All done dispatch results back to application
-//        //
-//        DispatchQueue.main.async(execute:  {
-//          if (!self.fileSearchCancelled) {
-//            if (builtURLArray != nil ) {
-//              self.filelist = builtURLArray!
-//            }
-//            else {
-//              // post a nothing found message
-//              self.statusField.stringValue = "No files found with suffix \(withSuffix)"
-//            }
-//            print("From "+#function)
-//            self.listingOfFilesFinished()
-//          } else {
-//            self.fileSearchCancelled = false
-//            self.selectDirectory.isEnabled = true
-//            self.statusField.stringValue = "Search Terminated"
-//          }
-//          })
-//      }
-//    }
-//    } )
-//  }
-  
   /// Observer function that responds to a mouseDown event on the
   /// file select popupbutton - purpose is to pick up and retain
   /// the current selection index BEFORE it is changed
@@ -896,7 +427,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let index = (indexSelector == FileToHandle.current) ? filelistIndex : lastfileIndex
     var proceedWithWrite = true
-    let validCuts = movie.cuts.isCuttable
+    let validCuts = movie.isCuttable
     guard (validCuts) else {
       self.statusField.stringValue = movie.cuts.lastValidationMessage
       return false
@@ -921,20 +452,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (proceedWithWrite) {
         // rewrite cuts file
         if movie.saveCuts() {
-//    
-//        let (fileMgr, found, fullFileName) = Recording.getFileManagerForFile(filelist[index])
-//        if (found) {
-//          let cutsData = movie.cuts.encodeCutsData()
-//          let fileWritten = fileMgr.createFile(atPath: fullFileName, contents: cutsData, attributes: nil)
           if ( debug) {
             print(MessageStrings.DID_WRITE_FILE)
           }
-//          self.cuts.saveCutsToFile(fullFileName, using: fileMgr)
           setDropDownColourForIndex(index)
         }
         else {
           self.statusField.stringValue = StringsCuts.FILE_SAVE_FAILED
-          // TODO:  needs some sort of try again/ give up options
+          // TODO:  needs some sort of try again / give up options
           return true
         }
       }
@@ -967,23 +492,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.player?.cancelPendingPrerolls()
     self.monitorView.player?.currentItem?.cancelPendingSeeks()
     resetGUI()
-    resetCurrentModel()
+    resetCurrentMovie()
     setStatusFieldToCurrentSelection()
-    videoDurationFromPlayer = 0.0
    
     currentFile.toolTip = currentFile.selectedItem?.toolTip
     let actualFileName = filelist[filelistIndex].components(separatedBy: CharacterSet(charactersIn: "/")).last
     fileWorkingName = actualFileName!.removingPercentEncoding!
-    let baseName = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-    movie = Recording(rootProgramName: baseName)
+    let baseNameURL = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
     
-//    let cutsData = Recording.loadRawDataFrom(file: filelist[filelistIndex])
-//    if cutsData != nil {
-//      cuts = CutsFile(data: cutsData!)
-//    }
-//    else { // empty table
-//      cuts = CutsFile()
-//    }
+    // load up a recording
+    movie = Recording(rootURLName: baseNameURL)
+    
     if (debug) { movie.cuts.printCutsData() }
     self.cutsTable.reloadData()
     
@@ -997,41 +516,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       startTime = CMTime(seconds: 0.0, preferredTimescale: 1)
     }
     
-    // process eit file
-    let EitName = baseName+ConstsCuts.EIT_SUFFIX
-    let EITData = Recording.loadRawDataFrom(file: EitName)
-    if (EITData != nil ) {
-      eit=EITInfo(data: EITData!)
-      if (debug) { print(eit.description()) }
-    }
-    else {
-      eit = EITInfo()
-    }
-    programTitle.stringValue = eit.programNameText()
-    epsiodeTitle.stringValue = eit.episodeText()
-    programDescription.string = eit.descriptionText()
+    // extract eit file information
+    programTitle.stringValue = movie.eit.programNameText()
+    epsiodeTitle.stringValue = movie.eit.episodeText()
+    programDescription.string = movie.eit.descriptionText()
     
-    let metaFilename = baseName+ConstsCuts.META_SUFFIX
-    
-    metadata = MetaData(fromFilename: URL(string: metaFilename)!)
-    
-    // load the ap file
-    let apName = URL(string: filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))!
-    accessPointData = AccessPoints(fullpath: apName)
-
-    if (debug) { print(metadata.description()) }
+    if (debug) { print(movie.meta.description()) }
     // if description is empty, replicate title in description field
     // some eit entries fail to give a title and put the description
     // in the notional episode title descriptor
     if programDescription.string!.isEmpty
     {
-      programDescription.string = eit.episodeText()
+      programDescription.string = movie.eit.episodeText()
     }
-    let TSName = baseName+ConstsCuts.TS_SUFFIX
-    setupAVPlayerFor(TSName, startTime: startTime)
+    let TSNameURL = baseNameURL+ConstsCuts.TS_SUFFIX
+    setupAVPlayerFor(TSNameURL, startTime: startTime)
     // found a loaded a file, update the recent file menu
-    let name = baseName+ConstsCuts.CUTS_SUFFIX
-    let fileURL = URL(string: name)!
+    let cutsNameURL = baseNameURL+ConstsCuts.CUTS_SUFFIX
+    let fileURL = URL(string: cutsNameURL)!
     if  let doc = try? TxDocument(contentsOf: fileURL, ofType: ConstsCuts.CUTS_SUFFIX)
     {
        NSDocumentController.shared().noteNewRecentDocument(doc)
@@ -1122,7 +624,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     removePlayerObserversAndItem()
     // clear current dialog entries
-    resetCurrentModel()
+    resetCurrentMovie()
     resetGUI()
     let moviePathURL = filelist[filelistIndex]
     cutMovie(moviePathURL)
@@ -1175,7 +677,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           self.filelist.removeAll()
           self.statusField.stringValue = "No files found with suffix \(forSuffix)"
         }
-//        print("From "+#function)
         self.listingOfFilesFinished()
         self.actionsSetEnabled(true)
       } else {
@@ -1226,6 +727,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
    }
 
+  
+  /// Used to determine from recording path which configuration should be used for
+  /// setting up the "Cut" task.  Uses a the unchangable local name determining fi
+  /// we are doing a local or remote cut.
+  /// - parameter dirPath: path of the recording
+  /// - returns : touple local or remote cut, index into the configurations array
   func pvrLocalMount(containedIn dirPath: String) -> (isLocal: Bool, configIndex: Int)
   {
     // note index 0 is always local cutting configuration
@@ -1240,9 +747,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     return (false, 0)
   }
+  
   /// respond to configured skip buttons
-  // TODO: Create the logic to handle honour skipping into Out/In sections
-  // TODO: when skipping is to be honoured
   @IBAction func seekToAction(_ sender: NSButton) {
     if let key = skipButtons(rawValue: sender.tag) {
       switch key {
@@ -1268,12 +774,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // Duplicate names may occur in multiple directories.  We don't care
   // where they are, we want all 'like' names brought together
   
+  /// Sorter to sort namePairs by name
+  /// picks program name from expected format of "^DateTime - Channel - ProgramName$"
   func pairsListNameSorter( _ s1: namePair, s2: namePair) -> Bool
   {
     var names1, names2: String
     let names1Array = s1.programeName.components(separatedBy: kHyphen)
     let names2Array = s2.programeName.components(separatedBy: kHyphen)
-    // pick program name from expected format of "DateTime - Channel - ProgramName"
     if (names1Array.count >= 3 && names2Array.count >= 3) { // pick name from expected
      names1 = names1Array[2 ... names1Array.count-1].joined(separator: kHyphen)
      names2 = names2Array[2 ... names2Array.count-1].joined(separator: kHyphen)
@@ -1292,6 +799,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return greaterThan
   }
   
+  /// Sorter to sort namePairs by channel name
+  /// picks channel from expected format of "^DateTime - Channel - ProgramName$"
   func pairsListChannelSorter( _ s1:namePair, s2: namePair) -> Bool
   {
     var greaterThan: Bool
@@ -1306,6 +815,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return greaterThan
   }
   
+  /// Sorter to sort namePairs by date field
+  /// picks date from expected format of "^DateTime - Channel - ProgramName$"
   func pairsListDateSorter( _ s1: namePair, s2: namePair) -> Bool
   {
     var greaterThan: Bool
@@ -1318,6 +829,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return greaterThan
   }
  
+  /// Build a namePair array using the namelist as a base
+  /// and sort it by name.
+  /// Used when user changes the preference sorting configuration
+  /// Generates a resorted namelist and filelist array
   func sortNames()
   {
     // build a pair list from namelist and filelist
@@ -1364,6 +879,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  
+  /// Sorts a namePairs array based on the sorting order
+  /// found in the user preferences
+  /// - parameter namePairs: array to be sorted
   func sortNamePairs(_ namePairs: inout [namePair])
   {
     // pick a sorter
@@ -1387,8 +906,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// If the file does not exist, then bail out
   /// - parameter filename: full path to file
   /// - returns: true on success of selecting file and false if no such file
-  
-  // FIXME: update file count in gui and work out why duplication is happening
   
   func appendSingleFileToListAndSelect(_ filename: String) -> Bool
   {
@@ -1458,7 +975,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let path = filelist[index].replacingOccurrences(of: "file://", with: "")
         self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding
       }
-    
   }
   
   /// Routine to work out the colour coding for the list of programs.
@@ -1497,10 +1013,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           if (index < self.namelist.count-1) {
             OperationQueue.main.addOperation (
             {
-//              print("deriving is \(index) of \(self.namelist.count)... working")
               self.progressBar.doubleValue = Double(index)
-  //            self.statusField.stringValue = "deriving is \(index) of \(self.namelist.count)... working"
-              self.statusField.stringValue = "Working out program colouring in background"
+              self.statusField.stringValue = "Working out title colour coding in background"
             })
           }
         }
@@ -1516,7 +1030,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         else {        // completed normally
           OperationQueue.main.addOperation (
             {
-//              print("setting colors")
               for index in 0 ..< self.namelist.count
               {
                 self.currentFile.item(at: index)?.attributedTitle = attributedStrings[index]
@@ -1546,34 +1059,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let fontSize = NSFont.systemFontSize()
     var font = NSFont.systemFont(ofSize: fontSize)
     var thisProgramDuration = 0.0
+    var thisMovie: Recording
     
     // work through the set of files
-    let cutsData = Recording.loadRawDataFrom(file: filelist[index])
-    let metaName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.META_SUFFIX))!
-    let metaData = MetaData(fromFilename: metaName)
-    let eitName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.EIT_SUFFIX))!
-    let EITData = Recording.loadRawDataFrom(file: eitName.path)
-    var eitdata : EITInfo?
-    if (EITData != nil  && (EITData?.count)! > 0) {
-      eitdata=EITInfo(data: EITData!)
-    }
-    else {
-      eitdata = EITInfo()
-    }
-    // load the ap file
-    let apName = URL(string: filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))!
-    let apData = AccessPoints(fullpath: apName)
+    let baseName = filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
+    thisMovie = Recording(rootURLName: baseName)
     
-    thisProgramDuration = self.getBestDurationInSeconds(metaData, eit: eitdata, ap: apData, player: nil)
-    
-    if cutsData != nil {
-      let thisCuts = CutsFile(data: cutsData!)
-      attributeColour = (thisCuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
+    thisProgramDuration = thisMovie.getBestDurationInSeconds()
+    if (thisMovie.cuts.count != 0) {
+      attributeColour = (thisMovie.cuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
       
       // override if we have in/out pairs
-      if ( thisCuts.containsINorOUT()) {
+      if ( thisMovie.cuts.containsINorOUT()) {
         font = NSFont.boldSystemFont(ofSize: fontSize)
-        attributeColour = fileColourParameters.readyToCutColor
+        // set unbalanced if there are not pairs of in/out - typically flagging MacOS player has trouble with ts file
+        // get one in, but cannot seek to set the other
+        let unbalanced = (thisMovie.cuts.inOutOnly.count % 2 == 1)
+        attributeColour = (unbalanced) ? fileColourParameters.partiallyReadyToCutColor : fileColourParameters.readyToCutColor
       }
       
       // override if it is a short
@@ -1615,8 +1117,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// set the colour of the NSPopUpButton based on a guess that the cuts file
   /// has already been processed
   
-//  // FIXME: Check what happens if user changes directory selection whilst this
-//  // detached process in running....it should probably find some way of killing it.
   func setCurrentFileListColors()
   {
     self.progressBar.isHidden = false
@@ -1631,7 +1131,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func listingOfFilesFinished()
   {
-//    statusField.stringValue = "file count is \(filelist.count) ... finished"
     self.selectDirectory.title = StringsCuts.SELECT_DIRECTORY
     guard (filelist.count != 0 ) else
     {
@@ -1650,40 +1149,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (menuItem.action == #selector(clearBookMarks(_:))
       || menuItem.action == #selector(clearCutMarks(_:))
       || menuItem.action == #selector(clearLastPlayMark(_:))
-      || menuItem.action == #selector(add10Bookmarks(_:))
       || menuItem.action == #selector(clearAllMarks(_:))
       )
     {
       return (filelist.count > 0 )
     }
+    else if (menuItem.action == #selector(add10Bookmarks(_:))) {
+      return cuttable && (filelist.count > 0 )
+    }
     else {
       return true
     }
   }
-
-  
-//  @IBAction func trim(sender: AnyObject)
-//  {
-//    print("hello from Trim")
-//    self.monitorView.beginTrimming(completionHandler: nil)
-//  }
-//
-//  func validateUserInterfaceItem(_ anItem: NSValidatedUserInterfaceItem) -> Bool
-//  {
-//    let theAction = anItem.action
-//    if ( theAction == #selector(trim)) {
-//      if (self.monitorView.canBeginTrimming) {
-//        self.monitorView.beginTrimming(completionHandler: {result in
-//          if result == .okButton {
-//            print ("Ok trimed")
-//          }
-//          else { print("trim cancelled")
-//          }
-//        })
-//      }
-//    }
-//    return true
-//  }
   
   /// set the GUI elements that are dependent on having at least one
   /// file available enabled or not
@@ -1716,6 +1193,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  /// Reset GUI elements to blank that reflect selected movie / directory
   func resetGUI()
   {
     programTitle.stringValue = ""
@@ -1748,24 +1226,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     seekButton2e.title = skips.rhs[4].display
   }
   
-  func resetCurrentModel()
+  /// Clear the current selected movie details back to empty/nil
+  func resetCurrentMovie()
   {
-    movie.cuts.removeAll()
-    eit = EITInfo()
-    movie.cuts = CutsFile()
     wasPlaying = false
-    metadata = MetaData()
+//    movie.cuts.removeAll()
+//    movie.cuts = CutsFile()
+//    movie.meta = MetaData()
+//    movie.eit = EITInfo()
+    movie.videoDurationFromPlayer = 0.0
+    movie = Recording()
   }
   
+  /// Clear all of the current model/state back to program startup condition
   func resetFullModel()
   {
     if currentFileColouringBlock != nil
     {
       currentFileColouringBlock!.cancel()
-      currentFileColouringBlock!.waitUntilFinished() // block on cancel completing... may file badly
+      currentFileColouringBlock!.waitUntilFinished() // block on cancel completing...
       currentFileColouringBlock = nil
     }
-    resetCurrentModel()
+    resetCurrentMovie()
     filelist.removeAll()
     namelist.removeAll()
     currentFile.removeAllItems()
@@ -1775,24 +1257,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     removePlayerObserversAndItem()
   }
   
+  /// Reset all element for a fresh file search (note that this leaves the current cutting jobs queue intact)
   func resetSearch()
   {
-//    print("Clearing dialog fields")
     resetFullModel()
     resetGUI()
   }
-  
-  // count of found matching files
-  // call back from detached operation
-  
-//  func findFilesFinished(_ fileIndexCount : Int, listOfFiles : [String])
-//  {
-//    self.selectDirectory.title = StringsCuts.SELECT_DIRECTORY
-////    print(listOfFiles)
-//    self.filelist = listOfFiles
-//    self.statusField.stringValue = "file count is \(fileIndexCount) ... finished"
-//    self.progressBar.isHidden = true
-//  }
   
   /// Select folder for processing of file
   /// - returns: full path to directory or nil
@@ -1828,6 +1298,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return directory?.path
   }
   
+  /// KVO responder
   override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?)
   {
     if (debug) {
@@ -1840,7 +1311,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (debug) { print ("keypath <\(keyPath)> for  \((object as AnyObject).className)") }
     if (keyPath == "tracks") {
       if let tracks = change?[NSKeyValueChangeKey.newKey] as? [AVPlayerItemTrack] {
-//        print("new value \(tracks)")
         for track in tracks
         {
           if (debug) {
@@ -1852,7 +1322,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           let duration = track.assetTrack.asset?.duration
           let durationInSeconds = CMTimeGetSeconds(duration!)
           if (debug) { print("duration = \(durationInSeconds) secs") }
-          videoDurationFromPlayer = durationInSeconds
+          movie.videoDurationFromPlayer = durationInSeconds
         }
       }
       else {
@@ -1873,28 +1343,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .readyToPlay:
             if (debug) {
               print("ready to play")
-              print("metadata duration = \(metadata.duration)")
-              print("eit duration = \(eit.eit.Duration)")
+              print("metadata duration = \(movie.meta.duration)")
+              print("eit duration = \(movie.eit.eit.Duration)")
             }
-            programDurationInSecs = getBestDurationInSeconds(metadata, eit: eit, ap: accessPointData, player: self.monitorView.player)
+            
+            let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
+            programDurationInSecs = movie.getBestDurationInSeconds(playerDuration: videoDuration)
             
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
-//            if (metadata.duration == "0" || metadata.duration == "")
-//            {
-//              if (eit.eit.Duration != "00:00:00.00") {
-//                self.programDuration.stringValue = eit.eit.Duration
-//              }
-//              else {  // query the player
-//                let playerDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
-//                self.programDuration.stringValue = CutEntry.hhMMssFromSeconds( playerDuration )
-//              }
-//            }
-//            else
-//            {  // meta data looks OK, use it for duration display
-//              self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(metadata.duration)!)
-//            }
-//            let startTime = (self.cuts.count>=1) ? self.cuts.firstBookmark : CMTime(seconds: 0, preferredTimescale: 1)
-            let startTime = CMTimeMake(Int64(firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
+            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
             if (self.monitorView.player?.status == .readyToPlay)
             {
               self.monitorView.player?.seek(to: startTime, completionHandler: seekCompletedOK)
@@ -1923,9 +1380,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .readyToPlay:
             if (debug) {
               print("Player ready to play")
-              print("metadata duration = \(metadata.duration)")
+              print("metadata duration = \(movie.meta.duration)")
             }
-            self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(metadata.duration)!)
+            self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(movie.meta.duration)!)
             let startTime = (movie.cuts.count>=1) ? movie.cuts.firstMarkTime : CMTime(seconds: 0, preferredTimescale: 1)
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -1951,6 +1408,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
  }
 
+  /// Removew all registered observers when the observee is changed
   func removePlayerObserversAndItem()
   {
     if (self.monitorView.player != nil )
@@ -1970,15 +1428,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.player = nil
   }
   
-  func setupAVPlayerFor(_ fileName:String, startTime: CMTime)
+  /// Initializ the AVPlayer for the file URL given with filename
+  /// and seek to the startTime
+  
+  func setupAVPlayerFor(_ fileURL:String, startTime: CMTime)
   {
-    if (debug) { print ("Setting up av Player with string <\(fileName)") }
+    if (debug) { print ("Setting up av Player with string <\(fileURL)") }
 
     // remove observers before instantiating new objects
     removePlayerObserversAndItem()
     
-    let videoURL = URL(string: fileName)
-    let avAsset = AVURLAsset(url: videoURL!)
+    let videoURL = URL(string: fileURL)!
+    let avAsset = AVURLAsset(url: videoURL)
     if (debug) { print("available formats:  \(avAsset.availableMetadataFormats)") }
     
     // ensure all track durations are valid - don't known enough video to 
@@ -2012,36 +1473,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.monitorView.showsFullScreenToggleButton = true
       self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
       self.monitorView.player?.seek(to: startTime)
-//      print("number of views under avplayerview \(self.monitorView.subviews.count)")
       self.addPeriodicTimeObserver()
    }
     else {
       self.statusField.stringValue = "Invalid Time duration cannot work with"
     }
   }
-  
-//  /// Utility function that unpacks the file name and check that the file is exists
-//  /// and is accessible.
-//  /// - parameter fullFileName: path to the file
-//  /// - returns : touple of a filemanager, status of files existence and the resolved path to file
-//  func getFileManagerForFile( _ fullFileName : String) -> (FileManager, Bool, String)
-//  {
-//    var pathName : String
-//    let fileMgr : FileManager = FileManager.default
-//    if (debug) { print (fullFileName) }
-//    
-//    pathName = ""
-//    if let checkIsURLFormat = URL.init(string: fullFileName)
-//    {
-//        pathName = checkIsURLFormat.path
-//    }
-//    else // assume file system format
-//    {
-//      pathName = fullFileName
-//    }
-//    let fileExists = fileMgr.fileExists(atPath: pathName)
-//    return (fileMgr, fileExists, pathName)
-//  }
   
   /// Common function to write the status field GUI entry to match
   /// the current user selection
@@ -2067,8 +1504,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  
-  
   /// Seek player by delta value in seconds.  Retains
   /// current paused or playing state
   
@@ -2076,13 +1511,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let pts=Int64(skipDurationSeconds*Double(CutsTimeConst.PTS_TIMESCALE))
     wasPlaying = isPlaying
-//    self.monitorView.player?.pause()
     let now = (self.monitorView.player?.currentTime())!
     let newtime = CMTimeAdd(now, CMTime(value: pts, timescale: CutsTimeConst.PTS_TIMESCALE))
     self.monitorView.player?.seek(to: newtime, completionHandler: seekCompletedOK)
-//    if (wasPlaying) {
-//      self.monitorView.player?.play()
-//    }
   }
   
   /// Seek player to absolute cutMark position.  Retains
@@ -2114,8 +1545,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let playPosition = self.monitorView.player?.currentTime().convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default)
     return UInt64((playPosition?.value)!)
   }
-  
-  private var timeObserverToken: Any?
   
   /// Highlight (without triggering selection actions) the cuttable entry that is
   /// before the given time into the recording in seconds.  This is providing the
@@ -2156,7 +1585,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
         let currentCMTime =  self?.monitorView.player?.currentTime()
-//          print("currentRate is  \(self?.monitorView.player?.rate)")
         
         let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
         if (debug)  { print("Saw callback start at \(currentTime)") }
@@ -2180,16 +1608,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             }
             if (debug) { print("Will Skip to time \(afterAdTime.seconds)") }
             self?.highlightCutTableEntryBefore(currentTime: Double(afterAdTime.seconds))
-//            if let (entry,index) = self?.cuts.entryBeforeTime(Double(afterAdTime.seconds))
-//            {
-//              if (index != self?.cutsTable.selectedRow) {  // ensure double seek does not happen
-//                // due to seek occuring with row selection of table
-//                let currentSuppressState = self?.suppressPlayerUpdate
-//                self?.suppressPlayerUpdate = true
-//                self?.selectCutTableEntry(entry)
-//                self?.suppressPlayerUpdate = currentSuppressState!
-//              }
-//            }
           }
           else {
             self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
@@ -2197,37 +1615,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         else {
           self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
-//          if let (entry,index) = self?.cuts.entryBeforeTime(Double(currentTime))
-//          {
-//            let cutSecs = entry.asSeconds()
-//            if (debug) { print("returned cuts table index of \(index) for time \(cutSecs)") }
-//            if (index != self?.cutsTable.selectedRow)
-//            {
-//              let currentSuppressState = self?.suppressPlayerUpdate
-//              self?.suppressPlayerUpdate = true
-//              self?.selectCutTableEntry(entry)
-//              self?.suppressPlayerUpdate = currentSuppressState!
-//            }
-//          }
-//          else {
-//            if (debug) { print("?? failed to find entry for \(currentTime)") }
-//          }
         }
         if (debug) { print("Saw callback end for \(currentTime)") }
-//        }
     }
+    // end closure addition
   }
-  
-//  func sampleNavigationMarkerGroup() -> AVNavigationMarkersGroup
-//  {
-//    let group = AVNavigationMarkersGroup(title: "Announcements", timedNavigationMarkers: [
-//      timedMetaDataGroupWithTitle("Apple Watch", startTime: 90, endTime: 917),
-//      timedMetaDataGroupWithTitle("iPad Pro", startTime: 917, endTime: 1691),
-//      timedMetaDataGroupWithTitle("Apple Pencil", startTime: 1691, endTime: 3105),
-//      timedMetaDataGroupWithTitle("Apple TV", startTime: 3105, endTime: 4968),
-//      timedMetaDataGroupWithTitle("iPhone", startTime: 4968, endTime: 7328)
-//      ])
-//  }
   
   // MARK: - Movie Cutting functions
   
@@ -2245,13 +1637,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  // TODO: Create a discrete view controller and dialog to capture this information when required
+  // TODO: but since is relatively rare usage case, clunky old school call and response will do for now
+  
   /// Look at user preferences and  collect the
   /// required information interactively from the user
+  /// - returns : array of program switch and argument strings
   func getCutsCommandLineArgs() -> [String]
   {
     // string args wrapped in " for remote usage
     // double quotes are removed for local usage
-    // TODO: this is just plain bad....
     var localPVRIndex = 0
     var args = [String]()
     if (isRemote) { // pick the global
@@ -2290,41 +1685,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return args
   }
   
-//  /// Add to global background queue
-//  
-//  func cutMovieInBackground(_ pathToMovieToCut: String, title movieTitle: String, cutter: MovieCutting)
-//  {
-//    let mcutCommandArgs = getCutsCommandLineArgs()
-//
-//    DispatchQueue.global(qos: .background).async { [unowned self] in
-//      print("This is run on the background queue")
-//      let cuttingResult = cutter.movieCutOne(moviePath: pathToMovieToCut, commandArgs: mcutCommandArgs)
-//      DispatchQueue.main.async {
-////        let now = Date()
-////        let delta = now.timeIntervalSince(self.startDate)
-////        print("Time in cutting block \(delta)")
-//        print("This is run on the main queue, after the previous code in outer block")
-//        self.statusField.stringValue = cuttingResult.message
-//        self.removeFromCutToolTip(message: movieTitle)
-//        // acquire index of program, in case environment has changed whilst cutting the recording
-//        // only change colour coding on SUCCESS
-//        if let index = self.indexOfMovie(of: pathToMovieToCut) {
-//            if (cuttingResult.result == 0)  {
-//              self.setDropDownColourForIndex(index)
-//            }
-//            self.changeFile(index)
-//            self.statusField.stringValue = cuttingResult.message
-//            self.cutButton.isEnabled = true
-//        }
-//      }
-//    }
-//  }
-  
   /// Create Operation for specific movie and add to Cutting Queue to related pvr
   /// - parameter URLToMovieToCut: full path % encoded url of recording file cuts file
   func cutMovie(_ URLToMovieToCut:String)
   {
-    let shortTitle = ViewController.programDateTitleFrom(movieURLPath: URLToMovieToCut)
+    let shortTitle = Recording.programDateTitleFrom(movieURLPath: URLToMovieToCut)
     let startMessage = mcutConsts.started + " " + shortTitle
     let waitMessage = mcutConsts.waiting + " " + shortTitle
     if let cutterQ = preferences.cuttingQueue(withTitle: generalPrefs.systemConfig.pvrSettings[pvrIndex].title)
@@ -2371,30 +1736,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       addToCutToolTip(message: waitMessage)
       cutterQ.jobAdd(op: movieCutter)
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
-      print("\(timestamp): Added  \(shortTitle) to Queue \(cutterQ.queue.name!)")
+      if (debug) { print("\(timestamp): Added  \(shortTitle) to Queue \(cutterQ.queue.name!)") }
     }
   }
   
-//  func queueForPath(URLPath: String) -> CuttingQueue?
-//  {
-//    // get the title of the PVR which as the matching root path
-//    guard let diskPathName = URLPath.replacingOccurrences(of: "file://",
-//                                                            with: "").removingPercentEncoding else {
-//                                                              return nil
-//    }
-//    
-//    for entry in self.systemSetup.pvrSettings
-//    {
-//      if diskPathName.contains(entry.cutLocalMountRoot) {
-//        // we have a winner
-//        let queue = preferences.cuttingQueue(withTitle: entry.title)
-//        return queue
-//      }
-//    }
-//    return nil
-//  }
-//  
   /// Get the queue associated with the configuration index
+  /// - parameter index: Index into the pvrSettings array to find corresponding queue
+  /// - returns: a serial queue
   func queueForPVR(index: Int) -> CuttingQueue?
   {
     // bounds check
@@ -2404,6 +1752,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// Append string to cut toolTip button
+  /// - parameter message: string to append to cut button tooltip
   func addToCutToolTip(message: String) {
     if (cutButton.toolTip != nil) {
       cutButton.toolTip = cutButton.toolTip! + "\n" + message
@@ -2416,6 +1765,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Remove string from toolTip button
   /// There is  potential race condition in here but hardly seems worth the effort
   /// to make atomic.  Detail is ensuring that both "title" or "\ntitle" are removed from the tooltip.
+  /// - parameter message: string to find and remove from cut button tooltip
 
   func removeFromCutToolTip(message: String)
   {
@@ -2427,6 +1777,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cutButton.toolTip = (newTip == "") ? nil : newTip
     }
   }
+  
   /// Replace string in the tooltip.
   /// If it does not contain the old message then do nothing
   /// - parameter oldMessage : message to match
@@ -2441,36 +1792,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  /// Method used in mainQueue callback to ensure that "current" filelist is used not
-  /// a closure "captured" version
+  /// Method used in mainQueue callback to ensure that "current" filelist index is
+  /// used rather than a closure "captured" version
+  /// - parameter movieURLEntry : url of movie of interest
+  /// - returns : index into filelist or nil
+  
   func indexOfMovie(of movieURLEntry: String) -> Int?
   {
     return filelist.index(of: movieURLEntry)
   }
   
-//  /// perform a live "while you wait" cut.  Based on contents of Advanced
-//  /// preferences dialog
-//  func movieCutAndWait()
-//  {
-//    // FIXME: add spinner
-//    // FIXME: adjust constraints of status field to have a maximum with and scroll
-////    startDate = Date()
-//    let movieTitle = (currentFile.selectedItem?.title)!
-//    let moviePathName = filelist[filelistIndex]
-//    addToCutToolTip(message: movieTitle)
-//    let mcutSystem = MovieCutting.isRemote(pathName: filelist[filelistIndex]) ? "remotely" : "locally"
-//    let messageString = String(format: mcutConsts.pleaseWaitMessage , MovieCutting.programTitleFrom(movieURLPath: moviePathName), mcutSystem)
-//    print(messageString)
-//    self.statusField.stringValue = messageString
-//    actionsSetEnabled(false)
-//    let movieCutter = MovieCutting(systemConfig: systemSetup, genPrefs: generalPrefs)
-//    cutMovieInBackground(moviePathName, title: movieTitle, cutter: movieCutter)
-//  }
-  
-  
   // MARK: - TableView delegate, datasource and table related functions
   
-  // Get the view related to selected cell and populated the data value
+  /// Get the view related to selected cell and populated the data value
+  /// - parameter newMessage : replacement text
+  /// - returns : populated view for tableView to use
   func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView?
   {
     var cellContent : String
@@ -2505,11 +1841,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return result
   }
   
+  /// Return number of rows required
+  /// - returns : count of cuts collection
   func numberOfRows(in tableView: NSTableView) -> Int
   {
     return self.movie.cuts.count
   }
   
+  /// Respond to change of row selection (both user and programatic will call this)
   func tableViewSelectionDidChange(_ notification: Notification) {
     let selectedRow = cutsTable.selectedRow
     // seek to associated cutEntry
@@ -2520,7 +1859,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       return
     }
     if let entry = movie.cuts.entry(at: selectedRow) {
-      
       if (!suppressPlayerUpdate) {
         if (debug) { print("Seeking to \(entry.asSeconds())") }
         seekPlayerToMark(entry)
@@ -2529,19 +1867,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
 
-/// "swipe" action function to delete rows from table.
-/// Updates model and GUI
+  /// "swipe" action function to delete rows from table.
+  /// Updates model and GUI
   func rowDelete(_ action:NSTableViewRowAction, indexPath:Int)
   {
     if let cutEntry = self.movie.cuts.entry(at: indexPath)  {
       _ = movie.cuts.removeEntry(cutEntry)
       self.cutsTable.reloadData()
-      cuttable = movie.cuts.isCuttable
+      cuttable = movie.isCuttable
     }
   }
   
-/// register swipe actions
-  
+  /// register swipe actions for table
   func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
     if edge == NSTableRowActionEdge.trailing {
       let delete = NSTableViewRowAction(style: NSTableViewRowActionStyle.destructive, title: "Delete", handler: rowDelete)
@@ -2552,7 +1889,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // Delegate function on row addition.
   // This delegate changes the background colour based on the mark type
-  
   func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
     // try to change the color of the rowView
     var colour = NSColor.white
@@ -2581,6 +1917,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (debug) { print("Saw tableViewSelectionIsChanging change") }
   }
   
+  /// Called when user clicks in column
   func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
     // user clicked in table, suppress timed updates
     self.suppressTimedUpdates = true
@@ -2604,6 +1941,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  /// General 'update the table' function
+  /// - parameter cutEntry: entry to be selected or nil
   func updateTableGUIEntry(_ cutEntry: CutEntry?)
   {
     self.cutsTable.reloadData()
@@ -2612,6 +1951,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // MARK: - Menu file handling
   
+  /// Action associated with File Open ... menu item
+  /// If a file is successfully selected it is added to the
+  /// general filelist collection and selected for editing
   @IBAction  func openDocument(_ sender: AnyObject)
   {
     if (debug) { print("Saw Open document call") }
@@ -2633,45 +1975,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
   // MARK: - utility functions
   
-  /// Extract selected fields from expected "dateTime - channel - programTitle" formated string
-  fileprivate static func getFieldsFromCutsFilename(movieURLPath: String, dateTime: Bool, channelName: Bool, programTitle: Bool) -> String
-  {
-    let fileNameSeperator = "-"
-    var programName = ""
-    let basename = movieURLPath.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-    if let fullPathName = basename.replacingOccurrences(of: "file://",
-                                                        with: "").removingPercentEncoding {
-      if let title = fullPathName.components(separatedBy: "/").last {
-        programName = title
-        let fileElements = programName.components(separatedBy: fileNameSeperator)
-        var conjuction = ""
-        if (fileElements.count >= 3) { // this is the expected format else return full title
-          programName = ""
-          programName += dateTime ? fileElements[0] : ""
-          if (programName != "" ) { conjuction = fileNameSeperator }
-          programName += channelName ? conjuction+fileElements[1] : ""
-          if (programName != "" ) { conjuction = fileNameSeperator }
-          programName += programTitle ? conjuction+fileElements[2 ..< fileElements.count].joined(separator: fileNameSeperator) : ""
-        }
-      }
-    }
-    return programName
-  }
-  
-  /// Extract the short movie title from the file path
-  public static func programTitleFrom(movieURLPath: String) -> String
-  {
-    return getFieldsFromCutsFilename(movieURLPath: movieURLPath, dateTime: false, channelName: false, programTitle: true)
-  }
-
-  /// Extract the short movie title from the file path
-  public static func programDateTitleFrom(movieURLPath: String) -> String
-  {
-    return getFieldsFromCutsFilename(movieURLPath: movieURLPath, dateTime: true, channelName: false, programTitle: true)
-  }
-
   // MARK: - cutMark management functions
-  // TODO: develop more robust bulk addition for multiple in/out pairs
   // currently fails to create bookmarks before first in and after last out
   // when recording is cut but with ads marked out
   @IBAction func clearBookMarks(_ send: AnyObject)
@@ -2696,35 +2000,39 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func add10Bookmarks(_ sender: AnyObject)
   {
     suppressPlayerUpdate = true
-    let firstPTS =  (movie.cuts.count != 0) ? ((movie.cuts.first!.cutType == MARK_TYPE.IN.rawValue) ? movie.cuts.first!.cutPts : PtsType(0)) : PtsType(0)
     if (preferences.generalPreference().markMode == MARK_MODE.FIXED_SPACING_OF_MARKS) {
-      movie.cuts.addFixedTimeBookmarks(interval: preferences.generalPreference().spacingModeDurationOfMarks,
-                                 firstInCutPts: firstPTS,
-                                 lastOutCutPts: lastOutCutPTS)
+      movie.cuts.addFixedTimeBookmarks(interval: preferences.generalPreference().spacingModeDurationOfMarks)
     }
     else {
-      movie.cuts.addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks,
-                                  firstInCutPts: firstPTS,
-                                  lastOutCutPts: lastOutCutPTS)
+      movie.cuts.addPercentageBookMarks(preferences.generalPreference().countModeNumberOfMarks)
     }
     suppressPlayerUpdate = false
     cutsTable.reloadData()
-    seekPlayerToMark(firstVideoPosition())
+    seekPlayerToMark(movie.firstVideoPosition())
+    cuttable = movie.isCuttable
   }
   
+  /// Clear all know mark types
   @IBAction func clearAllMarks(_ sender: AnyObject)
   {
     clearCutsOfTypes([.IN, .OUT, .LASTPLAY, .BOOKMARK])
   }
   
+  /// Remove all cuts of the single prescribed type
+  /// and update table
+  /// - parameter markType: type of mark
   func clearAllOfType(_ markType: MARK_TYPE)
   {
     suppressPlayerUpdate = true
     movie.cuts.removeEntriesOfType(markType)
+    cuttable = movie.isCuttable
     cutsTable.reloadData()
     suppressPlayerUpdate = false
   }
   
+  /// Remove all cuts of the type contained in the array
+  /// and update table
+  /// - parameter markArray: array of enum values from MARK_TYPE
   func clearCutsOfTypes(_ markArray: [MARK_TYPE])
   {
     suppressPlayerUpdate = true
@@ -2732,20 +2040,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       clearAllOfType(mark)
     }
+    cuttable = movie.isCuttable
+    cutsTable.reloadData()
     suppressPlayerUpdate = false
-
   }
   
-  /// 10% button action
+  
+  /// 10% spacing add bookmark button action
   /// parameter sender: expect NSButton, but don't care, it is unused
   @IBAction func addBookMarkSet(_ sender: AnyObject)
   {
     suppressPlayerUpdate = true
-    let firstPTS =  (movie.cuts.count != 0) ? ((movie.cuts.first!.cutType == MARK_TYPE.IN.rawValue) ? movie.cuts.first!.cutPts : PtsType(0)) : PtsType(0)
-    movie.cuts.addPercentageBookMarks(firstInCutPts: firstPTS, lastOutCutPts: lastOutCutPTS)
+    movie.cuts.addPercentageBookMarks()
     cutsTable.reloadData()
     suppressPlayerUpdate = false
-    seekPlayerToMark(firstVideoPosition())
+    seekPlayerToMark(movie.firstVideoPosition())
+    cuttable = movie.isCuttable
   }
   
   /// If present, remove the matching entry from the cut list.
@@ -2754,10 +2064,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (movie.cuts.removeEntry(cutEntry) )
     {
       cutsTable.reloadData()
-      cuttable = movie.cuts.isCuttable
+      cuttable = movie.isCuttable
     }
   }
   
+  /// Add a  bookmark at the current position
+  /// TODO: current unused whilst CUT button is in the same GUI location
+  /// TODO: shuffle buttons and re-enable
   @IBAction func addMark(sender: NSButton) {
     let markType = marksDictionary[sender.identifier!]
     let now = self.playerPositionInPTS()
@@ -2766,160 +2079,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     updateTableGUIEntry(mark)
 
     if (markType == .IN || markType == .OUT)  {
-      cuttable = movie.cuts.isCuttable
+      cuttable = movie.isCuttable
     }
   }
   
-  /// Find the earliest position in the video.  This should be;
-  /// the first IN mark not preceed by an out Mark, 
-  /// failing that, if there are <= 3 bookmarks,
-  /// use the first bookmark - most likely an unedited file.
-  /// Otherwise use then use the initial file position
-  /// which may have to be fabricated if it does not exist.
-  
-  func firstVideoPosition() -> CutEntry
-  {
-    if let firstInEntry = self.movie.cuts.firstInCutMark {
-      if (self.movie.cuts.index(of: firstInEntry) == 0) {
-        return firstInEntry
-      }
-      else
-      {
-        if let firstOutEntry = self.movie.cuts.firstOutCutMark
-        {
-          if (self.movie.cuts.index(of: firstInEntry)! < self.movie.cuts.index(of: firstOutEntry)!) {
-            return firstInEntry
-          }
-          else {
-            return CutEntry.InZero
-          }
-        }
-      }
-    }
-    // if there are a set of bookmarks or no bookmarks
-    if self.movie.cuts.count > 3 || self.movie.cuts.count == 0
-    {
-      return CutEntry.InZero
-    }
-    else // >0 && <= 2 bookmarks pick the first bookmark
-    {
-      if let entry = self.movie.cuts.first {
-        return entry
-      }
-      else { // should be technically impossible, however, belt and braces
-        return CutEntry.InZero
-      }
-    }
-  }
-  
-  // MARK: OS utility functions
-  
-//  /// Binary data loader
-//  /// - parameter filename: fully defined file path
-//  /// - returns : raw arbitrary data
-//  
-//  func loadRawDataFrom(file filename:String) -> Data?
-//  {
-//    var data:Data?
-//    
-//    let (fileMgr, foundFile, fullFileName) = Recording.getFileManagerForFile(filename)
-//    
-//    if (foundFile)
-//    {
-//      data = fileMgr.contents(atPath: fullFileName)
-//      if (debug)  {
-//        print("Found file ")
-//        print("Found file of \((data?.count))! size")
-//      }
-//      // not interested in empty files.... may as well be missing
-//      if (data?.count == 0 ) {
-//        data = nil
-//      }
-//    }
-//    return data
-//  }
-  
-  /// Inspect metadata, eit and player to get a best guess of the program duration
-  /// in seconds.  metaData can have 0 entry, eit can refer to a later program
-  /// subject to EPG and broadcaster variances
-  ///
-  /// first uses meta data duration
-  /// if that is missing or zero, then it return the event duration
-  /// from the eit it that is non-zero
-  /// finally queries the current item being played if there is any
-  
-  /// - parameter meta: decoded meta data structure
-  /// - parameter eit: decoded eit structure
-  /// - parameter player: player if running, may be nil
-  /// - returns: duration in seconds or 0.0 if it cannot be obtained
-  
-  func getBestDurationInSeconds( _ meta: MetaData?, eit: EITInfo?, ap: AccessPoints? , player: AVPlayer?) -> Double
-  {
-    // get the program duration from all sources and choose the least of the
-    // non-zero values
-    // It *looks* as though the Execute Cuts plugin does not update metaData or eit file
-    // all durations in seconds
-    var metaDuration: Double = 0.0
-    var eitDuration: Double = 0.0
-    var playerDuration: Double = 0.0
-    var accessPointsDuration: Double = 0.0
-    var bestDuration: Double = 0.0
-    // eventinfo table
-    if let eitInfo = eit {
-      if (eitInfo.eit.Duration != "00:00:00" && eitInfo.eit.Duration != "") {
-//        self.programDuration.stringValue = eitInfo.eit.Duration
-        let timeParts = eitInfo.eit.Duration.components(separatedBy: ":")
-        eitDuration = Double(timeParts[0])!*3600.0 + Double(timeParts[1])!*60.0+Double(timeParts[2])!
-      }
-    }
-    // query the player if it exists
-    if player != nil {
-      playerDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
-    }
-    
-    // metaData
-    if let metadata = meta
-    {
-      if (metadata.duration != "0" && metadata.duration != "")
-      {  // meta data looks OK, use it for duration display
-        metaDuration = Double(metadata.duration)!*CutsTimeConst.PTS_DURATION
-      }
-    }
-    
-    // accessPoints 
-    if let apdata = ap {
-      accessPointsDuration = apdata.durationInSecs()
-    }
-    if (debug) {
-      print("Meta Duration = \(metaDuration)")
-      print("EIT Duration = \(eitDuration)")
-      print("Player Duration = \(playerDuration)")
-      print("Access Points Duration = \(accessPointsDuration)")
-    }
-    
-    // cascade to pick out minimum non-zero duration
-    if (playerDuration != 0.0) {
-       bestDuration = playerDuration
-    }
-    if (metaDuration != 0.0 && bestDuration != 0.0)
-    {
-      bestDuration = min(bestDuration, metaDuration)
-    }
-    else if (metaDuration != 0.0) {
-      bestDuration = metaDuration
-    }
-    if (eitDuration != 0.0 && bestDuration != 0.0)
-    {
-      bestDuration = min(bestDuration, eitDuration)
-    } else if (eitDuration != 0.0 ) {
-      bestDuration = eitDuration
-    }
-    if (accessPointsDuration != 0.0 && bestDuration != 0.0)
-    {
-      bestDuration = min(bestDuration, accessPointsDuration)
-    } else if (accessPointsDuration != 0) {
-      bestDuration = accessPointsDuration
-    }
-    return bestDuration
-  }
 }

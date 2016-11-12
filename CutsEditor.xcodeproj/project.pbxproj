@@ -30,7 +30,9 @@
 		B7C45BF31CB0D36B00DB90FD /* CutsData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C45BF21CB0D36B00DB90FD /* CutsData.swift */; };
 		B7C45BF51CB0D43200DB90FD /* CutsFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C45BF41CB0D43200DB90FD /* CutsFile.swift */; };
 		B7C643521DC474D70066D9BB /* Recording.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C643511DC474D70066D9BB /* Recording.swift */; };
-		B7FCD6B01D13E9B40078277C /* reconstructscap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FCD6AF1D13E9B40078277C /* reconstructscap.swift */; };
+		B7C8D9E11DD699420050B48C /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E01DD699420050B48C /* Constants.swift */; };
+		B7C8D9E31DD69A670050B48C /* UserConfigDefinitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */; };
+		B7C8D9E51DD6A0220050B48C /* pvrPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */; };
 		B7FE54D11CBB102C002407EC /* MetaData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FE54D01CBB102C002407EC /* MetaData.swift */; };
 		B7FF4FE81D0017900078A986 /* DescriptorDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FF4FE71D0017900078A986 /* DescriptorDecoder.swift */; };
 /* End PBXBuildFile section */
@@ -82,7 +84,9 @@
 		B7C45BF21CB0D36B00DB90FD /* CutsData.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsData.swift; sourceTree = "<group>"; };
 		B7C45BF41CB0D43200DB90FD /* CutsFile.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CutsFile.swift; sourceTree = "<group>"; };
 		B7C643511DC474D70066D9BB /* Recording.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Recording.swift; path = ../Recording.swift; sourceTree = "<group>"; };
-		B7FCD6AF1D13E9B40078277C /* reconstructscap.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = reconstructscap.swift; sourceTree = "<group>"; };
+		B7C8D9E01DD699420050B48C /* Constants.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = UserConfigDefinitions.swift; path = CutsEditor/UserConfigDefinitions.swift; sourceTree = "<group>"; };
+		B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = pvrPreferences.swift; sourceTree = "<group>"; };
 		B7FE54D01CBB102C002407EC /* MetaData.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MetaData.swift; sourceTree = "<group>"; };
 		B7FF4FE71D0017900078A986 /* DescriptorDecoder.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DescriptorDecoder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -138,6 +142,7 @@
 		B782B4B51CAF77C00046B599 /* CutsEditor */ = {
 			isa = PBXGroup;
 			children = (
+				B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */,
 				B782B4B61CAF77C00046B599 /* AppDelegate.swift */,
 				B7C643511DC474D70066D9BB /* Recording.swift */,
 				B782B4B81CAF77C00046B599 /* ViewController.swift */,
@@ -149,7 +154,6 @@
 				B7A42AE01D1D144B007CEF2C /* SortPreferencesViewController.swift */,
 				B782B4BA1CAF77C00046B599 /* Assets.xcassets */,
 				B782B4BC1CAF77C00046B599 /* Main.storyboard */,
-				B7FCD6AF1D13E9B40078277C /* reconstructscap.swift */,
 				B782B4BF1CAF77C00046B599 /* Info.plist */,
 				B703C1581D6811F00039981A /* AccessPoints.swift */,
 				B7C45BF21CB0D36B00DB90FD /* CutsData.swift */,
@@ -186,6 +190,8 @@
 			children = (
 				B7A9BCE71CFC18E000E1DDF7 /* FileHandlers.swift */,
 				B7A9BCE31CFC12B000E1DDF7 /* EitSupport.py.txt */,
+				B7C8D9E01DD699420050B48C /* Constants.swift */,
+				B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */,
 			);
 			name = "Supporting Files";
 			sourceTree = "<group>";
@@ -326,6 +332,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B7A9BCE61CFC130600E1DDF7 /* EitSupport.swift in Sources */,
+				B7C8D9E11DD699420050B48C /* Constants.swift in Sources */,
 				B7B727ED1DA4B45900FC6EFA /* MovieCuttingOperation.swift in Sources */,
 				B71F0A091DBDC227000B7347 /* QueueViewController.swift in Sources */,
 				B7C45BF51CB0D43200DB90FD /* CutsFile.swift in Sources */,
@@ -333,12 +340,13 @@
 				B71F09E21DBB3B51000B7347 /* CuttingQueue.swift in Sources */,
 				B7C45BF31CB0D36B00DB90FD /* CutsData.swift in Sources */,
 				B7B5BCC31D47091B00340B9A /* TxDocument.swift in Sources */,
+				B7C8D9E51DD6A0220050B48C /* pvrPreferences.swift in Sources */,
 				B782B4B71CAF77C00046B599 /* AppDelegate.swift in Sources */,
+				B7C8D9E31DD69A670050B48C /* UserConfigDefinitions.swift in Sources */,
 				B7B727EB1DA4B3BA00FC6EFA /* FindFilesOperation.swift in Sources */,
 				B7FE54D11CBB102C002407EC /* MetaData.swift in Sources */,
 				B7A9BCE81CFC18E000E1DDF7 /* FileHandlers.swift in Sources */,
 				B74CE7351D236D8C00EB5DC6 /* PreferencesTabController.swift in Sources */,
-				B7FCD6B01D13E9B40078277C /* reconstructscap.swift in Sources */,
 				B7FF4FE81D0017900078A986 /* DescriptorDecoder.swift in Sources */,
 				B7A42AE11D1D144B007CEF2C /* SortPreferencesViewController.swift in Sources */,
 				B703C1591D6811F00039981A /* AccessPoints.swift in Sources */,

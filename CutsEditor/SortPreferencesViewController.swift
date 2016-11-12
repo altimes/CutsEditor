@@ -37,7 +37,7 @@ struct sortStringConsts {
 
 class SortPreferencesViewController: NSViewController {
 
-  // radio buttons
+  // radio buttons - grouping is achieved by connection to common action function
   // group 1
   @IBOutlet weak var sortAscending: NSButton!
   @IBOutlet weak var sortDescending: NSButton!
@@ -111,6 +111,7 @@ class SortPreferencesViewController: NSViewController {
   }
   
   @IBAction func done(_ sender: NSButton) {
+    // TODO: build a "modified" and warn on exit without save of changes
     self.presenting?.dismiss(sender)
   }
   

@@ -6,9 +6,6 @@
 //  Copyright © 2016 Alan Franklin. All rights reserved.
 //
 
-// TODO: deleting preference is not removing related cutting queues
-// TODO: make "Local" a static undeletable preference
-
 import Cocoa
 
 struct generalStringConsts {
@@ -52,9 +49,9 @@ struct playerConfigKeys {
   static let playerControlStyle = "PlayerControlStyle"
   static let playerSecondaryButtons = "PlayerSecondaryButtons"
   static let playerHonourCuts = "PlayerHonourCuts"
-  
 }
-class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDelegate, NSTextDelegate
+
+class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
 {
   @IBOutlet weak var markValueLabel: NSTextField!
   @IBOutlet weak var markValueUnitsLabel: NSTextField!
@@ -99,7 +96,7 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
       fixedSteps.title = generalStringConsts.fixedCountTitle
       fixedSpacing.title = generalStringConsts.fixedTimeTitle
       loadCurrentGeneralPrefs()
-      
+      numberEntryField.delegate = self
     }
   
   @IBAction func saveAction(_ sender: NSButton)
@@ -175,9 +172,8 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
       pathToSshCommand.isEnabled = true
       remoteLogin.isEnabled = true
     }
-    
-    
   }
+  
   func updateBookmarkGUI(_ genPrefs: generalPreferences)
   {
     autoWriteCheckBox.state = (genPrefs.autoWrite == CheckMarkState.checked) ? NSOnState : NSOffState
@@ -245,6 +241,7 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
   }
   
   @IBAction func done(_ sender: NSButton) {
+    // TODO: build a "modified" and warn on exit without save of changes
     self.presenting?.dismiss(sender)
   }
   
@@ -284,7 +281,6 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
   }
   
   @IBAction func changePVRSetting(_ sender: NSTextField) {
-//    print("got new string of \(sender.stringValue) for id of \(sender.identifier)")
     pvrChanged = true
     if let nextView = sender.nextKeyView {
       sender.resignFirstResponder()
@@ -293,7 +289,6 @@ class GeneralPreferencesViewController: NSViewController,NSControlTextEditingDel
       sender.window?.makeFirstResponder(nextView)
     }
     if let fieldIdentifier = sender.identifier {
-//      print("got field identifier of \(fieldIdentifier)")
       switch (fieldIdentifier) {
       case generalStringConsts.shPath: general.systemConfig.pvrSettings[pvrIndex].shPath = sender.stringValue
       case generalStringConsts.sshPath: general.systemConfig.pvrSettings[pvrIndex].sshPath = sender.stringValue

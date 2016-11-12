@@ -46,43 +46,48 @@ public struct MetaData {
     //    let fileContent = try? NSString(contentsOfFile: fromFilename.absoluteString, encoding: NSUTF8StringEncoding)
     self.init()
     
-    if let fileText = try? NSString(contentsOf: fromFilename, encoding: String.Encoding.utf8.rawValue) {
-      if (debug) { print(">>>"+(fileText as String)+"<<<") }
-      let fileAsArray = fileText.components(separatedBy: "\n")
-//      print(fileAsArray.count)
-      for item in fileAsArray {
-        switch fileAsArray.index(of: item)! {
-        case 0:
-          self.serviceReference = item
-        case 1:
-          programName = item
-        case 2:
-          programDescription = item
-        case 3:
-          recordingTime = item
-        case 4:
-          tags = item
-        case 5:
-          duration = item
-        case 6:
-          programFileSize = item
-        case 7:
-          serviceData = item
-        case 8:
-          packetSize = item
-        case 9:
-          scrambled = item
-        default:
-          // only report real data, ignor implied string after last newLine
-          if (item != "") {
-            print("Unexpected item in array index of \(index) value <\(item)>")
-          }
-        }
+    if let fileText = try? String(contentsOf: fromFilename, encoding: String.Encoding.utf8) {
+      if !decode(text: fileText) {
+        print("Failed Decoding: Initialzed with empty values")
       }
     }
     else {
-      print("Passing back empty values")
+      print("Failed reading file: Initialzed with empty values")
     }
+  }
+  
+  init(data rawData: Data) {
+    self.init()
+    if let fileText = String(data: rawData, encoding: String.Encoding.utf8)
+    {
+      if !decode(text: fileText) {
+        print("Failed Decoding: Initialzed with empty values")
+      }
+    }
+    else {
+      print("Failed Converting Data To String: Initialzed with empty values")
+    }
+  }
+  
+  mutating func decode(text: String) -> Bool
+  {
+    var decoded = false
+    if (debug) { print(">>>"+(text as String)+"<<<") }
+    let fileAsArray = text.components(separatedBy: "\n")
+    if (fileAsArray.count >= 10) {
+      serviceReference = fileAsArray[0]
+      programName = fileAsArray[1]
+      programDescription = fileAsArray[2]
+      recordingTime = fileAsArray[3]
+      tags = fileAsArray[4]
+      duration = fileAsArray[5]
+      programFileSize = fileAsArray[6]
+      serviceData = fileAsArray[7]
+      packetSize = fileAsArray[8]
+      scrambled = fileAsArray[9]
+      decoded = true
+    }
+    return decoded
   }
   
   func description() -> String
@@ -101,9 +106,6 @@ public struct MetaData {
     returnString += newLine + "PacketSize:"+packetSize
     returnString += newLine + "Scrambled:"+scrambled
     
-    // testing
-//    let fred = decodeServiceData(serviceReference)
-//    print (fred)
     return returnString
     
   }
@@ -152,8 +154,6 @@ public struct MetaData {
     referenceDecoded.path = items[10]
     if (items.count>=12) { referenceDecoded.name = items[11] }
     
-//    print(items)
-//    print(referenceDecoded.description())
     return referenceDecoded
   }
   
@@ -369,31 +369,6 @@ enum ENIGMA2_SERVICEREFERENCE_FLAGS : UInt8 {
   }
 }
 
-// decoding of ServiceData enty
-//ePtr<eDVBService> service;
-//if (!db->getService(ref, service))
-//{
-//  char tmp[255];
-//  sprintf(tmp, "f:%x", service->m_flags);
-//  service_data += tmp;
-//  // cached pids
-//  for (int x=0; x < eDVBService::cacheMax; ++x)
-//  {
-//    int entry = service->getCacheEntry((eDVBService::cacheID)x);
-//    if (entry != -1)
-//    {
-//      sprintf(tmp, ",c:%02d%04x", x, entry);
-//      service_data += tmp;
-//    }
-//  }
-//}
-
-//enum cacheID
-//{
-//		cVPID, cAPID, cTPID, cPCRPID, cAC3PID,
-//		cVTYPE, cACHANNEL, cAC3DELAY, cPCMDELAY,
-//		cSUBTITLE, cacheMax
-//};
 
 enum ENIGMA2_SERVICE_DATA_CACHE_TYPE : Int {
   case cVPID = 0,
@@ -414,12 +389,12 @@ enum ENIGMA2_SERVICE_DATA_CACHE_TYPE : Int {
     case .cPCMDELAY: return "PCM Delay"
     case .cSUBTITLE: return "Subtitle[PID:Page[:SubPage]]"
     case .cacheMax: return "Sentinel"
-//    default : return "Unknown Item ID"
     }
   }
 }
 
-enum ENIGMA2_SERVICEREFERENCE_TYPE : Int {
+enum ENIGMA2_SERVICEREFERENCE_TYPE : Int
+{
   case INVALID = -1
   case TV = 1
   case RADIO = 2
