@@ -9,8 +9,8 @@ Developed on Mac OS Sierra, with Xcode 8.1 and Swift 3 with no thought to
 compatibility to earlier versions.  The program uses the Apple provided
 AVPlayer for its video interface.  This player does choke on slightly corrupt
 recordings.  When it encounters something imperfect, it appears to read the
-entire recording on across the network.  It show the "spinning beachball" when
-this happens.  Sometimes you can then continue, sometime you will have to kill
+entire recording on across the network.  It shows the "spinning beachball" when
+this happens.  Sometimes you can then continue, sometimes you will have to kill
 the program.   I have yet to hear of anyway of trapping and recovering from
 this condition.  My experience has been that this is about 1 recording in 20.
 Just enough to be a nuisance.
@@ -36,7 +36,7 @@ can be changed in the user preferences if the defaults do not suit.
 file.  By default the changes to the cuts file are "autowrite".  This
 characteristic can be changed in the Preferences/General panel if the user prefers
 prompting when changes are made permanent.  A recording can be selected using the
-Prev/Next buttons or scroll through the list.
+Prev/Next buttons or by scrolling through the list.
 
 5. The list of recordings is colour coded.   The coding is Green for a recording
 that looks to have been edited and contains bookmarks.  Red for a recording that
@@ -72,7 +72,7 @@ Remote "Cutting"
 
 A "Cut" button is present on the dialog.  This relies on the user knowing
 sufficient about the PVR to ensure that the Preferences / General setup for
-PVR matches their system.  In essence, when the cut button is clicked, program
+PVR matches their system.  In essence, when the cut button is clicked, the program
 builds a complete command line for the "Execute Cuts" plugin and invokes it
 through an ssh command on the PVR.  This is done as a detached task which then
 blocks waiting for the result ensuring only one cut is done at a time.  Since this
@@ -80,14 +80,14 @@ is a detached task, the user may continue editing another set of cuts whilst thi
 is going on.  The program maintains a serial queue of jobs, so multiple "Cut"
 commands can be safely issued.  When a job is completed, the next job is started.
 It is mportant to realise that, unlike the using "Execute cuts"  plugin, the queue
-is held on the Mac, NOT the PVR, so the Mac need to be left running (and awake)
+is held on the Mac, NOT the PVR, so the Mac needs to be left running (and awake)
 until all the jobs are completed.  Note that the configuration has the local and
-remote root paths for a recording.  The programs see and works with the local
+remote root paths for a recording.  The programs sees and works with the local
 (mounted) path.  When the cut job command is built, it replaces the local root
 with the remote path to ensure that mcut on the PVR sees the appropriate local
 path name for the recording.
 
-A "Job Management" window from the Main Menu provide a means of monitoring the
+A "Job Management" window from the Main Menu provides a means of monitoring the
 cutting jobs.  A job in a "waiting" state can be cancelled.  The button is enabled
 if the associated job is currently waiting in the queue.
 
@@ -119,8 +119,8 @@ User Preferences
 
 General Preferences
 
-The Mark Style option determine if the Marks / Insert show either fixed number
-of bookmarks or spacing of bookmarks.
+The Mark Style option determine if the Marks / Insert menu entry shows either
+fixed number of bookmarks or fixed spacing of bookmarks.
 
 PVR config as described above.  The mcut program options are the same as those
 on the PVR.  The application prompts for new names, etc when it builds the
@@ -129,19 +129,19 @@ not the eit when title and description are changed.
 
 Skips / Player Preferences
 
-This allow you to set the skipping buttons to your own time/text preferences.
+This allows you to set the skipping buttons to your own time/text preferences.
 There is only nominal "is it really a number" checking done here, it simply
 associates the string you see on the button with a number of seconds.
 
 The player preferences are a little more interesting.  As noted earlier, the
-application uses the Apple AVPlayer class for video.  It provides three type
-of control windows.  Fixed to the bottom with simple Play/Pause button.
+application uses the Apple AVPlayer class for video.  It provides three types
+of control window.  Fixed to the bottom with simple Play/Pause button.
 Floating with either fast forward/reverse controls or frame step
 forward / reverse.  Fast does not seem to work at 2x speed for some unknown
 reason (5x, 10x, 30x, 60x OK).
 
-Player Skips Over OUT/IN.  During playback the player it behaves in the same
-way that the BeyonWiz does and skip over the OUT/IN sequences.
+Player Skips Over OUT/IN.  During playback the player behaves in the same
+manner that the BeyonWiz does and skips over the OUT/IN sequences.
 
 Sorting
 
@@ -154,5 +154,5 @@ to the top.
 The name, channel, date fields are derived from the file name pattern.  If
 the pattern changes the program will break.
 
-20161113-001
+20161113-002
 
