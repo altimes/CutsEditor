@@ -1,4 +1,4 @@
-CutsEditor V0.9 for Apple Mac
+CutsEditor V0.91 for Apple Mac
 
 The purpose of this program is to enable editing of cut marks and
 bookmarks on Beyonwiz Tx PVRs.
@@ -65,6 +65,43 @@ bookmarks before creates a clean result.  Additionally the Marks menu provides a
 utility for adding bookmarks at either fixed time intervals or more at other
 that 10% time gap.  The number of marks and the time interval is configured
 under Preferences/General.
+
+Verbal Control.
+
+Verbal control has been added using the Apple speech recognizer.
+It was added to assist in the tedious process of finding advertisement
+boundaries.
+
+It recognizes the English commands:
+Advert            : in Advert
+Program           : in Program
+Repeat            : repeat of last command
+Step two forward  : step video forward whatever forward button 2 is set to
+Step two backward : step video backward whatever backward button 2 is set to
+In                : Add an IN Cut mark
+Out               : Add an OUT Cut mark
+Reset             : Reset the boundary hunter
+next              : advance to next recording
+previous          : Change to previous recording
+
+TODO: Provide multilanguage mapping of valid words
+TODO: Provide configuration for user to extend verbal command to map to internal commands (buttons)
+
+Advertisement Boundary Hunting
+To aid in the manual detection of boundaries between program and advert a binary
+search feature has been created. When the user sees and advert, they can start a
+hunt for the boundary between the program and advert by identifying if they are
+seeing and "advert" or "program".  This identification can be verbal (if mirophone has
+been enabled),  clicking the P or A buttons on the GUI or using the "/" or "z" keys
+on the keyboard.  Each step halves the distance between the advert and program until
+the boundary is detected.  The GUI buttons are given a green background when the gap
+is less than 1/10 th of a second.  The IN or OUT mark can then be set using the GUI
+Mark Buttons or using the "x" or "." keys from the keyboard.  If at least one IN or OUT
+is already present, then the "c" or "," keys will add the complement to the last
+Cut Mark.  If the user indavertently indicates the wrong type (ie program when in an
+advertisement), then the ";" key or the GUI button label "!" can be used to "reset"
+the hunt back to the position that it was started at.  The spacebar has been mapped
+to a "step forward button", the amount is determined by the middle step button.
 
 Advanced Features
 
@@ -154,5 +191,5 @@ to the top.
 The name, channel, date fields are derived from the file name pattern.  If
 the pattern changes the program will break.
 
-20161113-002
+20161129-001
 

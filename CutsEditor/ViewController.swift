@@ -2325,13 +2325,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   override func keyDown(with event: NSEvent) {
-    print("saw keyDown keycode value \(event.keyCode)")
+//    print("saw keyDown keycode value \(event.keyCode)")
     
     if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
     if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown)
     {
       if let keyString = event.characters {
-        print(">>\(keyString)<<")
+//        print(">>\(keyString)<<")
 
         if (keyString == "z") { // z
           inProgram(forwardHuntButton)
@@ -2402,7 +2402,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         movie.cuts.remove(at: selectedRow)
         cutsTable.reloadData()
       }
-      print ("cell is \(cutEntry?.asString())")
+//      print ("cell is \(cutEntry?.asString())")
     }
   }
 }
