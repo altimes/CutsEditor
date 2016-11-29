@@ -94,6 +94,14 @@ public enum MARK_TYPE : UInt32
 public struct  CutEntry {
   var cutPts  : UInt64
   var cutType : UInt32
+  var type : MARK_TYPE? {
+    get {
+      return MARK_TYPE.lookupOnRawValue(self.cutType)
+    }
+    set {
+      self.cutType = (newValue?.rawValue)!
+    }
+  }
   
   /// designated initializer
   init(cutPts:UInt64, cutType: UInt32)

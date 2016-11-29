@@ -30,6 +30,8 @@ struct StringsCuts {
 /// Engima file extensions and sundry constants
 struct ConstsCuts {
   static let filelistSize = 200  // starting size for list of files
+  static let titleWordsPick = 6  // abitrary number of words to pick from description if episode title is too long
+  static let maxTitleLength = 50 // episode title longer that this is probably not a title, but a description
   static let CUTS_SUFFIX = ".ts.cuts"
   static let META_SUFFIX = ".ts.meta"
   static let EIT_SUFFIX = ".eit"

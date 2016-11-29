@@ -423,7 +423,6 @@ class EITInfo
   
   // MARK: Accessor Functions
   
-  
   // Note is would look like both then eventName (program name) and episode title
   // could be easily packed into the one short descriptor.  
   // However from the recording that I have it appears that two decriptors are

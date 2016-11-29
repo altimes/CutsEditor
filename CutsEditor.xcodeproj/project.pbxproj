@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B70232E91DD91DBB0096764E /* BinaryHunter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70232E81DD91DBB0096764E /* BinaryHunter.swift */; };
 		B703C1591D6811F00039981A /* AccessPoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = B703C1581D6811F00039981A /* AccessPoints.swift */; };
 		B71F09E21DBB3B51000B7347 /* CuttingQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F09E11DBB3B51000B7347 /* CuttingQueue.swift */; };
 		B71F0A091DBDC227000B7347 /* QueueViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F0A081DBDC227000B7347 /* QueueViewController.swift */; };
@@ -33,6 +34,7 @@
 		B7C8D9E11DD699420050B48C /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E01DD699420050B48C /* Constants.swift */; };
 		B7C8D9E31DD69A670050B48C /* UserConfigDefinitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */; };
 		B7C8D9E51DD6A0220050B48C /* pvrPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */; };
+		B7C8DA041DD836920050B48C /* userGuide.txt in Resources */ = {isa = PBXBuildFile; fileRef = B7C8DA031DD836920050B48C /* userGuide.txt */; };
 		B7FE54D11CBB102C002407EC /* MetaData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FE54D01CBB102C002407EC /* MetaData.swift */; };
 		B7FF4FE81D0017900078A986 /* DescriptorDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FF4FE71D0017900078A986 /* DescriptorDecoder.swift */; };
 /* End PBXBuildFile section */
@@ -55,6 +57,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B70232E81DD91DBB0096764E /* BinaryHunter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BinaryHunter.swift; sourceTree = "<group>"; };
+		B70232EA1DDA6F090096764E /* CutsEditor.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CutsEditor.entitlements; sourceTree = "<group>"; };
 		B703C1581D6811F00039981A /* AccessPoints.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AccessPoints.swift; path = ../AccessPoints.swift; sourceTree = "<group>"; };
 		B71F09E11DBB3B51000B7347 /* CuttingQueue.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CuttingQueue.swift; sourceTree = "<group>"; };
 		B71F0A081DBDC227000B7347 /* QueueViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = QueueViewController.swift; sourceTree = "<group>"; };
@@ -87,6 +91,7 @@
 		B7C8D9E01DD699420050B48C /* Constants.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = UserConfigDefinitions.swift; path = CutsEditor/UserConfigDefinitions.swift; sourceTree = "<group>"; };
 		B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = pvrPreferences.swift; sourceTree = "<group>"; };
+		B7C8DA031DD836920050B48C /* userGuide.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = userGuide.txt; sourceTree = "<group>"; };
 		B7FE54D01CBB102C002407EC /* MetaData.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MetaData.swift; sourceTree = "<group>"; };
 		B7FF4FE71D0017900078A986 /* DescriptorDecoder.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DescriptorDecoder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -142,6 +147,8 @@
 		B782B4B51CAF77C00046B599 /* CutsEditor */ = {
 			isa = PBXGroup;
 			children = (
+				B70232EA1DDA6F090096764E /* CutsEditor.entitlements */,
+				B70232E81DD91DBB0096764E /* BinaryHunter.swift */,
 				B7C8D9E41DD6A0220050B48C /* pvrPreferences.swift */,
 				B782B4B61CAF77C00046B599 /* AppDelegate.swift */,
 				B7C643511DC474D70066D9BB /* Recording.swift */,
@@ -189,6 +196,7 @@
 			isa = PBXGroup;
 			children = (
 				B7A9BCE71CFC18E000E1DDF7 /* FileHandlers.swift */,
+				B7C8DA031DD836920050B48C /* userGuide.txt */,
 				B7A9BCE31CFC12B000E1DDF7 /* EitSupport.py.txt */,
 				B7C8D9E01DD699420050B48C /* Constants.swift */,
 				B7C8D9E21DD69A670050B48C /* UserConfigDefinitions.swift */,
@@ -266,6 +274,11 @@
 						CreatedOnToolsVersion = 7.2.1;
 						DevelopmentTeam = 76Y4T47YU5;
 						LastSwiftMigration = 0800;
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 0;
+							};
+						};
 					};
 					B782B4C31CAF77C00046B599 = {
 						CreatedOnToolsVersion = 7.2.1;
@@ -304,6 +317,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B7C8DA041DD836920050B48C /* userGuide.txt in Resources */,
 				B7A9BCE41CFC12B000E1DDF7 /* EitSupport.py.txt in Resources */,
 				B782B4BB1CAF77C00046B599 /* Assets.xcassets in Resources */,
 				B782B4BE1CAF77C00046B599 /* Main.storyboard in Resources */,
@@ -331,6 +345,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B70232E91DD91DBB0096764E /* BinaryHunter.swift in Sources */,
 				B7A9BCE61CFC130600E1DDF7 /* EitSupport.swift in Sources */,
 				B7C8D9E11DD699420050B48C /* Constants.swift in Sources */,
 				B7B727ED1DA4B45900FC6EFA /* MovieCuttingOperation.swift in Sources */,
@@ -494,6 +509,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = CutsEditor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				PRODUCT_BUNDLE_IDENTIFIER = org.dyndns.franklinoffner.CutsEditor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 3.0;
@@ -507,6 +523,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				INFOPLIST_FILE = CutsEditor/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				PRODUCT_BUNDLE_IDENTIFIER = org.dyndns.franklinoffner.CutsEditor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 3.0;

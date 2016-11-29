@@ -9,12 +9,25 @@
 import Cocoa
 import AVFoundation
 import AVKit
+import Carbon.HIToolbox
 
 typealias FindCompletionBlock = ( _ URLArray:[String]?,  _ forSuffix: String,  _ didCompleteOK:Bool) -> ()
 typealias MovieCutCompletionBlock  = (_ message: String, _ resultValue: Int, _ wasCancelled: Bool) -> ()
 typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 
-class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource
+extension Dictionary {
+  
+  mutating func merge(with dictionary: Dictionary) {
+    dictionary.forEach { updateValue($1, forKey: $0) }
+  }
+  
+  func merged(with dictionary: Dictionary) -> Dictionary {
+    var dict = self
+    dict.merge(with: dictionary)
+    return dict
+  }
+}
+class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
 {
 //  class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
   
@@ -92,7 +105,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   var lastfileIndex : Int = 0
   var fileWorkingName : String = ""
-//  var videoDurationFromPlayer: Double = 0.0
   var programDurationInSecs: Double = 0.0
   /// Flag for completion handler to resume playing after seek
   var wasPlaying: Bool = false
@@ -161,16 +173,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// flag to control if out/in block skipping is honoured
   var honourOutInMarks = true
   
-  /// var used to maintain ordered list of movie cuttting jobs added to the cutting queue.
-  /// Used as a lightweight queue monitor.  Displayed as "tooltip" on Cut button
-  
+  /// object to perform speech processing
+  var mySpeechRecogizer : NSSpeechRecognizer?
   
   override func viewDidLoad() {
     super.viewDidLoad()
     
     // Do any additional setup after loading the view.
-//    UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
-//    UserDefaults.standard.synchronize()
     
     previousButton.isEnabled = false
     nextButton.isEnabled = false
@@ -200,6 +209,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.progressBar.controlTint = NSControlTint.clearControlTint
     self.view.window?.title = "CutListEditor"
     
+//    if (voiceRecognition) {
+//      mySpeechRecogizer = NSSpeechRecognizer()
+//      mySpeechRecogizer?.commands = ["advert", "program", "done", "reset", "in", "out", "skip two forward", "repeat", "next", "previous", "skip two backward"]
+//      mySpeechRecogizer?.delegate = self
+//      mySpeechRecogizer?.listensInForegroundOnly = true
+//      mySpeechRecogizer?.blocksOtherRecognizers = true
+//    }
+    microphoneButton.wantsLayer = true
+    microphoneButton.layer?.backgroundColor = (voiceRecognition) ? NSColor.green.cgColor : NSColor.red.cgColor
+  }
+
+  override func viewDidAppear() {
+    // set window delegate
+    self.view.window?.delegate = self
+  }
+  
+  func windowShouldClose(_ sender: Any) -> Bool {
+    return true
+  }
+  
+  func windowWillClose(_ notification: Notification) {
+    NSApplication.shared().terminate(self)
   }
   
   /// Housekeeping Things to do on window closure
@@ -487,7 +518,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.statusField.stringValue = flushMessage
       return
     }
-
+    let voiceWasOn = voiceRecognition
+    if (voiceRecognition) {
+      toggleVoiceRecognition(microphoneButton)
+    }
     //  clean out the GUI and context for the next file
     self.monitorView.player?.cancelPendingPrerolls()
     self.monitorView.player?.currentItem?.cancelPendingSeeks()
@@ -525,8 +559,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // if description is empty, replicate title in description field
     // some eit entries fail to give a title and put the description
     // in the notional episode title descriptor
+    // Alternative would be to blank title field and populate description
     if programDescription.string!.isEmpty
     {
+      let epTitle = epsiodeTitle.stringValue
+      if epTitle.characters.count > ConstsCuts.maxTitleLength {
+        // abitrarily pick out the first n words
+        let titlewords = epTitle.components(separatedBy: " ")
+        let title  = titlewords[0..<min(ConstsCuts.titleWordsPick,titlewords.count)].joined(separator: " ")
+        epsiodeTitle.stringValue = title
+      }
       programDescription.string = movie.eit.episodeText()
     }
     let TSNameURL = baseNameURL+ConstsCuts.TS_SUFFIX
@@ -538,6 +580,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
        NSDocumentController.shared().noteNewRecentDocument(doc)
     }
+    if (voiceWasOn) { toggleVoiceRecognition(microphoneButton)}
+//    print(mySpeechRecogizer?.commands)
+//    print("Have I started?")
   }
 
   // MARK: - button responders
@@ -582,6 +627,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         setPrevNextButtonState(filelistIndex)
       }
     }
+    huntButtonsReset()
   }
   
   @IBAction func prevButton(sender: NSButton) {
@@ -636,20 +682,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// GUI Program Picker - NSPopUpButton list of programs
   
   @IBAction func selectFile(_ sender: NSPopUpButton) {
-    lastfileIndex = mouseDownPopUpIndex!
-    let indexSelected = sender.indexOfSelectedItem
-    if (debug) { print("New file selected is [\(indexSelected) - \(sender.itemArray[indexSelected])") }
-    if (indexSelected != mouseDownPopUpIndex) // file selection has really changed
+    if let lastfileIndex = mouseDownPopUpIndex
     {
-      setPrevNextButtonState(indexSelected)
-      changeFile(indexSelected)
-      // check if change succeeded or it has reset the selected index
-      if (indexSelected == lastfileIndex) {
-        sender.selectItem(at: indexSelected)
+      let indexSelected = sender.indexOfSelectedItem
+      if (debug) { print("New file selected is [\(indexSelected) - \(sender.itemArray[indexSelected])") }
+      if (indexSelected != mouseDownPopUpIndex) // file selection has really changed
+      {
+        
+        setPrevNextButtonState(indexSelected)
+        changeFile(indexSelected)
+        // check if change succeeded or it has reset the selected index
+        if (indexSelected == lastfileIndex) {
+          sender.selectItem(at: indexSelected)
+        }
+        currentFile.toolTip = currentFile.selectedItem?.toolTip
       }
-      currentFile.toolTip = currentFile.selectedItem?.toolTip
     }
     mouseDownPopUpIndex = nil
+    boundaryAdHunter = nil
   }
   
   // for the user to select a directory and populate an array with
@@ -768,6 +818,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         case skipButtons.PLUS_E: seekToSkip(skips.rhs[4].value)
       }
     }
+    boundaryHuntReset()
   }
   
   // files on disk are unique.. therefore easy sorting
@@ -1191,6 +1242,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       previousButton.isEnabled = state
       nextButton.isEnabled = state
     }
+    enableAdHuntingButtons(state)
   }
   
   /// Reset GUI elements to blank that reflect selected movie / directory
@@ -1206,6 +1258,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     actionsSetEnabled(false)
     self.cutsTable.reloadData()
     currentFile.toolTip = ""
+    boundaryAdHunter?.reset()
   }
   
   /// Assigns the button text to each button from
@@ -1230,10 +1283,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func resetCurrentMovie()
   {
     wasPlaying = false
-//    movie.cuts.removeAll()
-//    movie.cuts = CutsFile()
-//    movie.meta = MetaData()
-//    movie.eit = EITInfo()
     movie.videoDurationFromPlayer = 0.0
     movie = Recording()
   }
@@ -1532,7 +1581,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (wasPlaying) {
       self.monitorView.player?.pause()
     }
-    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity, completionHandler: seekCompletedOK)
+    let seekTolerance = boundaryHunter.seekTolerance
+    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: seekTolerance, completionHandler: seekCompletedOK)
   }
   
   /// Get the video players current position as a PTS value
@@ -1570,11 +1620,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  let callbackTimePeriodSecs = 0.25
   // from apple code sample
   func addPeriodicTimeObserver() {
     let debug = false
     // Invoke callback every second
-    let interval = CMTime(seconds: 1.0,
+    let interval = CMTime(seconds: callbackTimePeriodSecs,
                           preferredTimescale: CMTimeScale(NSEC_PER_SEC))
     // Queue on which to invoke the callback
     let mainQueue = DispatchQueue.main
@@ -2083,4 +2134,275 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  // MARK: - Advertisment boundary pickers
+  
+  var boundaryAdHunter : boundaryHunter?
+  let initialStep = 90.0
+  let nearEnough = 0.5
+  var prevCut: MARK_TYPE {  // nearest cutmark before current position
+    get {
+      let inOut = movie.cuts.inOutOnly
+      let now = monitorView.player?.currentTime().seconds
+      if inOut.count > 0 && now != nil {
+        var index = 0
+        var isPastCurrent = (inOut[index].asSeconds() > now!)
+        while !isPastCurrent && index+1 < (inOut.count) {
+          index += 1
+          isPastCurrent = inOut[index].asSeconds() > now!
+        }
+        if (index > 0) {
+          return (isPastCurrent) ? MARK_TYPE.lookupOnRawValue(inOut[index-1].cutType)! : MARK_TYPE.lookupOnRawValue(inOut[index].cutType)!
+        }
+        else {
+          return !isPastCurrent ? MARK_TYPE.lookupOnRawValue(inOut[0].cutType)! : .LASTPLAY
+        }
+      }
+      return .LASTPLAY
+    }
+  }
+  var noCutBefore : Bool {
+    get {
+      return true
+    }
+  }
+  var noCutAfter: Bool {
+    get {
+      return true
+    }
+  }
+  
+  @IBOutlet weak var forwardHuntButton: NSButton!
+  @IBOutlet weak var backwardHuntButton: NSButton!
+  @IBOutlet weak var resetHuntButton: NSButton!
+  @IBOutlet weak var doneHuntButton: NSButton!
+
+  /// Enable, disable the advertisement hunting buttons.
+  /// Should reflect state of there being an active loaded media item
+  func enableAdHuntingButtons(_ state:Bool) {
+    forwardHuntButton.isEnabled = state
+    backwardHuntButton.isEnabled = state
+    resetHuntButton.isEnabled = state
+    doneHuntButton.isEnabled = state
+  }
+
+  @IBAction func inProgram(_ sender: NSButton) {
+    if (prevCut == .IN ) {
+      huntForward( sender )
+    }
+    else if (prevCut == .OUT) {
+      huntBackward(sender)
+    }
+    else // no earlier cuts edge conditions
+    {
+      // assume begining of program
+       huntForward(sender)
+    }
+  }
+  
+  @IBAction func inAdvertisment(_ sender: NSButton) {
+    if (prevCut == .IN ) {
+      huntBackward( sender )
+    }
+    else if (prevCut == .OUT) {
+      huntForward(sender)
+    }
+    else // no earlier cuts edge conditions
+    {
+      // assume begining of program
+      huntBackward(sender)
+    }
+    
+  }
+  
+  
+  @IBAction func huntForward(_ sender: NSButton) {
+    if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: initialStep, player: self.monitorView.player!) }
+    statusField.stringValue  = (boundaryAdHunter?.jumpForward())!
+    if let lastStep = Double(statusField.stringValue) {
+      if abs(lastStep) < 0.5 {
+        sender.wantsLayer = true
+        sender.layer?.backgroundColor = NSColor.green.cgColor
+      }
+      else {
+        sender.wantsLayer = false
+      }
+    }
+  }
+  @IBAction func huntBackward(_ sender: NSButton) {
+    if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: -initialStep, player: self.monitorView.player!) }
+    statusField.stringValue = (boundaryAdHunter?.jumpBackward())!
+    if let lastStep = Double(statusField.stringValue) {
+      if abs(lastStep) < 0.5 {
+        sender.wantsLayer = true
+        sender.layer?.backgroundColor = NSColor.green.cgColor
+      }
+      else {
+        sender.wantsLayer = false
+      }
+    }
+  }
+  
+  @IBAction func huntReset(_ sender: NSButton) {
+    if let videoPlayer = self.monitorView.player
+    {
+      if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: initialStep, player: videoPlayer) }
+      boundaryAdHunter?.reset()
+      statusField.stringValue = "Reset jump state"
+      huntButtonsReset()
+    }
+  }
+  
+  @IBAction func huntDone(_ sender: NSButton) {
+    statusField.stringValue = "hunter nilled"
+    huntButtonsReset()
+  }
+  
+  func boundaryHuntReset()
+  {
+    boundaryAdHunter?.done()
+    huntButtonsReset()
+  }
+  
+  func huntButtonsReset() {
+    forwardHuntButton.wantsLayer = false
+    backwardHuntButton.wantsLayer = false
+    boundaryAdHunter = nil
+  }
+  
+  /// Cache last recognized speech command for reuse with "repeat" command
+  var lastCommand: String?
+  var voiceRecognition = false
+  
+  @IBOutlet weak var microphoneButton: NSButton!
+  @IBAction func toggleVoiceRecognition(_ sender: NSButton) {
+    if (voiceRecognition) {
+      mySpeechRecogizer?.stopListening()
+      mySpeechRecogizer = nil
+      voiceRecognition = false
+      sender.layer?.backgroundColor = NSColor.red.cgColor
+    }
+    else {
+      mySpeechRecogizer = NSSpeechRecognizer()
+      mySpeechRecogizer?.commands = ["advert", "program", "done", "reset", "in", "out", "skip two forward", "repeat", "next", "previous", "skip two backward"]
+      mySpeechRecogizer?.delegate = self
+      mySpeechRecogizer?.listensInForegroundOnly = true
+      mySpeechRecogizer?.blocksOtherRecognizers = true
+      voiceRecognition = true
+      sender.layer?.backgroundColor = NSColor.green.cgColor
+      mySpeechRecogizer?.startListening()
+   }
+  }
+  func speechRecognizer(_ sender: NSSpeechRecognizer, didRecognizeCommand command: String) {
+    print("saw command \(command)")
+    if (command != "repeat") { lastCommand = command }
+    switch command {
+      case "advert" :
+        inAdvertisment(backwardHuntButton)
+      case "program" :
+        inProgram(forwardHuntButton)
+      case "done":
+        huntDone(doneHuntButton)
+      case "reset" :
+        huntReset(resetHuntButton)
+      case "in" :
+        addMark(sender: inButton)
+      case "out" :
+        addMark(sender: outButton)
+      case "skip two forward" :
+        seekToAction(seekButton2c)
+      case "skip two backward" :
+        seekToAction(seekButton1c)
+      case "next" :
+        nextButton(sender: nextButton)
+      case "previous" :
+        prevButton(sender: previousButton)
+      case "repeat" :
+        if lastCommand != nil {
+          speechRecognizer(sender, didRecognizeCommand: lastCommand!)
+        }
+      default: print("???")
+    }
+  }
+  
+  override func keyDown(with event: NSEvent) {
+    print("saw keyDown keycode value \(event.keyCode)")
+    
+    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
+    if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown)
+    {
+      if let keyString = event.characters {
+        print(">>\(keyString)<<")
+
+        if (keyString == "z") { // z
+          inProgram(forwardHuntButton)
+        }
+        if (keyString == "/") {
+          print ("saw / key")
+          inAdvertisment(backwardHuntButton)
+        }
+        if (keyString == "x") {
+          addMark(sender: inButton)
+          
+        }
+        if (keyString == ".") {
+          addMark(sender: outButton)
+          
+        }
+        
+        if (keyString == " ") {
+          seekToAction(seekButton2c)
+        }
+        
+        if (keyString == ";" ) {
+          huntReset(resetHuntButton)
+        }
+        
+        // add a mark that is the complement of previous in / out
+        if (keyString == "c" || keyString == ",") {
+          addMatchingCutMark(toMark: prevCut)
+        }
+        
+//        if (event.keyCode == UInt16(kVK_Delete))
+//        {
+//          if cutsTable.acceptsFirstResponder {
+//            print ("table accepts")
+//            let fred = cutsTable.selectedRow
+//            if (fred == -1) { print ("no selection") }
+//              else { print("selected row \(fred)") }
+//            
+//          }
+//          print("delete if cuttable has focus")
+//        }
+      }
+    }
+  }
+
+  /// Add mark that is complementary to the previous cut mark.
+  /// Beep and ignor any mark that is not In or Out
+  /// should never happen, however....
+  func addMatchingCutMark(toMark: MARK_TYPE)
+  {
+    switch toMark {
+      case .IN:
+        addMark(sender: outButton)
+      case .OUT:
+        addMark(sender: inButton)
+      default: NSBeep()
+    }
+  }
+  
+  /// Respond to user taping the "delete" button on the keyboard to remove IN or OUT mark
+  override func deleteBackward(_ sender: Any?) {
+//    print("Backward delete?")
+    let selectedRow = cutsTable.selectedRow
+    if (selectedRow >= 0) {
+      let cutEntry = movie.cuts.entry(at: selectedRow)
+      if (cutEntry?.type == MARK_TYPE.OUT || cutEntry?.type == MARK_TYPE.IN)
+      {
+        movie.cuts.remove(at: selectedRow)
+        cutsTable.reloadData()
+      }
+      print ("cell is \(cutEntry?.asString())")
+    }
+  }
 }
