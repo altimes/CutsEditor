@@ -2543,8 +2543,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       disconnectCurrentMovieFromGUI()
 //      print ("found remote PVR .Trash")
       let toPaths = fromPaths.map { self.safeMoveTarget(sourceMoviePath: $0, to: trashDirectory) }
-      print (fromPaths)
-      print (toPaths)
+//      print (fromPaths)
+//      print (toPaths)
       for index in 0..<fromPaths.count {
         do {
           try FileManager().moveItem(atPath: fromPaths[index], toPath: toPaths[index])
