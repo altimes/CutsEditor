@@ -8,6 +8,8 @@
 
 import Cocoa
 
+let trashDirectoryName = ".Trash"
+
 // MARK: - file search support class
 
 /// This creates and detaches a remote/local system query to build a list of files
@@ -101,6 +103,11 @@ class FindFilesOperation: Operation
         //
         DispatchQueue.main.async(execute:  {
           self.onCompletionBlock(builtURLArray, self.suffixRequired, self.isCancelled)
+        })
+      }
+      else {
+        DispatchQueue.main.async(execute:  {
+          self.onCompletionBlock(nil, self.suffixRequired, self.isCancelled)
         })
       }
     }

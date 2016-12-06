@@ -15,18 +15,19 @@ typealias FindCompletionBlock = ( _ URLArray:[String]?,  _ forSuffix: String,  _
 typealias MovieCutCompletionBlock  = (_ message: String, _ resultValue: Int, _ wasCancelled: Bool) -> ()
 typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 
-extension Dictionary {
-  
-  mutating func merge(with dictionary: Dictionary) {
-    dictionary.forEach { updateValue($1, forKey: $0) }
-  }
-  
-  func merged(with dictionary: Dictionary) -> Dictionary {
-    var dict = self
-    dict.merge(with: dictionary)
-    return dict
-  }
-}
+//// picked up from stackoverflow - combine dictionaries
+//extension Dictionary {
+//  mutating func merge(with dictionary: Dictionary) {
+//    dictionary.forEach { updateValue($1, forKey: $0) }
+//  }
+//  
+//  func merged(with dictionary: Dictionary) -> Dictionary {
+//    var dict = self
+//    dict.merge(with: dictionary)
+//    return dict
+//  }
+//}
+
 class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
 {
 //  class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
@@ -71,6 +72,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var fileSearchCancelled = false
   var filelist: [String] = []
   var namelist: [String] = []
+  var selectedDirectory: String = ""
   var filelistIndex : Int {
     set {
       // bounds check before trying to change selection
@@ -163,6 +165,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// to each new bookmark as if the user has just selected it in the table.
   var suppressPlayerUpdate = false
   
+  /// table of three possible durations (player, metadata, eit)
+  /// used as tooltip on displayed duration
+  var recordingDurations : [Double] = Array(repeating: 0.0, count: 3)
   
   /// value to track periodic callbacks in player and suppress execution of multiples at the same time
   var lastPeriodicCallBackTime : Float = -1.0
@@ -661,7 +666,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  @IBAction func cutButton(_ sender: NSButton)
+  func disconnectCurrentMovieFromGUI()
   {
     // disconnect player display from the item about to be processed
     guard flushPendingChangesFor(.current) else
@@ -672,6 +677,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // clear current dialog entries
     resetCurrentMovie()
     resetGUI()
+  }
+  
+  @IBAction func cutButton(_ sender: NSButton)
+  {
+    disconnectCurrentMovieFromGUI()
     let moviePathURL = filelist[filelistIndex]
     cutMovie(moviePathURL)
     currentFile.isEnabled = true
@@ -689,14 +699,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (indexSelected != mouseDownPopUpIndex) // file selection has really changed
       {
         
-        setPrevNextButtonState(indexSelected)
         changeFile(indexSelected)
         // check if change succeeded or it has reset the selected index
         if (indexSelected == lastfileIndex) {
           sender.selectItem(at: indexSelected)
         }
         currentFile.toolTip = currentFile.selectedItem?.toolTip
-      }
+        setPrevNextButtonState(indexSelected)
+     }
     }
     mouseDownPopUpIndex = nil
     boundaryAdHunter = nil
@@ -742,6 +752,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       {
         var rootPath : String
         rootPath = pickedPath + StringsCuts.DIRECTORY_SEPERATOR
+        selectedDirectory = rootPath
         let foundRootPath = rootPath
         self.progressBar.isHidden = false
         (isRemote, pvrIndex) = pvrLocalMount(containedIn: rootPath)
@@ -770,6 +781,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else    // user clicked on Cancel Search
     {
       fileSearchCancelled = true
+      selectedDirectory = ""
       sender.title = StringsCuts.SELECT_DIRECTORY
       actionsSetEnabled(false)
       sender.isEnabled = false
@@ -1237,10 +1249,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (state)
     {
      setPrevNextButtonState(filelistIndex)
+     deleteRecordingButton.isEnabled = (filelist.count > 0)
     }
     else {
       previousButton.isEnabled = state
       nextButton.isEnabled = state
+      deleteRecordingButton.isEnabled = state
     }
     enableAdHuntingButtons(state)
   }
@@ -1254,6 +1268,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     cutsTable.reloadData()
     fileWorkingName = ""
     programDuration.stringValue = ""
+    programDuration.toolTip = ""
     statusField.stringValue = ""
     actionsSetEnabled(false)
     self.cutsTable.reloadData()
@@ -1283,7 +1298,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func resetCurrentMovie()
   {
     wasPlaying = false
-    movie.videoDurationFromPlayer = 0.0
     movie = Recording()
   }
   
@@ -1397,9 +1411,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             }
             
             let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
+            let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
             programDurationInSecs = movie.getBestDurationInSeconds(playerDuration: videoDuration)
             
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
+            self.programDuration.toolTip = recordingDurations(movie: movie).joined(separator: "\n").appending(videoDurationString)
             let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -1427,11 +1443,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .failed:
             if (debug) { print("failed state") }
           case .readyToPlay:
+            let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
+            let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
+            programDurationInSecs = movie.getBestDurationInSeconds(playerDuration: videoDuration)
             if (debug) {
               print("Player ready to play")
               print("metadata duration = \(movie.meta.duration)")
             }
-            self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(movie.meta.duration)!)
+            self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(movie.meta.duration)!).appending(videoDurationString)
+            self.programDuration.toolTip = recordingDurations(movie: movie).joined(separator: "\n")
             let startTime = (movie.cuts.count>=1) ? movie.cuts.firstMarkTime : CMTime(seconds: 0, preferredTimescale: 1)
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -1472,6 +1492,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           self.monitorView.player?.removeTimeObserver(token)
           self.timeObserverToken = nil
         }
+      }
+      if (self.monitorView.player?.currentItem != nil) {
+        self.monitorView.player?.replaceCurrentItem(with: nil)
       }
     }
     self.monitorView.player = nil
@@ -2026,6 +2049,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
   // MARK: - utility functions
   
+  /// Build a string from player and recording that shows all possible recording durations
+  /// for use as a tooltip on GUI
+  
+  func recordingDurations(movie: Recording) -> [String]
+  {
+    let (eitDuration, metaDuration, ptsDuration) = movie.getStoredDurations()
+    let eitString =  "eit: " + CutEntry.hhMMssFromSeconds(eitDuration)
+    let metaString = "meta: " + CutEntry.hhMMssFromSeconds(metaDuration)
+    let apString = "ap: " + CutEntry.hhMMssFromSeconds(ptsDuration)
+    return [eitString, metaString, apString]
+  }
+  
   // MARK: - cutMark management functions
   // currently fails to create bookmarks before first in and after last out
   // when recording is cut but with ads marked out
@@ -2336,17 +2371,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (keyString == "z") { // z
           inProgram(forwardHuntButton)
         }
+        
         if (keyString == "/") {
-          print ("saw / key")
           inAdvertisment(backwardHuntButton)
         }
+        
         if (keyString == "x") {
           addMark(sender: inButton)
           
         }
         if (keyString == ".") {
           addMark(sender: outButton)
-          
         }
         
         if (keyString == " ") {
@@ -2361,25 +2396,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (keyString == "c" || keyString == ",") {
           addMatchingCutMark(toMark: prevCut)
         }
-        
-//        if (event.keyCode == UInt16(kVK_Delete))
-//        {
-//          if cutsTable.acceptsFirstResponder {
-//            print ("table accepts")
-//            let fred = cutsTable.selectedRow
-//            if (fred == -1) { print ("no selection") }
-//              else { print("selected row \(fred)") }
-//            
-//          }
-//          print("delete if cuttable has focus")
-//        }
       }
     }
   }
 
   /// Add mark that is complementary to the previous cut mark.
   /// Beep and ignor any mark that is not In or Out
-  /// should never happen, however....
+  /// should never happen, however....if in doubt Beep
   func addMatchingCutMark(toMark: MARK_TYPE)
   {
     switch toMark {
@@ -2404,5 +2427,184 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
 //      print ("cell is \(cutEntry?.asString())")
     }
+  }
+  
+  
+  /// Insert a new element into a path string
+  func insertPathElement(newElement: String, into path: String, at index: Int) -> String
+  {
+    var elements = path.components(separatedBy: "/")
+    elements.insert(newElement, at: index)
+    return elements.joined(separator: "/")
+  }
+  
+//  // MARK: - Recording removal
+//  override func mouseDown(with event: NSEvent) {
+////    print ("saw mouse down")
+////    let currentFileSubmenu = NSMenu()
+////    let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
+////    currentFileSubmenu.addItem(deleteMenuItem)
+////    currentFile.menu?.setSubmenu(currentFileSubmenu, for: currentFile.selectedItem!)
+//    if (event.type == NSEventType.rightMouseDown)
+//    {
+////       print("saw right click")
+//    }
+//    else {
+//      super.mouseDown(with: event)
+//    }
+//  }
+  
+  override func rightMouseDown(with event: NSEvent) {
+    print("saw right click")
+        let currentFileSubmenu = NSMenu()
+        let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
+        currentFileSubmenu.addItem(deleteMenuItem)
+        let item = currentFile.selectedItem
+        item?.view?.menu = currentFileSubmenu
+  }
+  
+  /// Create a move target that does not already exist
+  func safeMoveTarget(sourceMoviePath: String, to trashDirectory:String ) -> String
+  {
+    var duplicate: Int = 0
+    let targetComponents = sourceMoviePath.components(separatedBy: "/")
+    var targetName = targetComponents[targetComponents.count-1]
+    var targetPath = trashDirectory+"/"+targetName
+    while (FileManager().fileExists(atPath: targetPath)) {
+      duplicate += 1
+      var nameComponents = targetName.components(separatedBy: ".")
+      let lastIndex = nameComponents.count - 1
+      if (nameComponents[lastIndex] == "ts" || nameComponents[lastIndex] == "eit")
+      {
+        nameComponents[lastIndex-1] = nameComponents[lastIndex-1]+"(\(duplicate))"
+        targetName = nameComponents.joined(separator: ".")
+      }
+      else {
+        nameComponents[lastIndex-2] = nameComponents[lastIndex-2]+"(\(duplicate))"
+        targetName = nameComponents.joined(separator: ".")
+      }
+      targetPath = trashDirectory+"/"+targetName
+    }
+    return targetPath
+  }
+  
+  /// Locally move recording to trash folder
+  /// If it fails on any element, attempt to unwind what has
+  /// been done.
+  func localMoveToTrash(recording: Recording) -> Bool
+  {
+    var resultURL = NSURL(string: "")
+    var doneURL : [NSURL] = Array(repeating: resultURL!, count: recording.movieFiles.count)
+    var allSuceeded = true
+    let fromPaths = recording.movieFiles
+    disconnectCurrentMovieFromGUI()
+    for index in 0..<fromPaths.count {
+      let fileURL = URL(fileURLWithPath: fromPaths[index])
+      do {
+        try FileManager().trashItem(at: fileURL, resultingItemURL: &resultURL )
+        doneURL[index] = resultURL!
+      }
+      catch _ {
+        // try to put back already trashed element of recording
+        NSBeep()
+        allSuceeded = false
+        for doneIndex in 0..<index
+        {
+          let fromURL = doneURL[doneIndex] as URL
+          let toURL = URL(fileURLWithPath: fromPaths[doneIndex])
+          do {
+            try FileManager().moveItem(at: fromURL, to: toURL)
+          }
+          catch _ {
+            NSBeep() // failed putback
+          }
+        }
+        break
+      }
+    }
+    return allSuceeded
+  }
+
+  
+  /// Delete from the PVR and move to its trash folder
+  // TODO: implement PutBack code similar to local operation, thinking about NAS use cases
+  // TODO: for Enigma boxes, implement as ssh operation (performance)
+  func remoteMoveToTrash(recording: Recording)
+  {
+    //
+    // look for .Trash below firstdirectory below mount point
+    let mountPath = generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot.components(separatedBy: "/")
+    let pathElements = selectedDirectory.components(separatedBy: "/")
+    let rootElements = pathElements[0 ... mountPath.count]
+    let rootPath = rootElements.joined(separator: "/")
+    let trashDirectory = rootPath + "/" + trashDirectoryName
+    if FileManager().fileExists(atPath: trashDirectory) {
+      let fromPaths = recording.movieFiles
+      disconnectCurrentMovieFromGUI()
+//      print ("found remote PVR .Trash")
+      let toPaths = fromPaths.map { self.safeMoveTarget(sourceMoviePath: $0, to: trashDirectory) }
+      print (fromPaths)
+      print (toPaths)
+      for index in 0..<fromPaths.count {
+        do {
+          try FileManager().moveItem(atPath: fromPaths[index], toPath: toPaths[index])
+        }
+        catch _ {  // delete failed for item
+          NSBeep()
+        }
+      }
+    }
+    else  // no such file
+    {
+      NSBeep()
+    }
+  }
+  
+  func deleteRecording()
+  {
+    let movieName = movie.movieShortName!
+    
+    let cutsNamePath = movie.movieName!+ConstsCuts.CUTS_SUFFIX
+    let fileURL = URL(fileURLWithPath: cutsNamePath)
+    if  let doc = try? TxDocument(contentsOf: fileURL, ofType: ConstsCuts.CUTS_SUFFIX)
+    {
+      NSDocumentController.shared().removeDocument(doc)
+    }
+    
+    if (isRemote) {
+      remoteMoveToTrash(recording: movie)
+    }
+    else {
+      if !localMoveToTrash(recording: movie) {
+        statusField.stringValue = "Delete Failed for \(movieName)"
+      }
+    }
+    // remove from filelist and rebuild gui elements selecting either next (or previous if no next)
+    var nextIndexToSelect = filelistIndex
+    mouseDownPopUpIndex = filelistIndex
+    filelist.remove(at: filelistIndex)
+    namelist.remove(at: filelistIndex)
+    currentFile.removeItem(at: filelistIndex)
+    
+    // bring index into sync with model (reducing by 1 if we are removing the tail of the list
+    nextIndexToSelect = (nextIndexToSelect < filelist.count) ? nextIndexToSelect : nextIndexToSelect-1
+    if (nextIndexToSelect >= 0) {
+      // simulate mouse down
+      // to ensure that select file perceives a "change" when we have reduced the array and are reselecting the same index
+      if (mouseDownPopUpIndex! == nextIndexToSelect) { mouseDownPopUpIndex! += 1 }
+      currentFile.selectItem(at: nextIndexToSelect)
+      selectFile(currentFile)
+      currentFile.isEnabled = true
+      setPrevNextButtonState(filelistIndex)
+    }
+    
+  }
+  
+  @IBOutlet weak var deleteRecordingButton: NSButton!
+  /// Nominal Delete of recording
+  /// Really move to .Trash subdirectory
+  @IBAction func deleteRecording(_ sender: NSButton)
+  {
+    deleteRecording()
   }
 }

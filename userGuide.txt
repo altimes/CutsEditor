@@ -66,6 +66,17 @@ utility for adding bookmarks at either fixed time intervals or more at other
 that 10% time gap.  The number of marks and the time interval is configured
 under Preferences/General.
 
+Hovering over the recording duration will reveal ALL the durations that the program
+can detect.  The duration from the meta file (often 0), the duration from the eit file
+(typically the nominal broadcast duration), the duration derived from the ap file
+(derived as a summation of pts chunks - usually the best guide) and the duration as
+determined for a Apple AVItem used by the player (get confused by PTS gaps and *look* like
+it is derived as the delta between the first and last PTS values)
+
+Hovering over a recording name gives a tooltip that show that path to the recording (useful
+to discriminate between two recordings with the same name stored in different directories
+with the same tree).
+
 Verbal Control.
 
 Verbal control has been added using the Apple speech recognizer.
@@ -89,12 +100,17 @@ TODO: Provide configuration for user to extend verbal command to map to internal
 
 Advertisement Boundary Hunting
 To aid in the manual detection of boundaries between program and advert a binary
-search feature has been created. When the user sees and advert, they can start a
+search feature has been created. To facilitate the binary search the algorithm uses
+the Mark that preceeds the current hunting position.  If no preceeding mark is present, then
+a virtual IN is implied at the start of the recording (ie the first complementary mark will be
+an OUT mark), if this is not suitable, then the user
+may explicitly make a the first boundary an IN mark.
+The working method is for the user to step forward until an advert is seen, they can start a
 hunt for the boundary between the program and advert by identifying if they are
 seeing and "advert" or "program".  This identification can be verbal (if mirophone has
-been enabled),  clicking the P or A buttons on the GUI or using the "/" or "z" keys
+been enabled),  clicking the P(rogram) or A(dvert) buttons on the GUI or using the "/" or "z" keys
 on the keyboard.  Each step halves the distance between the advert and program until
-the boundary is detected.  The GUI buttons are given a green background when the gap
+the boundary is seen.  The GUI buttons are given a green background when the gap
 is less than 1/10 th of a second.  The IN or OUT mark can then be set using the GUI
 Mark Buttons or using the "x" or "." keys from the keyboard.  If at least one IN or OUT
 is already present, then the "c" or "," keys will add the complement to the last
@@ -102,6 +118,8 @@ Cut Mark.  If the user indavertently indicates the wrong type (ie program when i
 advertisement), then the ";" key or the GUI button label "!" can be used to "reset"
 the hunt back to the position that it was started at.  The spacebar has been mapped
 to a "step forward button", the amount is determined by the middle step button.
+Keyboard mapping corresponds to qwerty keyboard layout LHS of "z,x,c" (program, IN, complementary mark)
+and RHS of ",./" (Advert, OUT, complementary mark)
 
 Advanced Features
 

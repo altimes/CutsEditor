@@ -17,7 +17,6 @@ import Foundation
 /// with the objective a interrogation about commonly used elements
 /// such a pts ranges, discontinuity in pts and other
 
-//class Recording : RecordingResources
 class Recording 
 {
 //  var movie: TransportStream?
@@ -74,6 +73,25 @@ class Recording
         }
       }
       return pts
+    }
+  }
+  
+  var movieFiles:[String]  {
+    get {
+      if (movieName == nil)
+      {
+         return Array<String>(repeating: "", count:6)
+      }
+      else {
+        var namesArray:[String] = Array<String>(repeating: "", count:6)
+        namesArray[0] = movieName! + ConstsCuts.TS_SUFFIX
+        namesArray[1] = movieName! + ConstsCuts.AP_SUFFIX
+        namesArray[2] = movieName! + ConstsCuts.META_SUFFIX
+        namesArray[3] = movieName! + ConstsCuts.EIT_SUFFIX
+        namesArray[4] = movieName! + ConstsCuts.SC_SUFFIX
+        namesArray[5] = movieName! + ConstsCuts.CUTS_SUFFIX
+        return namesArray
+      }
     }
   }
   
@@ -244,6 +262,31 @@ class Recording
   }
   
   
+  /// Decode and return the thee stored recording durations in seconds
+  /// - returns : touple of (eitDuration, metaDuration, ptsDuration) all Doubles
+  
+  func getStoredDurations() -> (eitDuration: Double, metaDuration:Double, ptsDuration:Double)
+  {
+    var metaFileDuration: Double = 0.0
+    var eitFileDuration: Double = 0.0
+    var accessPointsFileDuration: Double
+    if (eit.eit.Duration != "00:00:00" && eit.eit.Duration != "") {
+      //        self.programDuration.stringValue = eitInfo.eit.Duration
+      let timeParts = eit.eit.Duration.components(separatedBy: ":")
+      eitFileDuration = Double(timeParts[0])!*3600.0 + Double(timeParts[1])!*60.0+Double(timeParts[2])!
+    }
+    
+    // metaData
+    if (meta.duration != "0" && meta.duration != "")
+    {  // meta data looks OK, use it for duration display
+      metaFileDuration = Double(meta.duration)!*CutsTimeConst.PTS_DURATION
+    }
+    
+    // accessPoints
+    accessPointsFileDuration = ap.durationInSecs()
+    return (eitFileDuration, metaFileDuration, accessPointsFileDuration)
+  }
+  
   /// Inspect metadata, eit and player to get a best guess of the program duration
   /// in seconds.  metaData can have 0 entry, eit can refer to a later program
   /// subject to EPG and broadcaster variances
@@ -268,21 +311,11 @@ class Recording
     var eitDuration: Double = 0.0
     var accessPointsDuration: Double = 0.0
     var bestDuration: Double = 0.0
-    // eventinfo table
-    if (eit.eit.Duration != "00:00:00" && eit.eit.Duration != "") {
-      //        self.programDuration.stringValue = eitInfo.eit.Duration
-      let timeParts = eit.eit.Duration.components(separatedBy: ":")
-      eitDuration = Double(timeParts[0])!*3600.0 + Double(timeParts[1])!*60.0+Double(timeParts[2])!
-    }
     
-    // metaData
-    if (meta.duration != "0" && meta.duration != "")
-    {  // meta data looks OK, use it for duration display
-      metaDuration = Double(meta.duration)!*CutsTimeConst.PTS_DURATION
-    }
+    metaDuration = getStoredDurations().metaDuration
+    eitDuration = getStoredDurations().eitDuration
+    accessPointsDuration = getStoredDurations().ptsDuration
     
-    // accessPoints
-    accessPointsDuration = ap.durationInSecs()
     if (Recording.debug) {
       print("Meta Duration = \(metaDuration)")
       print("EIT Duration = \(eitDuration)")
@@ -315,4 +348,5 @@ class Recording
     }
     return bestDuration
   }
+  
 }

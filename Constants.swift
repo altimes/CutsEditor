@@ -37,6 +37,7 @@ struct ConstsCuts {
   static let EIT_SUFFIX = ".eit"
   static let TS_SUFFIX = ".ts"
   static let AP_SUFFIX = ".ts.ap"
+  static let SC_SUFFIX = ".ts.sc"
 }
 
 /// Control which file to process "selected" or just worked on
