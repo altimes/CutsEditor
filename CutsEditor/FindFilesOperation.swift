@@ -77,11 +77,11 @@ class FindFilesOperation: Operation
     if (self.foundRootPath.contains(self.localMountPoint) && isRemote) {
       searchPath = self.foundRootPath.replacingOccurrences(of: self.localMountPoint, with: self.remoteExportPath)
       fileCountTask.launchPath = sysConfig.pvrSettings[pvrIndex].sshPath
-      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
+      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash | grep -v denied"]
     }
     else {
       fileCountTask.launchPath = mcutConsts.shPath
-      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash"]
+      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash | grep -v denied"]
       searchPath = self.foundRootPath
     }
     fileCountTask.standardOutput = outPipe

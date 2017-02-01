@@ -19,6 +19,8 @@ protocol AppPreferences {
   func saveVideoPlayerPreference(_ videoPlayer: videoPlayerPreferences)
   func cuttingQueue(withTitle title: String) -> CuttingQueue?
   func cuttingQueueTable() -> [CuttingQueue]
+  func movie() -> Recording?
+  func setMovie(movie: Recording?)
 }
 
 struct sortStringConsts {

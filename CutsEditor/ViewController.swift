@@ -28,10 +28,15 @@ typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 //  }
 //}
 
+struct logMessage {
+  static let noTrashFolder = "Cannot find folder %@"
+  static let adHuntReset = "Reset search state"
+}
+
+
+
 class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
 {
-//  class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSUserInterfaceValidations {
-  
   @IBOutlet weak var previousButton: NSButton!
   @IBOutlet weak var nextButton: NSButton!
   @IBOutlet weak var selectDirectory: NSButton!
@@ -181,6 +186,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// object to perform speech processing
   var mySpeechRecogizer : NSSpeechRecognizer?
   
+//  /// track advert boundary hunting state
+//  var boundaryDoubleGreen = false
+
+  /// alias for typical button action from storyboard.
+  /// function that has a NSButton arg and returns nothing
+  typealias buttonAction = (NSButton) -> ()
+  
+  /// Dictionary of voice commands with keys that have a one-to-one map to a GUI Button.
+  /// TODO: do the I18N to make configurable.  Currrently static english
+  var speechDictionary = [String: (action: buttonAction, button: NSButton)]()
+  
   override func viewDidLoad() {
     super.viewDidLoad()
     
@@ -211,19 +227,38 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     NotificationCenter.default.addObserver(self, selector: #selector(fileToOpenChange(_:)), name: NSNotification.Name(rawValue: fileOpenDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(fileSelectPopUpChange(_:)), name: NSNotification.Name.NSPopUpButtonWillPopUp, object: nil )
     
+//    NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
+    
+//    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
+//    
+//    addMatchingCutMark(toMark: prevCut)
+    
     self.progressBar.controlTint = NSControlTint.clearControlTint
     self.view.window?.title = "CutListEditor"
     
-//    if (voiceRecognition) {
-//      mySpeechRecogizer = NSSpeechRecognizer()
-//      mySpeechRecogizer?.commands = ["advert", "program", "done", "reset", "in", "out", "skip two forward", "repeat", "next", "previous", "skip two backward"]
-//      mySpeechRecogizer?.delegate = self
-//      mySpeechRecogizer?.listensInForegroundOnly = true
-//      mySpeechRecogizer?.blocksOtherRecognizers = true
-//    }
     microphoneButton.wantsLayer = true
     microphoneButton.layer?.backgroundColor = (voiceRecognition) ? NSColor.green.cgColor : NSColor.red.cgColor
-  }
+    backwardHuntButton.wantsLayer = true
+    forwardHuntButton.wantsLayer = true
+    // set button title to inverse of setting
+    self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
+    stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
+    stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
+    typealias buttonAction = (NSButton) -> ()
+    speechDictionary =
+      [voiceCommands.advert: (inAdvertisment,backwardHuntButton),
+       voiceCommands.program:(inProgram,forwardHuntButton),
+       voiceCommands.done:(huntDone,doneHuntButton),
+       voiceCommands.reset:(huntReset,resetHuntButton),
+       voiceCommands.inCut:(addMark,inButton),
+       voiceCommands.out:(addMark,outButton),
+       voiceCommands.skipTwoForward:(seekToAction,seekButton2c),
+       voiceCommands.skipTwoBackward:(seekToAction,seekButton1c),
+       voiceCommands.next:(nextButton,nextButton),
+       voiceCommands.previous:(prevButton,previousButton),
+       voiceCommands.repeatLast:(seekToAction,seekButton2c)  // non-destructive initial value for "repeat last voice command"
+    ]
+ }
 
   override func viewDidAppear() {
     // set window delegate
@@ -231,30 +266,54 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
+//    print(#file+" "+#function)
     return true
   }
   
   func windowWillClose(_ notification: Notification) {
+//    print(#file+" "+#function)
+    
+    if let token = timeObserverToken
+    {
+      self.monitorView.player?.removeTimeObserver(token)
+      self.timeObserverToken = nil
+    }
+    self.monitorView.player?.pause()
+    NotificationCenter.default.removeObserver(self)
     NSApplication.shared().terminate(self)
   }
   
+  func windowWillMiniaturize(_ notification: Notification)
+  {
+//    print(#file+" "+#function+" \(self.monitorView.player?.rate)")
+    wasPlaying = (self.monitorView.player?.rate)! > Float(0.0)
+    self.monitorView.player?.pause()
+  }
+  
+//  func windowDidMiniaturize(_ notification: Notification) {
+////    print(#file+" "+#function)
+//  }
+  
+  func windowDidDeminiaturize(_ notification: Notification) {
+    if wasPlaying {
+      self.monitorView.player?.play()
+    }
+//    print(#file+" "+#function)
+  }
+  
+  
   /// Housekeeping Things to do on window closure
   override func viewDidDisappear() {
+//    print(#file+" "+#function)
         super.viewDidDisappear()
-    
-        if let token = timeObserverToken
-        {
-          self.monitorView.player?.removeTimeObserver(token)
-          self.timeObserverToken = nil
-        }
-        self.monitorView.player?.pause()
   }
   
   /// Housekeeping Things to do after window closure
  
   override func viewWillDisappear() {
-    super.viewWillDisappear()
-    NotificationCenter.default.removeObserver(self)
+//    print(#file+" "+#function)
+//    super.viewWillDisappear()
+//    NotificationCenter.default.removeObserver(self)
   }
   
   /// Observer function to handle the "seek" changes that are made
@@ -366,6 +425,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.playerPrefs = preferences.videoPlayerPreference()
     self.monitorView.controlsStyle = playerPrefs.playbackControlStyle == videoControlStyle.inLine ? AVPlayerViewControlsStyle.inline : AVPlayerViewControlsStyle.floating
     self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
+    stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
+    stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
     self.honourOutInMarks = playerPrefs.skipCutSections
   }
   
@@ -380,56 +441,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       let message = String.localizedStringWithFormat( StringsCuts.FAILED_TRYING_TO_ACCESS, filename)
       self.statusField.stringValue = message
     }
-  }
-  
-  /// Query the PVR (or directory) for a recursive count of the files with xxx extension.
-  /// Written to do a external shell query and then process the resulting message
-  /// eg. countFilesWithSuffix(".ts", "/hdd/media/movie")
-  /// Used to support sizing of progress bar for background tasks.
-  /// If remote query fails for any reason, function returns default value of 100
-  /// - parameter fileSuffix: tail of file name, eg .ts, .ts.cuts, etc
-  /// - parameter belowPath: root of path to recursively search
-  
-  func countFilesWithSuffix(_ fileSuffix: String, belowPath: String) -> Int?
-  {
-    let defaultCount: Int? = nil
-    var searchPath: String
-    // use a task to get a count of the files in the directory
-    // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
-    // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
-    // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
-    let fileCountTask = Process()
-    let outPipe = Pipe()
-    let localMountRoot = isRemote ? generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot : mcutConsts.localMount
-    if (belowPath.contains(localMountRoot) && isRemote) {
-      searchPath = belowPath.replacingOccurrences(of: generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot, with: generalPrefs.systemConfig.pvrSettings[pvrIndex].cutRemoteExport)
-      fileCountTask.launchPath = systemSetup.pvrSettings[pvrIndex].sshPath
-      fileCountTask.arguments = [systemSetup.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
-   }
-    else {
-      // TODO: look at putting this where the user can change it
-      fileCountTask.launchPath = mcutConsts.shPath
-      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(belowPath)\" -regex \"^.*\\\(fileSuffix)$\" | wc -l"]
-      searchPath = belowPath
-    }
-    fileCountTask.standardOutput = outPipe
-    fileCountTask.standardError = outPipe
-    fileCountTask.launch()
-    let handle = outPipe.fileHandleForReading
-    let data = handle.readDataToEndOfFile()
-    if let resultString = String(data: data, encoding: String.Encoding.utf8)
-    {
-      // trim to just the text and try converting to a number
-      let digitString = resultString.trimmingCharacters(in: CharacterSet(charactersIn: " \n"))
-      if let fileCount = Int(digitString) {
-        return fileCount
-      }
-      else {
-        let message = String.localizedStringWithFormat(StringsCuts.FAILED_COUNTING_FILES, digitString)
-        self.statusField.stringValue = message
-      }
-    }
-    return defaultCount
   }
   
   /// Observer function that responds to a mouseDown event on the
@@ -463,44 +474,50 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let index = (indexSelector == FileToHandle.current) ? filelistIndex : lastfileIndex
     var proceedWithWrite = true
+    var abandonWrite = false
     let validCuts = movie.isCuttable
     guard (validCuts) else {
-      self.statusField.stringValue = movie.cuts.lastValidationMessage
+      setStatusFieldStringValue(message: movie.cuts.lastValidationMessage, isLoggable: true)
+      NSBeep()
       return false
     }
-    if (cutsModified ) {
-      if (generalPrefs.autoWrite == CheckMarkState.unchecked) {
-        // pop up a modal dialog to confirm overwrite of cuts file
-        let overWriteDialog = NSAlert()
-        overWriteDialog.alertStyle = NSAlertStyle.critical
-        overWriteDialog.informativeText = "Will overwrite the \(ConstsCuts.CUTS_SUFFIX) file"
-        overWriteDialog.window.title = "Save File"
-        let programname = self.currentFile.item(at: lastfileIndex)!.title.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-        overWriteDialog.messageText = "OK to overwrite file \n\(programname)"
-        overWriteDialog.addButton(withTitle: "OK")
-        overWriteDialog.addButton(withTitle: "Cancel")
+    guard cutsModified else {
+      return true
+    }
+    if (generalPrefs.autoWrite == CheckMarkState.unchecked) {
+      // pop up a modal dialog to confirm overwrite of cuts file
+      let overWriteDialog = NSAlert()
+      overWriteDialog.alertStyle = NSAlertStyle.critical
+      overWriteDialog.informativeText = "Will overwrite the \(ConstsCuts.CUTS_SUFFIX) file"
+      overWriteDialog.window.title = "Save File"
+      let programname = self.currentFile.item(at: index)!.title.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
+      overWriteDialog.messageText = "OK to overwrite file \n\(programname)"
+      overWriteDialog.addButton(withTitle: "OK")
+      overWriteDialog.addButton(withTitle: "Cancel")
+      overWriteDialog.addButton(withTitle: "Don't Save")
 
-        let result = overWriteDialog.runModal()
-        proceedWithWrite = result == NSAlertFirstButtonReturn
+      let result = overWriteDialog.runModal()
+      proceedWithWrite = result == NSAlertFirstButtonReturn
+      abandonWrite = result == NSAlertThirdButtonReturn
+    }
+    
+    // autowrite is enabled, so just get on with it
+    if (proceedWithWrite) {
+      // rewrite cuts file
+      if movie.saveCuts() {
+        if ( debug) {
+          print(MessageStrings.DID_WRITE_FILE)
+        }
+        setDropDownColourForIndex(index)
+        return true
       }
-      
-      // autowrite is enabled, so just get on with it
-      if (proceedWithWrite) {
-        // rewrite cuts file
-        if movie.saveCuts() {
-          if ( debug) {
-            print(MessageStrings.DID_WRITE_FILE)
-          }
-          setDropDownColourForIndex(index)
-        }
-        else {
-          self.statusField.stringValue = StringsCuts.FILE_SAVE_FAILED
-          // TODO:  needs some sort of try again / give up options
-          return true
-        }
+      else {
+        setStatusFieldStringValue(message: StringsCuts.FILE_SAVE_FAILED, isLoggable: true)
+        // TODO:  needs some sort of try again / give up options
+        return false
       }
     }
-    return true
+    return abandonWrite
   }
   
   /// Change the selected file to
@@ -541,9 +558,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     // load up a recording
     movie = Recording(rootURLName: baseNameURL)
-    
+    preferences.setMovie(movie: movie)
     if (debug) { movie.cuts.printCutsData() }
     self.cutsTable.reloadData()
+    cutsUndoRedo = CutsEditCommnands(movie.cuts)
     
     // select begining of file or earliest bookmark if just a few
     if (movie.cuts.count>0 && movie.cuts.count<=3)
@@ -588,6 +606,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (voiceWasOn) { toggleVoiceRecognition(microphoneButton)}
 //    print(mySpeechRecogizer?.commands)
 //    print("Have I started?")
+    NotificationCenter.default.post(name: Notification.Name(rawValue: movieDidChange), object: nil)
   }
 
   // MARK: - button responders
@@ -655,6 +674,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 400, height: 24))
     textField.stringValue = defaultValue
+    textField.sizeToFit()
     
     msg.accessoryView = textField
     let response: NSModalResponse = msg.runModal()
@@ -681,6 +701,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   @IBAction func cutButton(_ sender: NSButton)
   {
+    guard flushPendingChangesFor(.current) else
+    {
+      return
+    }
     disconnectCurrentMovieFromGUI()
     let moviePathURL = filelist[filelistIndex]
     cutMovie(moviePathURL)
@@ -864,11 +888,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// Sorter to sort namePairs by channel name
   /// picks channel from expected format of "^DateTime - Channel - ProgramName$"
+  /// if pattern does not contain "-" then use name alone
   func pairsListChannelSorter( _ s1:namePair, s2: namePair) -> Bool
   {
     var greaterThan: Bool
-    let names1 = s1.programeName.components(separatedBy: kHyphen)[1]
-    let names2 = s2.programeName.components(separatedBy: kHyphen)[1]
+    let s1Components = s1.programeName.components(separatedBy: kHyphen)
+    let s2Components = s2.programeName.components(separatedBy: kHyphen)
+    let names1 = (s1Components.count>=2) ? s1Components[1] : s1Components[0]
+    let names2 = (s2Components.count>=2) ? s2Components[1] : s2Components[0]
     if sortPrefs.isAscending {
       greaterThan = names1 < names2
     }
@@ -1033,12 +1060,32 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       self.currentFile.removeAllItems()
       self.currentFile.addItems(withTitles: namelist)
-      // add a tip of the actual file path 
+//      var durations = [Double](repeating:0.0, count:namelist.count)
+//      durations = apDurations(files: filelist)
+      // add a tip of the actual file path
       for index in 0 ..< self.currentFile.itemArray.count {
         let path = filelist[index].replacingOccurrences(of: "file://", with: "")
-        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding
+//        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding! + " (" + CutEntry.hhMMssFromSeconds(durations[index])+")"
+        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding!
       }
   }
+  
+//  /// Build an array matching the list of files with the correspodning
+//  /// calculated rutime of the recording
+//  /// - parameter files: array of fully specified disk paths
+//  /// - returns: array of same size as input with duration of related file in seconds
+//  func apDurations(files list:[String]) -> [Double]
+//  {
+//    var durations = [Double](repeating: 0.0, count:list.count)
+//    for fileIndex in 0 ..< list.count {
+//      let filename = list[fileIndex]
+//      if let urlName = URL(string: filename.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))
+//      {
+//        durations[fileIndex] = AccessPoints(url:urlName)?.durationInSecs() ?? 0.0
+//      }
+//    }
+//    return durations
+//  }
   
   /// Routine to work out the colour coding for the list of programs.
   /// This can be a lengthy task and is done as a detached process with
@@ -1055,10 +1102,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var resultNotWanted = false
     self.progressBar.maxValue = Double(self.namelist.count)
     self.progressBar.doubleValue = 0.0
-    blockOperation.addExecutionBlock(
-      {
+    blockOperation.addExecutionBlock (
+      { [weak weakself = self] in
         var attributedStrings = [NSAttributedString]()
-        
+//        let trailingDurationRegexString = " ([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\)$" // eg " (01:23:35)"
         // progressively construct a duplicate of NSPopUpButton to query & update without interfering with UI
         for index in 0 ..< self.namelist.count
         {
@@ -1067,10 +1114,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             resultNotWanted = true
             break
           }
-          let (fontAttribute, colourAttribute) = self.getFontAttributesForIndex(index)
+          if let (fontAttribute, colourAttribute, apDuration) = weakself?.getFontAttributesDurationForIndex(index) {
           if let menuItem = self.currentFile.item(at: index)
           {
             attributedStrings.append(NSAttributedString(string: menuItem.title, attributes:[NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName:fontAttribute]))
+//            let path = weakself?.filelist[index].replacingOccurrences(of: "file://", with: "")
+//            let tooltip = (path?.removingPercentEncoding!)! + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
+            if let pathURL = weakself?.filelist[index],
+               let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
+            {
+              menuItem.toolTip = tooltip
+            }
+            // else: no path == no tooltip (duh)
           }
           // update the application each time we have completed one program except the last
           if (index < self.namelist.count-1) {
@@ -1079,6 +1134,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               self.progressBar.doubleValue = Double(index)
               self.statusField.stringValue = "Working out title colour coding in background"
             })
+            }
           }
         }
         
@@ -1115,7 +1171,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// - parameter index: index into filelist array
   /// - returns: tuple of NSColor and NSFont
   
-  func getFontAttributesForIndex( _ index : Int) -> (font :NSFont, colour: NSColor)
+  func getFontAttributesDurationForIndex( _ index : Int) -> (font :NSFont, colour: NSColor, apDuration:Double)
   {
     // set defaults
     var attributeColour = NSColor.black
@@ -1128,7 +1184,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let baseName = filelist[index].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
     thisMovie = Recording(rootURLName: baseName)
     
-    thisProgramDuration = thisMovie.getBestDurationInSeconds()
+    let durations = thisMovie.getBestDurationAndApDurationInSeconds()
+    thisProgramDuration = durations.best
     if (thisMovie.cuts.count != 0) {
       attributeColour = (thisMovie.cuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
       
@@ -1155,7 +1212,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         attributeColour = fileColourParameters.noBookmarksColor
       }
     }
-    return (font, attributeColour)
+    return (font, attributeColour, durations.ap)
   }
   
   /// Routine that examines the cuts data associated program and
@@ -1169,11 +1226,31 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
   func setDropDownColourForIndex(_ index: Int)
   {
-    let (fontAttribute, colourAttribute) = getFontAttributesForIndex(index)
+    let (fontAttribute, colourAttribute, apDuration) = getFontAttributesDurationForIndex(index)
     if  let menuItem = currentFile.item(at: index)
     {
+//      let path = filelist[index].replacingOccurrences(of: "file://", with: "")
+//      let tooltip = (path.removingPercentEncoding!) + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
+      let tooltip = tooltipFrom(url: filelist[index], duration: apDuration)
+      
       menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName: fontAttribute])
+      menuItem.toolTip = tooltip
     }
+  }
+  
+  /// Construct the dropdown tool tip to be full (local) path and the calculated duration
+  /// of the recording
+  /// - parameter url: file:// style url
+  /// - parameter apDuration: the duration of the recording in seconds
+  /// - returns: formatted string
+  
+  func tooltipFrom(url: String, duration: Double ) -> String
+  {
+    let durationString = " ("+CutEntry.hhMMssFromSeconds(duration) + ")"
+    let path = url.replacingOccurrences(of: "file://", with: "")
+    let plainPath = path.removingPercentEncoding ?? path
+    let tooltip = plainPath + durationString
+    return tooltip
   }
   
   /// Routine that examines the cuts data associated with each program and
@@ -1220,9 +1297,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else if (menuItem.action == #selector(add10Bookmarks(_:))) {
       return cuttable && (filelist.count > 0 )
     }
+    else if (menuItem.action == #selector(undo(_:))) {
+      print("undo is \(cutsUndoRedo?.undoEmpty)")
+      return cutsUndoRedo?.undoEmpty ?? false
+    }
+    else if ( menuItem.action == #selector(redo(_:))) {
+      print("redo is \(cutsUndoRedo?.isRedoPossible)")
+    return cutsUndoRedo?.isRedoPossible ?? false
+    }
     else {
       return true
     }
+  }
+  
+  @IBAction  func undo(_ sender: AnyObject) {
+    cutsEditUndo()
+  }
+  @IBAction  func redo(_ sender: AnyObject) {
+    cutsEditRedo()
   }
   
   /// set the GUI elements that are dependent on having at least one
@@ -1299,6 +1391,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     wasPlaying = false
     movie = Recording()
+    preferences.setMovie(movie: nil)
+    cutsUndoRedo = nil
   }
   
   /// Clear all of the current model/state back to program startup condition
@@ -1412,7 +1506,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             
             let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
             let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
-            programDurationInSecs = movie.getBestDurationInSeconds(playerDuration: videoDuration)
+            let durationsInSecs = movie.getBestDurationAndApDurationInSeconds(playerDuration: videoDuration)
+            programDurationInSecs = durationsInSecs.best
             
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
             self.programDuration.toolTip = recordingDurations(movie: movie).joined(separator: "\n").appending(videoDurationString)
@@ -1445,8 +1540,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .readyToPlay:
             let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
             let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
-            programDurationInSecs = movie.getBestDurationInSeconds(playerDuration: videoDuration)
-            if (debug) {
+            let durationsInSecs = movie.getBestDurationAndApDurationInSeconds(playerDuration: videoDuration)
+            programDurationInSecs = durationsInSecs.best
+           if (debug) {
               print("Player ready to play")
               print("metadata duration = \(movie.meta.duration)")
             }
@@ -1544,6 +1640,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.monitorView.player = samplePlayer
       self.monitorView.showsFullScreenToggleButton = true
       self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
+      stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle : playerStringConsts.stepButtonTitle
       self.monitorView.player?.seek(to: startTime)
       self.addPeriodicTimeObserver()
    }
@@ -1558,6 +1655,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let arrayIndex = currentFile.indexOfSelectedItem
     self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
+  }
+  
+  /// Conceptual start for a logging mechanism.  Use a function
+  /// as a gateway to setting the string value of the status field
+  func setStatusFieldStringValue(message: String, isLoggable: Bool)
+  {
+    self.statusField.stringValue = message
+    // and log...
   }
   
   // MARK: - Player related functions
@@ -1693,6 +1798,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (debug) { print("Saw callback end for \(currentTime)") }
     }
     // end closure addition
+  }
+  
+  func sawDidDeminiaturize(_ notification: Notification) {
+    // reset periodic observer
+//    print(#file+#function)
+    addPeriodicTimeObserver()
   }
   
   // MARK: - Movie Cutting functions
@@ -2062,16 +2173,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   // MARK: - cutMark management functions
+  
+  /// Contains all undo / redo functions and data (copies of cutslist)
+  var cutsUndoRedo: CutsEditCommnands?
+  
   // currently fails to create bookmarks before first in and after last out
   // when recording is cut but with ads marked out
   @IBAction func clearBookMarks(_ send: AnyObject)
   {
     clearAllOfType(.BOOKMARK)
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
   @IBAction func clearLastPlayMark(_ send: AnyObject)
   {
     clearAllOfType(.LASTPLAY)
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
   /// Clears the cuts object of all IN and OUT marks
@@ -2079,6 +2196,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func clearCutMarks(_ sender: AnyObject)
   {
     clearCutsOfTypes([.IN, .OUT])
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
   /// Menu item action
@@ -2096,12 +2214,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     cutsTable.reloadData()
     seekPlayerToMark(movie.firstVideoPosition())
     cuttable = movie.isCuttable
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
-  /// Clear all know mark types
+  /// Clear all known mark types
   @IBAction func clearAllMarks(_ sender: AnyObject)
   {
     clearCutsOfTypes([.IN, .OUT, .LASTPLAY, .BOOKMARK])
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
   /// Remove all cuts of the single prescribed type
@@ -2142,6 +2262,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     suppressPlayerUpdate = false
     seekPlayerToMark(movie.firstVideoPosition())
     cuttable = movie.isCuttable
+    cutsUndoRedo?.add(state: self.movie.cuts)
   }
   
   /// If present, remove the matching entry from the cut list.
@@ -2151,6 +2272,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       cutsTable.reloadData()
       cuttable = movie.isCuttable
+      cutsUndoRedo?.add(state: self.movie.cuts)
     }
   }
   
@@ -2163,46 +2285,69 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let mark = CutEntry(cutPts: now, cutType: markType!.rawValue)
     movie.cuts.addEntry(mark)
     updateTableGUIEntry(mark)
+    cutsUndoRedo?.add(state: self.movie.cuts)
 
     if (markType == .IN || markType == .OUT)  {
       cuttable = movie.isCuttable
     }
   }
   
-  // MARK: - Advertisment boundary pickers
+  /// Undo the last change to the cuts list. Go BACKWARD in history
+  func cutsEditUndo()
+  {
+    print(#function)
+    if let lastCuts = cutsUndoRedo?.getPrevious()
+     {
+      self.movie.cuts = lastCuts
+      cutsTable.reloadData()
+      cuttable = movie.isCuttable
+     }
+     else  {
+      NSBeep()
+    }
+  }
   
+  /// Redo the last cuts list change to the cuts list.  Go FORWARD in history
+  func cutsEditRedo () {
+    print(#function)
+    if let nextCuts = cutsUndoRedo?.next()
+    {
+      self.movie.cuts = nextCuts
+      cutsTable.reloadData()
+      cuttable = movie.isCuttable
+    }
+    else {
+      NSBeep()
+    }
+  }
+  
+  // MARK: - Advertisment boundary pickers
   var boundaryAdHunter : boundaryHunter?
-  let initialStep = 90.0
-  let nearEnough = 0.5
+  let initialStep = 90.0      // TODO: add to user config panel
+  let nearEnough = 1.0/50.0   // TODO: add to user config panel 1/25 th is frame level
+  
+  
+  /// Get Nearest cutmark type PRECEEDING the current player position.
+  /// Has a dummy .LASTPLAY value if there is no cutmark before the current position
   var prevCut: MARK_TYPE {  // nearest cutmark before current position
     get {
       let inOut = movie.cuts.inOutOnly
-      let now = monitorView.player?.currentTime().seconds
-      if inOut.count > 0 && now != nil {
-        var index = 0
-        var isPastCurrent = (inOut[index].asSeconds() > now!)
-        while !isPastCurrent && index+1 < (inOut.count) {
-          index += 1
-          isPastCurrent = inOut[index].asSeconds() > now!
-        }
-        if (index > 0) {
-          return (isPastCurrent) ? MARK_TYPE.lookupOnRawValue(inOut[index-1].cutType)! : MARK_TYPE.lookupOnRawValue(inOut[index].cutType)!
-        }
-        else {
-          return !isPastCurrent ? MARK_TYPE.lookupOnRawValue(inOut[0].cutType)! : .LASTPLAY
-        }
+      guard (inOut.count > 0 && monitorView.player != nil) else {
+        return .LASTPLAY
       }
-      return .LASTPLAY
-    }
-  }
-  var noCutBefore : Bool {
-    get {
-      return true
-    }
-  }
-  var noCutAfter: Bool {
-    get {
-      return true
+      let now = (monitorView.player?.currentTime().seconds)!
+      var index = 0
+      var cutIsAfterPlayer = (inOut[index].asSeconds() > now)
+      while !cutIsAfterPlayer && index+1 < (inOut.count) {
+        index += 1
+        cutIsAfterPlayer = inOut[index].asSeconds() > now
+      }
+      if (index > 0) {
+        return (cutIsAfterPlayer) ? MARK_TYPE.lookupOnRawValue(inOut[index-1].cutType)! : MARK_TYPE.lookupOnRawValue(inOut[index].cutType)!
+      }
+      else {
+        return !cutIsAfterPlayer ? MARK_TYPE.lookupOnRawValue(inOut[0].cutType)! : .LASTPLAY
+      }
     }
   }
   
@@ -2210,16 +2355,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBOutlet weak var backwardHuntButton: NSButton!
   @IBOutlet weak var resetHuntButton: NSButton!
   @IBOutlet weak var doneHuntButton: NSButton!
-
-  /// Enable, disable the advertisement hunting buttons.
-  /// Should reflect state of there being an active loaded media item
-  func enableAdHuntingButtons(_ state:Bool) {
-    forwardHuntButton.isEnabled = state
-    backwardHuntButton.isEnabled = state
-    resetHuntButton.isEnabled = state
-    doneHuntButton.isEnabled = state
-  }
-
+  
+  /// Action to take when users says that "this is in a program".
+  /// Bound to the GUI "P" Button, the "z" keyboard keydown event
+  /// and the "program" speech command
+  /// - parameter: GUI Button
   @IBAction func inProgram(_ sender: NSButton) {
     if (prevCut == .IN ) {
       huntForward( sender )
@@ -2230,10 +2370,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else // no earlier cuts edge conditions
     {
       // assume begining of program
-       huntForward(sender)
+      huntForward(sender)
     }
   }
   
+  /// Action to take when user says "this is in an Advertisement"
+  /// - parameter: GUI Button
   @IBAction func inAdvertisment(_ sender: NSButton) {
     if (prevCut == .IN ) {
       huntBackward( sender )
@@ -2248,67 +2390,43 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     
   }
-  
-  
+  /// Hunt forward for advert / program boundary
+  /// Change colour when close enough
+  /// - parameter: GUI Button
   @IBAction func huntForward(_ sender: NSButton) {
-    if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: initialStep, player: self.monitorView.player!) }
-    statusField.stringValue  = (boundaryAdHunter?.jumpForward())!
-    if let lastStep = Double(statusField.stringValue) {
-      if abs(lastStep) < 0.5 {
-        sender.wantsLayer = true
-        sender.layer?.backgroundColor = NSColor.green.cgColor
-      }
-      else {
-        sender.wantsLayer = false
-      }
-    }
+    doBinaryJump(button: sender, direction: .forward)
   }
+  
+  /// Hunt backward for advert / program boundary
+  /// Change colour when close enough
+  /// - parameter: GUI Button
   @IBAction func huntBackward(_ sender: NSButton) {
-    if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: -initialStep, player: self.monitorView.player!) }
-    statusField.stringValue = (boundaryAdHunter?.jumpBackward())!
-    if let lastStep = Double(statusField.stringValue) {
-      if abs(lastStep) < 0.5 {
-        sender.wantsLayer = true
-        sender.layer?.backgroundColor = NSColor.green.cgColor
-      }
-      else {
-        sender.wantsLayer = false
-      }
-    }
+    doBinaryJump(button: sender, direction: .backward)
   }
   
+  /// User knows that they clicked wrong (ad/prog) button - reset to start state
+  /// - parameter: GUI Button
   @IBAction func huntReset(_ sender: NSButton) {
-    if let videoPlayer = self.monitorView.player
-    {
-      if boundaryAdHunter == nil { boundaryAdHunter = boundaryHunter(firstJump: initialStep, player: videoPlayer) }
-      boundaryAdHunter?.reset()
-      statusField.stringValue = "Reset jump state"
-      huntButtonsReset()
-    }
+    guard self.monitorView.player != nil else { return }
+    guard boundaryAdHunter != nil else { return }
+    boundaryAdHunter?.reset()
+    setStatusFieldStringValue(message: logMessage.adHuntReset, isLoggable: false)
+    huntButtonsReset()
   }
   
+  /// Found boundary or completely lost, so clear the hunter and reset the buttons
+  /// - parameter: GUI Button
   @IBAction func huntDone(_ sender: NSButton) {
-    statusField.stringValue = "hunter nilled"
     huntButtonsReset()
+    let outCutDuration = movie.cuts.simpleOutCutDurationInSecs()
+    let doneMessage = "Advert hunt done ("+CutEntry.hhMMssFromSeconds(outCutDuration)+")"
+    setStatusFieldStringValue(message: doneMessage, isLoggable: false)
   }
   
-  func boundaryHuntReset()
-  {
-    boundaryAdHunter?.done()
-    huntButtonsReset()
-  }
-  
-  func huntButtonsReset() {
-    forwardHuntButton.wantsLayer = false
-    backwardHuntButton.wantsLayer = false
-    boundaryAdHunter = nil
-  }
-  
-  /// Cache last recognized speech command for reuse with "repeat" command
-  var lastCommand: String?
   var voiceRecognition = false
   
   @IBOutlet weak var microphoneButton: NSButton!
+  
   @IBAction func toggleVoiceRecognition(_ sender: NSButton) {
     if (voiceRecognition) {
       mySpeechRecogizer?.stopListening()
@@ -2318,7 +2436,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else {
       mySpeechRecogizer = NSSpeechRecognizer()
-      mySpeechRecogizer?.commands = ["advert", "program", "done", "reset", "in", "out", "skip two forward", "repeat", "next", "previous", "skip two backward"]
+      mySpeechRecogizer?.commands = [String](speechDictionary.keys)
       mySpeechRecogizer?.delegate = self
       mySpeechRecogizer?.listensInForegroundOnly = true
       mySpeechRecogizer?.blocksOtherRecognizers = true
@@ -2327,77 +2445,75 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       mySpeechRecogizer?.startListening()
    }
   }
+  
+  
+  /// Delegate function
+  
   func speechRecognizer(_ sender: NSSpeechRecognizer, didRecognizeCommand command: String) {
     print("saw command \(command)")
-    if (command != "repeat") { lastCommand = command }
-    switch command {
-      case "advert" :
-        inAdvertisment(backwardHuntButton)
-      case "program" :
-        inProgram(forwardHuntButton)
-      case "done":
-        huntDone(doneHuntButton)
-      case "reset" :
-        huntReset(resetHuntButton)
-      case "in" :
-        addMark(sender: inButton)
-      case "out" :
-        addMark(sender: outButton)
-      case "skip two forward" :
-        seekToAction(seekButton2c)
-      case "skip two backward" :
-        seekToAction(seekButton1c)
-      case "next" :
-        nextButton(sender: nextButton)
-      case "previous" :
-        prevButton(sender: previousButton)
-      case "repeat" :
-        if lastCommand != nil {
-          speechRecognizer(sender, didRecognizeCommand: lastCommand!)
-        }
-      default: print("???")
+    // excute associated command function and cache for re-use
+    if let voiceCommandActionAndButton = speechDictionary[command]
+    {
+      voiceCommandActionAndButton.action(voiceCommandActionAndButton.button)
+      // now cache the last command for re-use with "repeat" command
+      speechDictionary.updateValue(voiceCommandActionAndButton, forKey: "repeat")
     }
   }
+  
   
   override func keyDown(with event: NSEvent) {
 //    print("saw keyDown keycode value \(event.keyCode)")
     
     if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
-    if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown)
+    if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown) && NSEvent.modifierFlags().isEmpty
     {
       if let keyString = event.characters {
 //        print(">>\(keyString)<<")
 
         if (keyString == "z") { // z
           inProgram(forwardHuntButton)
+          return
         }
         
         if (keyString == "/") {
           inAdvertisment(backwardHuntButton)
+          return
+        }
+        
+        if (keyString == "s") {
+          seekToAction(seekButton1c)
+          return
         }
         
         if (keyString == "x") {
           addMark(sender: inButton)
-          
+          huntDone(doneHuntButton)
+          return
         }
         if (keyString == ".") {
           addMark(sender: outButton)
+          huntDone(doneHuntButton)
+          return
         }
         
         if (keyString == " ") {
           seekToAction(seekButton2c)
+          return
         }
         
         if (keyString == ";" ) {
           huntReset(resetHuntButton)
+          return
         }
         
         // add a mark that is the complement of previous in / out
         if (keyString == "c" || keyString == ",") {
           addMatchingCutMark(toMark: prevCut)
+          return
         }
       }
     }
+    super.keyDown(with: event)
   }
 
   /// Add mark that is complementary to the previous cut mark.
@@ -2408,8 +2524,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     switch toMark {
       case .IN:
         addMark(sender: outButton)
+        huntDone(doneHuntButton)
+        NSBeep();NSBeep();NSBeep()
       case .OUT:
         addMark(sender: inButton)
+        huntDone(doneHuntButton)
+        NSBeep();NSBeep();NSBeep()
       default: NSBeep()
     }
   }
@@ -2424,21 +2544,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       {
         movie.cuts.remove(at: selectedRow)
         cutsTable.reloadData()
+        cuttable = movie.isCuttable
+        cutsUndoRedo?.add(state: movie.cuts)
       }
 //      print ("cell is \(cutEntry?.asString())")
     }
   }
   
-  
-  /// Insert a new element into a path string
-  func insertPathElement(newElement: String, into path: String, at index: Int) -> String
-  {
-    var elements = path.components(separatedBy: "/")
-    elements.insert(newElement, at: index)
-    return elements.joined(separator: "/")
-  }
+//  /// Insert a new element into a path string
+//  func insertPathElement(newElement: String, into path: String, at index: Int) -> String
+//  {
+//    var elements = path.components(separatedBy: "/")
+//    elements.insert(newElement, at: index)
+//    return elements.joined(separator: "/")
+//  }
   
 //  // MARK: - Recording removal
+  
 //  override func mouseDown(with event: NSEvent) {
 ////    print ("saw mouse down")
 ////    let currentFileSubmenu = NSMenu()
@@ -2455,156 +2577,44 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //  }
   
   override func rightMouseDown(with event: NSEvent) {
-    print("saw right click")
-        let currentFileSubmenu = NSMenu()
-        let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
-        currentFileSubmenu.addItem(deleteMenuItem)
-        let item = currentFile.selectedItem
-        item?.view?.menu = currentFileSubmenu
+    print("saw "+#function)
+//        let currentFileSubmenu = NSMenu()
+//        let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
+//        currentFileSubmenu.addItem(deleteMenuItem)
+//        let item = currentFile.selectedItem
+//        item?.view?.menu = currentFileSubmenu
   }
   
-  /// Create a move target that does not already exist
-  func safeMoveTarget(sourceMoviePath: String, to trashDirectory:String ) -> String
-  {
-    var duplicate: Int = 0
-    let targetComponents = sourceMoviePath.components(separatedBy: "/")
-    var targetName = targetComponents[targetComponents.count-1]
-    var targetPath = trashDirectory+"/"+targetName
-    while (FileManager().fileExists(atPath: targetPath)) {
-      duplicate += 1
-      var nameComponents = targetName.components(separatedBy: ".")
-      let lastIndex = nameComponents.count - 1
-      if (nameComponents[lastIndex] == "ts" || nameComponents[lastIndex] == "eit")
-      {
-        nameComponents[lastIndex-1] = nameComponents[lastIndex-1]+"(\(duplicate))"
-        targetName = nameComponents.joined(separator: ".")
-      }
-      else {
-        nameComponents[lastIndex-2] = nameComponents[lastIndex-2]+"(\(duplicate))"
-        targetName = nameComponents.joined(separator: ".")
-      }
-      targetPath = trashDirectory+"/"+targetName
-    }
-    return targetPath
-  }
-  
-  /// Locally move recording to trash folder
-  /// If it fails on any element, attempt to unwind what has
-  /// been done.
-  func localMoveToTrash(recording: Recording) -> Bool
-  {
-    var resultURL = NSURL(string: "")
-    var doneURL : [NSURL] = Array(repeating: resultURL!, count: recording.movieFiles.count)
-    var allSuceeded = true
-    let fromPaths = recording.movieFiles
-    disconnectCurrentMovieFromGUI()
-    for index in 0..<fromPaths.count {
-      let fileURL = URL(fileURLWithPath: fromPaths[index])
-      do {
-        try FileManager().trashItem(at: fileURL, resultingItemURL: &resultURL )
-        doneURL[index] = resultURL!
-      }
-      catch _ {
-        // try to put back already trashed element of recording
-        NSBeep()
-        allSuceeded = false
-        for doneIndex in 0..<index
-        {
-          let fromURL = doneURL[doneIndex] as URL
-          let toURL = URL(fileURLWithPath: fromPaths[doneIndex])
-          do {
-            try FileManager().moveItem(at: fromURL, to: toURL)
-          }
-          catch _ {
-            NSBeep() // failed putback
-          }
-        }
-        break
-      }
-    }
-    return allSuceeded
-  }
-
-  
-  /// Delete from the PVR and move to its trash folder
-  // TODO: implement PutBack code similar to local operation, thinking about NAS use cases
-  // TODO: for Enigma boxes, implement as ssh operation (performance)
-  func remoteMoveToTrash(recording: Recording)
-  {
-    //
-    // look for .Trash below firstdirectory below mount point
-    let mountPath = generalPrefs.systemConfig.pvrSettings[pvrIndex].cutLocalMountRoot.components(separatedBy: "/")
-    let pathElements = selectedDirectory.components(separatedBy: "/")
-    let rootElements = pathElements[0 ... mountPath.count]
-    let rootPath = rootElements.joined(separator: "/")
-    let trashDirectory = rootPath + "/" + trashDirectoryName
-    if FileManager().fileExists(atPath: trashDirectory) {
-      let fromPaths = recording.movieFiles
-      disconnectCurrentMovieFromGUI()
-//      print ("found remote PVR .Trash")
-      let toPaths = fromPaths.map { self.safeMoveTarget(sourceMoviePath: $0, to: trashDirectory) }
-//      print (fromPaths)
-//      print (toPaths)
-      for index in 0..<fromPaths.count {
-        do {
-          try FileManager().moveItem(atPath: fromPaths[index], toPath: toPaths[index])
-        }
-        catch _ {  // delete failed for item
-          NSBeep()
-        }
-      }
-    }
-    else  // no such file
-    {
-      NSBeep()
-    }
-  }
-  
-  func deleteRecording()
-  {
-    let movieName = movie.movieShortName!
-    
-    let cutsNamePath = movie.movieName!+ConstsCuts.CUTS_SUFFIX
-    let fileURL = URL(fileURLWithPath: cutsNamePath)
-    if  let doc = try? TxDocument(contentsOf: fileURL, ofType: ConstsCuts.CUTS_SUFFIX)
-    {
-      NSDocumentController.shared().removeDocument(doc)
-    }
-    
-    if (isRemote) {
-      remoteMoveToTrash(recording: movie)
-    }
-    else {
-      if !localMoveToTrash(recording: movie) {
-        statusField.stringValue = "Delete Failed for \(movieName)"
-      }
-    }
-    // remove from filelist and rebuild gui elements selecting either next (or previous if no next)
-    var nextIndexToSelect = filelistIndex
-    mouseDownPopUpIndex = filelistIndex
-    filelist.remove(at: filelistIndex)
-    namelist.remove(at: filelistIndex)
-    currentFile.removeItem(at: filelistIndex)
-    
-    // bring index into sync with model (reducing by 1 if we are removing the tail of the list
-    nextIndexToSelect = (nextIndexToSelect < filelist.count) ? nextIndexToSelect : nextIndexToSelect-1
-    if (nextIndexToSelect >= 0) {
-      // simulate mouse down
-      // to ensure that select file perceives a "change" when we have reduced the array and are reselecting the same index
-      if (mouseDownPopUpIndex! == nextIndexToSelect) { mouseDownPopUpIndex! += 1 }
-      currentFile.selectItem(at: nextIndexToSelect)
-      selectFile(currentFile)
-      currentFile.isEnabled = true
-      setPrevNextButtonState(filelistIndex)
-    }
-    
-  }
   
   @IBOutlet weak var deleteRecordingButton: NSButton!
+  @IBOutlet weak var stepSwapperButton: NSButton!
+  
   /// Nominal Delete of recording
   /// Really move to .Trash subdirectory
   @IBAction func deleteRecording(_ sender: NSButton)
   {
-    deleteRecording()
+    let result = deleteRecording(recording: self.movie, with: NSDocumentController.shared())
+    if result.status != true {
+      setStatusFieldStringValue(message: result.message, isLoggable: true)
+      NSBeep()
+    }
+  }
+  
+  /// If a floating control is present, then swap the fastforward and step frame
+  /// controls.  Set the Button title to correspond to state change
+  /// - parameter  action button
+  
+  @IBAction func swapStepControls(_ sender: NSButton)
+  {
+    self.monitorView.showsFrameSteppingButtons = !self.monitorView.showsFrameSteppingButtons
+    stepSwapperButton.title = monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
+  }
+  
+  override func prepare(for segue: NSStoryboardSegue, sender: Any?) {
+    if (segue.identifier == "EITEdit") {
+      print("Saw menu EITEdit segue")
+      let eit = sender as! ShortEventDescriptorViewController
+      eit.movie = self.movie
+    }
   }
 }

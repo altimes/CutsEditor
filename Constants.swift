@@ -70,6 +70,20 @@ public struct mcutConsts {
   static let fixedLocalName = "Local"
 }
 
+public struct voiceCommands {
+  static let advert = "advert"
+  static let program = "program"
+  static let done = "done"
+  static let reset = "reset"
+  static let inCut = "in"
+  static let out = "out"
+  static let skipTwoForward = "skip two forward"
+  static let skipTwoBackward = "skip two backward"
+  static let next = "next"
+  static let previous = "previous"
+  static let repeatLast = "repeat"
+}
+
 typealias PtsType = UInt64
 typealias OffType = UInt64
 typealias OffPts = (offset: OffType, pts: PtsType)

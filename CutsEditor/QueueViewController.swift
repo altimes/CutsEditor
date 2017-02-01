@@ -137,6 +137,19 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     return size.height
   }
   
+  // make the columns as wide as necessary to display all text
+  func tableView(_ tableView: NSTableView, sizeToFitWidthOfColumn column: Int) -> CGFloat
+  {
+    var minWidth = CGFloat(25.0)
+    for rowIndex in 0..<tablelength {
+      let cell = tableView.view(atColumn:column, row:rowIndex, makeIfNecessary:true)
+      if let width = cell?.fittingSize.width {
+        minWidth = max(width,minWidth)
+      }
+    }
+    return minWidth
+  }
+  
   /// "swipe" action function to delete rows from table.
   /// Updates model and GUI
   func jobCancel(_ action:NSTableViewRowAction, indexPath:Int)

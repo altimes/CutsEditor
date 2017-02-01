@@ -37,9 +37,6 @@ class Recording
   /// injected from viewController when/if player comes ready with video
   var videoDurationFromPlayer: Double = 0.0
   
-  // TODO: move to Recording class
-  // in the controller whilst it has access to all the elements of a recording AND the videoPlayer
-  // better placed in either the cutsfile class or the Recording class once populated
   
   /// Readonly computed var of the position of the last OUT pts.  If no OUT is present,
   /// or it is followed by an IN
@@ -204,7 +201,6 @@ class Recording
     return data
   }
   
-  // MARK: RecordingResource Protocol implementation
   
   // return to first PTS from the ap file, else 0
   // TODO: develop function to read first PTS from recording if ap file is not present
@@ -301,7 +297,7 @@ class Recording
   /// - parameter player: player if running, may be nil
   /// - returns: duration in seconds or 0.0 if it cannot be obtained
   
-  func getBestDurationInSeconds(playerDuration: Double = 0) -> Double
+  func getBestDurationAndApDurationInSeconds(playerDuration: Double = 0) -> (best: Double, ap: Double)
   {
     // get the program duration from all sources and choose the least of the
     // non-zero values
@@ -346,7 +342,7 @@ class Recording
     } else if (accessPointsDuration != 0) {
       bestDuration = accessPointsDuration
     }
-    return bestDuration
+    return (bestDuration, accessPointsDuration)
   }
   
 }

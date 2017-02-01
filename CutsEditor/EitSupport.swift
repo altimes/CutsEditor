@@ -24,6 +24,7 @@ struct EITConst {
 }
 
 import Foundation
+
 fileprivate func < <T : Comparable>(lhs: T?, rhs: T?) -> Bool {
   switch (lhs, rhs) {
   case let (l?, r?):
@@ -45,6 +46,25 @@ fileprivate func >= <T : Comparable>(lhs: T?, rhs: T?) -> Bool {
 }
 
 
+extension UInt8 {
+  func asHexString() -> String
+  {
+    return  String(format: "0x%02.2x", self)
+  }
+}
+extension UInt16 {
+  func asHexString() -> String
+  {
+    return  String(format: "0x%02=4.4x", self)
+  }
+}
+extension UInt32 {
+  func asHexString() -> String
+  {
+    return  String(format: "0x%08.8x", self)
+  }
+}
+
 // MARK: structures mapping model
 
 struct EventInfomationTable {
@@ -60,10 +80,13 @@ struct EventInfomationTable {
 
 struct Short_Event_Descriptor {
   var languageCode:String?
+  let tag = EITConst.SHORT_EVENT_DESCRIPTOR_TAG
   var eventName:DVBTextString?
   var eventText:DVBTextString?
+  var itemLength: Int
   
   init(buffer:[UInt8]) {
+    self.itemLength = buffer.count
     self.languageCode = ""
     let languageFieldLength = 3
     var startIndex:Int = 0
@@ -83,6 +106,13 @@ struct Short_Event_Descriptor {
       eventText = DVBTextString.init(bytes: [UInt8](buffer[startIndex..<endIndex]))
     }
   }
+  init()
+  {
+    languageCode = ""
+    eventName = DVBTextString()
+    eventText = DVBTextString()
+    itemLength = 0
+  }
 }
 
 // Table 51 ETSI EN300 468 v1.11.1
@@ -96,11 +126,14 @@ struct Extended_Event_Descriptor {
   var itemDescription:[Extended_Event_Descriptor_Item]?         // should be itemCount of these
   var textLength = 0
   var descriptionText:DVBTextString?
+  var descriptorLength: Int = 0
+  let tag = EITConst.EXTENDED_EVENT_DESCRIPTOR_TAG
   
   init(buffer:[UInt8]) {
     
     // invert byte
     var startIndex:Int = 0
+    descriptorLength = buffer.count
     let t = buffer[0]
     descriptorNumber = Int(t & 0xF0) >> 4
     highestDescriptorNuber = Int(t & 0x0F)
@@ -149,14 +182,25 @@ struct Extended_Event_Descriptor {
     endIndex = startIndex+textLength
     if (textLength != 0)
     {
-      descriptionText = DVBTextString.init(bytes: [UInt8](buffer[startIndex ..< endIndex]))
+      descriptionText = DVBTextString(bytes: [UInt8](buffer[startIndex ..< endIndex]))
     }
+  }
+  
+  init()
+  {
+    languageCode = ""
+    descriptionText = DVBTextString()
   }
 }
 
 struct Extended_Event_Descriptor_Item {
   var description:DVBTextString?
   var item:DVBTextString?
+  var asString: String? {
+    get {
+      return (description?.asString)! + (item?.asString)!
+    }
+  }
 }
 
 // placeholder for a more complete implementation by others....
@@ -183,14 +227,28 @@ struct DVBTextString
     }
     else  {
       contentText = String.init(bytes: bytes[1..<bytes.count], encoding: String.Encoding.utf8)
-      let hexCodeTable = String.init(format: "%02.2x", characterTable)
+//      let hexCodeTable = String.init(format: "%02.2x", characterTable)
+      let hexCodeTable = characterTable.asHexString()
       contentText = "Unimpl code \(hexCodeTable) raw text = \(contentText)"
     }
   }
+  
   init()
   {
     characterTable = 0
     contentText = ""
+  }
+  
+  init(characterTable charTab: UInt8, contentText content: String)
+  {
+    characterTable = charTab
+    contentText = content
+  }
+  
+  var asString : String? {
+    get {
+      return String(format:"02.2X",characterTable)+":\(contentText)"
+    }
   }
 }
 
@@ -361,9 +419,9 @@ class EITInfo
     statusShort = statusShort.bigEndian
     //      let p1 = (statusShort & 0xE000)
     //      let p2 = p1 >> 13
-    var runningStatus = Int((statusShort.bigEndian & 0xE000) >> 13)
+    var runningStatus = Int((statusShort & 0xE000) >> 13)
     // bounds control
-    let status = ["Recording", "not running", "starts in a seconds", "pausing", "running", "reserved for future 5", "reserved for future 6", "reserved for future 7"]
+    let status = ["Recording", "not running", "starts in a few seconds", "pausing", "running", "service off air", "reserved for future 6", "reserved for future 7"]
     runningStatus = (runningStatus>=0 && runningStatus<status.count) ? runningStatus : 0
     
     //        print("running status \(runningStatus)")
@@ -558,7 +616,7 @@ func parseMJD(_ packed:UInt16) -> (year:Int, month:Int, day:Int)
   let YY = Int((packedDate - 15078.2)/365.25)
   let yearFactor = trunc(Double(YY)*365.25)
   let MM = Int((packedDate - 14956.1 - yearFactor) / 30.6001)
-  let K = (MM==15 || MM == 15) ? 1 : 0
+  let K = (MM == 14 || MM == 15) ? 1 : 0
   let monthFactor = UInt16(Double(MM)*30.6001)
   let D = packed - UInt16(14956) - UInt16(yearFactor) - monthFactor
   return ((1900+YY+K),(MM-1-K*12),Int(D))
@@ -583,7 +641,8 @@ func decodeDescriptor(_ buffer:[UInt8])
   {
     var oneChar: UInt8 = 0
     oneChar = buffer[i]
-    let hexString = String(format: ">>%0.2X<<", oneChar)
+//    let hexString = String(format: ">>%0.2X<<", oneChar)
+    let hexString = oneChar.asHexString()
     let terminator = ((i+1)%16==0) ? "\n":""
     print("\(hexString) ", terminator:terminator)
   }

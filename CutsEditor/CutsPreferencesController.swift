@@ -15,6 +15,9 @@ struct playerStringConsts {
   
   static let fastButtonsRadio = "Fastforward Buttons"
   static let steppingButtonsRadio = "Stepping Buttons"
+  
+  static let ffButtonTitle = "Fast"
+  static let stepButtonTitle = "Step"
 }
 
 class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSControlTextEditingDelegate {

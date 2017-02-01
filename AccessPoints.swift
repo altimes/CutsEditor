@@ -32,7 +32,7 @@ class AccessPoints {
   
   init() {
     runtimePTS = PtsType(0)
-    apFileName = "unassiged"
+    apFileName = "unassigned"
   }
   
   /// given full path filename, open related file
@@ -41,12 +41,12 @@ class AccessPoints {
   /// Intializer where filename is the full path to the file
   /// - parameter fullpath : full pathname to zzzzzzzz.ts.ap file
   
-  convenience init?( fullpath: URL) {
+  convenience init?( url: URL) {
     self.init()
-    if (!self.loadAP(fullpath)) {
+    if (!self.loadAP(url)) {
       return nil
     }
-    apFileName = fullpath.path
+    apFileName = url.path
     runtimePTS = deriveRunTimePTS()
   }
   
@@ -226,14 +226,14 @@ class AccessPoints {
   /// Determine the runtime of a recording bye checking for "gaps" or breaks in the PTS sequencing.
   /// This happens when advertisement have been edited out of a recording.
   /// The corresponding entries have been removed resulting in a smooth file offset sequence but a jump in the PTS
-  /// The lack of PTS compenstation in the ap/ts files means that (last-first) calculation for runtime is incorrect
+  /// The lack of PTS compensation in the ap/ts files means that (last-first) calculation for runtime is incorrect
   /// A approximately valid run time can only be determined by summing the pts deltas
   /// A typical PTS offset is about .4 secs
-  /// - returns: runtime calculated in PCR ticks (1/90000 of a sec)
+  /// - returns: runtime calculated in PCR ticks (~1/90000 of a sec)
   private func deriveRunTimePTS() -> PtsType
   {
-     // analyze for gaps
-    guard m_access_points_array.count > 0 else {
+    // derive duration with analysis for gaps
+    guard m_access_points_array.count > 1 else {
       return PtsType(0)
     }
     var deltaSecs: Double
@@ -292,5 +292,70 @@ class AccessPoints {
     }
     self.hasGaps = (seqStart != 0)
     return cummulativeDurationPTS
+  }
+  
+  /// find the ap index nearest the given PTS
+  func nearestApIndex(ptsValue: PtsType) -> Int
+  {
+    guard m_access_points_array.count > 2 else {
+      return -1
+    }
+    let adjustedPtsValue = ptsValue + self.firstPTS
+    // cannot use binary search due to clock resets, the sequence may restart midstream
+    // O(n) but how else ?
+    var index = 0
+    var found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+    while (!found && index < m_access_points_array.count-2)
+    {
+      index += 1
+      let low = m_access_points_array[index].pts
+      let hi = m_access_points_array[index+1].pts
+      if hi < low {
+        // PCR clock reset has happened
+        // simple case, target is greater than next pts number
+        if adjustedPtsValue > hi && index < m_access_points_array.count-1  // reset indices and continue
+        {
+          index += 1
+          found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+        }
+        else {
+          found = true
+          // what is the pts delta to the last index entry ?
+          let ptsDelta = adjustedPtsValue - m_access_points_array[index].pts
+          if ptsDelta > 2*(m_access_points_array[index].pts - m_access_points_array[index-1].pts) {
+            // !argh this is too big a difference .. give up
+            index = -1
+          }
+        }
+      }
+      else {
+       found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+        if found {
+          // pick the nearest
+          index =  ((adjustedPtsValue - m_access_points_array[index].pts) < (m_access_points_array[index+1].pts - adjustedPtsValue)) ? index : index+1
+        }
+      }
+    }
+    return index
+  }
+  
+  /// Derive the duration between to index values of the access points table.
+  /// Allow for detection of one discontinuity.
+  /// Expected usage is for get the time duration of a cut out section
+  func durationInPTS(from startIndex: Int, to endIndex: Int) -> UInt64
+  {
+    var durationInPTS:UInt64
+    guard(startIndex >= 0 && endIndex >= 0) else { return 0 }
+    
+    // check for PTS discontinuity
+    if (m_access_points_array[endIndex].pts < m_access_points_array[startIndex].pts)
+    { // discontuity get a close approximation (assuming only one discontinuity)
+      let (ptsValue, ceilingIndex) = highestPTSFrom(startIndex)
+      durationInPTS = (ptsValue - m_access_points_array[startIndex].pts) + (m_access_points_array[endIndex].pts - m_access_points_array[ceilingIndex+1].pts)
+    }
+    else {
+      durationInPTS = m_access_points_array[endIndex].pts - m_access_points_array[startIndex].pts
+    }
+    return durationInPTS
   }
 }

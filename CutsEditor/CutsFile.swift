@@ -19,7 +19,7 @@ struct MessageStrings {
 
 /// Models the collection of cut/book/lastplay marks associated with a recording
 
-class CutsFile: NSObject {
+class CutsFile: NSObject, NSCopying {
   
   /// Known cut mark cases
   fileprivate enum cutStates {
@@ -134,10 +134,23 @@ class CutsFile: NSObject {
   
   // MARK: Initializers
   
+  override init()
+  {
+    
+  }
+  
   convenience init(data: Data)
   {
     self.init()
-    decodeCutsData(data)
+    self.decodeCutsData(data)
+  }
+  
+  required init(_ model: CutsFile) {
+    cutsArray = model.cutsArray
+    modified = model.modified
+    debug = model.debug
+    lastValidationMessage = model.lastValidationMessage
+    container = model.container
   }
   
   // supporting functions
@@ -665,6 +678,7 @@ class CutsFile: NSObject {
       if (fileWritten && debug) {
         print(MessageStrings.DID_WRITE_FILE)
       }
+      if (fileWritten) { modified = false }
       return fileWritten
     }
     return false
@@ -709,4 +723,111 @@ class CutsFile: NSObject {
     }
     return (goodList, message)
   }
+  
+  func copy(with zone: NSZone? = nil) -> Any {
+    return type(of: self).init(self)
+  }
+  
+  // Simple calculation that uses the 0 based pts valued in the cuts file
+  // - returns: duration of cuts to remove in seconds
+  func simpleOutCutDurationInSecs() -> Double
+  {
+    var outDuration:Double = 0.0
+    var outDurationInPTS = PtsType(0)
+    
+    guard (self.isCuttable) else { return outDuration }
+    let inOut = self.inOutOnly
+    guard (inOut.count > 0) else { return outDuration }
+    
+    var index = 0
+    
+    // leading in
+    if inOut.first?.cutType == MARK_TYPE.IN.rawValue {
+      outDurationInPTS = inOut[index].cutPts
+      index += 1
+    }
+    
+    // Now in the state of having an OUT starter mark
+    // now process the subsequent out/in pairs
+    while (index < inOut.count-1) {
+      outDurationInPTS += inOut[index+1].cutPts - inOut[index].cutPts
+      index += 2
+    }
+    
+    // Check for having a trailing OUT without matching IN,
+    // that is, pruning the end of a recording
+    // trailing out cut
+    if index == inOut.count-1
+    {
+      // try using the derived value from the ap file
+      if let apDurationInPTS = container?.ap.runtimePTS
+      {
+        outDurationInPTS += apDurationInPTS - inOut[index].cutPts
+      }
+      // else give up and ignor failure
+    }
+    outDuration = Double(outDurationInPTS) * CutsTimeConst.PTS_DURATION
+    return outDuration
+  }
+  
+//  /// Calculate and return the duration of the material being removed from
+//  /// Try to be more accurate using ap PTS value to get GOP boundary calcuation
+//  /// the recording in seconds
+//  func cutDurationInSecs() -> Double
+//  {
+//    var outDuration:Double = 0.0
+//    var outDurationInPTS = PtsType(0)
+//    
+//    guard (self.isCuttable) else { return outDuration }
+//    let inOut = self.inOutOnly
+//    guard (inOut.count > 0) else { return outDuration }
+//    
+//    var index = 0
+//    if inOut.first?.cutType == MARK_TYPE.IN.rawValue {
+//      let highAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index].cutPts)
+//      let lowAPIndex = 0
+//      outDurationInPTS += container!.ap.durationInPTS(from: lowAPIndex, to:highAPIndex)
+//    //  outDurationInPTS = inOut[0].cutPts - (container?.ap.firstPTS)!
+//      // start accumulating the OUT-IN durations
+//      index += 2  // advance to next IN marker
+//      while index < inOut.count-1
+// //     for index in  3 ..< inOut.count
+//      {
+//        if (inOut[index].cutPts > inOut[index-1].cutPts) {
+//         outDurationInPTS += inOut[index].cutPts - inOut[index-1].cutPts
+//        }
+//        else {  // hit a PCR Reset, get the AP file index nearest the two values
+//           let highAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index].cutPts)
+//           let lowAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index-1].cutPts)
+//           outDurationInPTS += container!.ap.durationInPTS(from: lowAPIndex, to:highAPIndex)
+//        }
+//        index += 2
+//      }
+//      // check is there is a trailing OUT marker
+//      if (index == inOut.count) {
+//        index -= 1
+//        // one more to go OUT->END
+//        let lowAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index].cutPts)
+//        let highAPIndex = container!.ap.m_access_points_array.count-1
+//        outDurationInPTS += container!.ap.durationInPTS(from: lowAPIndex, to:highAPIndex)
+//      }
+//    }
+//    else // must be an OUT starter
+//    {
+//      for index in  1 ..< inOut.count
+//      {
+//        if (inOut[index].cutPts > inOut[index-1].cutPts) {
+//          outDurationInPTS += inOut[index].cutPts - inOut[index-1].cutPts
+//        }
+//        else {  // hit a PCR Reset, get the AP file index nearest the two values
+//          let highAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index].cutPts)
+//          let lowAPIndex = container!.ap.nearestApIndex(ptsValue: inOut[index-1].cutPts)
+//          outDurationInPTS += container!.ap.durationInPTS(from: lowAPIndex, to:highAPIndex)
+//        }
+////        outDurationInPTS += inOut[index].cutPts - inOut[index-1].cutPts
+//      }
+//    }
+//    outDuration =  Double(outDurationInPTS) * CutsTimeConst.PTS_DURATION
+//    return outDuration
+//  }
 }

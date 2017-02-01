@@ -1,17 +1,17 @@
-CutsEditor V0.91 for Apple Mac
+CutsEditor V1.01 for Apple Mac
 
 The purpose of this program is to enable editing of cut marks and
 bookmarks on Beyonwiz Tx PVRs.
 
 Caveat Emptor
 
-Developed on Mac OS Sierra, with Xcode 8.1 and Swift 3 with no thought to
+Developed on Mac OS Sierra, with Xcode 8.2 and Swift 3 with no thought to
 compatibility to earlier versions.  The program uses the Apple provided
 AVPlayer for its video interface.  This player does choke on slightly corrupt
 recordings.  When it encounters something imperfect, it appears to read the
 entire recording on across the network.  It shows the "spinning beachball" when
-this happens.  Sometimes you can then continue, sometimes you will have to kill
-the program.   I have yet to hear of anyway of trapping and recovering from
+this happens.  Sometimes if you wait, you can then continue, sometimes you will have to kill
+the program.   I have yet to find any way of trapping and recovering from
 this condition.  My experience has been that this is about 1 recording in 20.
 Just enough to be a nuisance.
 
@@ -45,8 +45,8 @@ IN and OUT marks and Lighter Blue Bold if it only contains an IN or an OUT mark
 (typically a "problem" recording in which the seek does not work fully
 - my experience in Sydney is that about 5% of the files are unusable on the Mac).
 Working out the colour coding is fiddly and involves opening  every cuts file.
-As such, it is done as a background task, thus initially the recording list is
-black and white.  A progress bar above the program list shows how far through the
+As such, it is done as a background task, thus initially the recording list text is
+black.  A progress bar above the program list shows how far through the
 task it is.  It does not interfere with starting the editing process.  (As an
 indication a T4 with 750 recordings across a wired network takes about 40 secs
 elapse time to setup the colour coding of the recording list)
@@ -111,15 +111,24 @@ seeing and "advert" or "program".  This identification can be verbal (if miropho
 been enabled),  clicking the P(rogram) or A(dvert) buttons on the GUI or using the "/" or "z" keys
 on the keyboard.  Each step halves the distance between the advert and program until
 the boundary is seen.  The GUI buttons are given a green background when the gap
-is less than 1/10 th of a second.  The IN or OUT mark can then be set using the GUI
+is less than 1/25 th of a second.  The IN or OUT mark can then be set using the GUI
 Mark Buttons or using the "x" or "." keys from the keyboard.  If at least one IN or OUT
 is already present, then the "c" or "," keys will add the complement to the last
-Cut Mark.  If the user indavertently indicates the wrong type (ie program when in an
+Cut Mark.  When the remaining "gap" falls below a threshold value and there is a preceeding
+cut mark, then a complementary mark is inserted followed by a beep to indicate that
+the hunt is done - this is done to minimize the amount of tediious user input required.
+
+If the user indavertently indicates the wrong type (ie program when in an
 advertisement), then the ";" key or the GUI button label "!" can be used to "reset"
 the hunt back to the position that it was started at.  The spacebar has been mapped
 to a "step forward button", the amount is determined by the middle step button.
 Keyboard mapping corresponds to qwerty keyboard layout LHS of "z,x,c" (program, IN, complementary mark)
 and RHS of ",./" (Advert, OUT, complementary mark)
+
+Undo / Redo
+
+Limited simplistic undo / redo is available for changes to the cuts list (mostly useful for
+circumstances when cut list is accidentally cleared)
 
 Advanced Features
 
@@ -152,7 +161,7 @@ Since a chunk of the time spent writing this was spent in a coffee shop in Manly
 I needed a means of testing,  I found Anders Holst mcut program on GitHub that
 is part of the plugin.  It is straightforward C.  A handful of tweaks for type
 adapting to Xcode and some byte swapping functions provided a means of using
-the Mac to the run the same cut job that runs on the Beyonwiz.  It also turned
+the Mac to the run the same cut job that runs on the Beyonwiz PVR.  It also turned
 out to be handy for working directly with recordings moved off onto a NAS disk.
 The macified version of the mcut program is not provided as part of this program.
 I am not sure of the etiquette of publishing "not my own work", so I leave
@@ -166,7 +175,7 @@ uncommon.  The Preferences / General enables multiple PVR's.  I am "assuming"
 that the mounted disks show up differently.  The decision on which unit to SSH
 to is based on comparing the root of the path of a recording with the "remote
 mount" path in the  pvr configurations.  The remote login field determines
-which Beyonwiz the job is ssh'ed to.
+which Beyonwiz PVR the job is ssh'ed to.
 Apologies that some of the configuration items that ought to be global
 (mcut command args) are on a per PVR basis
 
@@ -190,10 +199,11 @@ associates the string you see on the button with a number of seconds.
 
 The player preferences are a little more interesting.  As noted earlier, the
 application uses the Apple AVPlayer class for video.  It provides three types
-of control window.  Fixed to the bottom with simple Play/Pause button.
+of intial control window.  Fixed to the bottom with simple Play/Pause button.
 Floating with either fast forward/reverse controls or frame step
 forward / reverse.  Fast does not seem to work at 2x speed for some unknown
-reason (5x, 10x, 30x, 60x OK).
+reason (5x, 10x, 30x, 60x are OK).  A button enables changing from fast buttons
+to stepping buttons whilst editing.
 
 Player Skips Over OUT/IN.  During playback the player behaves in the same
 manner that the BeyonWiz does and skips over the OUT/IN sequences.
@@ -209,5 +219,5 @@ to the top.
 The name, channel, date fields are derived from the file name pattern.  If
 the pattern changes the program will break.
 
-20161129-001
+20170116-001
 

@@ -72,7 +72,7 @@ class MovieCuttingOperation: Operation
     if (self.isCancelled && shouldLogCancelled) {
       let cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
       let shortTitle = Recording.programDateTitleFrom(movieURLPath: moviePath)
-      resultMessage = String.init(format: global_mcut_errors[cutResultStatusValue], shortTitle)
+      resultMessage = String(format: global_mcut_errors[cutResultStatusValue], shortTitle)
       DispatchQueue.main.async {
         self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
       }
@@ -98,7 +98,7 @@ class MovieCuttingOperation: Operation
                                                         with: "").removingPercentEncoding else
     {
       cutResultStatusValue = global_mcut_errors.index(of: FAILED_TO_NORMALIZE_MESSAGE)!
-      resultMessage = String.init(format: global_mcut_errors[Int(cutResultStatusValue)], targetPathName)
+      resultMessage = String(format: global_mcut_errors[Int(cutResultStatusValue)], targetPathName)
       DispatchQueue.main.async {
         self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
       }
@@ -112,9 +112,9 @@ class MovieCuttingOperation: Operation
       cutTask.standardOutput = outPipe
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
       if(debug) {print("\(timestamp) Launching for >\(shortTitle)<")}
-      DispatchQueue.main.async { [unowned self] in
+      DispatchQueue.main.async { [weak weakSelf = self] in
         // callback that job has been started for name returned (update tooltip entry)
-        self.onStart(shortTitle)
+        weakSelf?.onStart(shortTitle)
       }
       
       cutTask.launch()
@@ -134,8 +134,8 @@ class MovieCuttingOperation: Operation
     }
   
     // job done.  Send results back to caller
-    DispatchQueue.main.async {
-      self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
+    DispatchQueue.main.async  { [weak weakSelf = self] in
+      weakSelf?.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
     }
   }
   
@@ -171,7 +171,9 @@ class MovieCuttingOperation: Operation
     // array is collapsed to single string for remote or passed on as array of args to local command
     //      mcutCommandArgs = getCutsCommandLineArgs()
     mcutCommandArgs = withArgs
-    mcutCommandArgs = mcutCommandArgs.map({$0.replacingOccurrences(of: " ", with: "\\ ")})
+    if (isRemote) {
+      mcutCommandArgs = mcutCommandArgs.map({$0.replacingOccurrences(of: " ", with: "\\ ")})
+    }
     if (cutTask.launchPath == mcutConsts.mcutProgramLocal)
     {
       mcutCommandArgs.append("\(targetPathName)")
@@ -180,6 +182,8 @@ class MovieCuttingOperation: Operation
     else {
       mcutCommandArgs.insert(mcutConsts.mcutProgramRemote, at: 0)
       // FIXME: check handling of apostrophe's in local directories
+      targetPathName = targetPathName.replacingOccurrences(of: "&", with: "\\&")
+      targetPathName = targetPathName.replacingOccurrences(of: "!", with: "\\!")
       targetPathName = targetPathName.replacingOccurrences(of: "'", with: "\\'")
       mcutCommandArgs.append(targetPathName.replacingOccurrences(of: " ", with: "\\ ") )
       cutTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, mcutCommandArgs.joined(separator: " ")]

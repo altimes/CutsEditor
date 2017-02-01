@@ -23,10 +23,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   var skipValueArray        = [Double](repeating: 0.0, count: 10)  // values 1..10
   var fileToOpen: String?
   /// development flag, may become a "reset to default" function
-  var needToClearOutUserPreferences = false
+  var setUserPreferencesToDefault = false
   var debug = false
   
   public var cuttingQueues = [CuttingQueue]()
+  public var currentMovie : Recording?
   
   func applicationDidFinishLaunching(_ notification: Notification)
   {
@@ -35,9 +36,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
         print(dict)
       }
     }
-    if (needToClearOutUserPreferences) {
-    UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
-    UserDefaults.standard.synchronize()
+    if (setUserPreferencesToDefault) {
+      UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier!)
+      UserDefaults.standard.synchronize()
     }
     // Insert code here to initialize your application
     // load up the user preferences or fabricate default settings
@@ -109,7 +110,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       saveVideoPlayerPreference(defaultVideoPlayerPrefs)
     }
     setInsertBookmarksMenuItemText()
-    
   }
   
   
@@ -278,7 +278,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   {
     return self.cuttingQueues
   }
-
   
   /// commit preferences to userdefaults
   func saveGeneralPreference(_ general: generalPreferences)
@@ -314,6 +313,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     fileToOpen = filename
     NotificationCenter.default.post(name: Notification.Name(rawValue: fileOpenDidChange), object: fileToOpen!)
    return true
+  }
+  
+  /// set/get "Current Movie"
+  func movie() -> Recording? {
+    return currentMovie
+  }
+  
+  func setMovie(movie: Recording?) {
+    self.currentMovie = movie
   }
 }
 

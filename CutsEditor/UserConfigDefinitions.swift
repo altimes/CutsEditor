@@ -47,6 +47,8 @@ let generalDidChange = "GeneralPreferencesControllerGeneralDidChange"
 let playerDidChange = "PlayerPreferencesControllerDidChange"
 let fileOpenDidChange = "FileToOpenFromMenuDidChange"
 let jobQueueDidChange = "JobQueueDidChange"
+let movieDidChange = "MovieDidChange"
+let eitDidChange = "EITDidChange"
 
 /// Pair of Strings touple of diskURL and the extracted recording program name
 struct namePair {

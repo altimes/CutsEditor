@@ -175,7 +175,7 @@ public struct MetaData {
 //    Flags bitfield (in parenthesis the decimal value of the flag is stated):
 //    1.Bit(01): It's about a Directory. // SHOULD enter (implies mustDescent)
 //    2.Bit(02): The user must change to the directory // cannot be played directly - often used with "isDirectory" (implies canDescent)
-//    3.Bit(04): The user may change to the directory // supports enterDirectory/leaveDirectory
+//    3.Bit(04): The user may change to the directory  // supports enterDirectory/leaveDirectory
 //    The Bits 1-3 have sense if set together
 //    4.Bit(08): The content of the folder needs to be automatically sorted.
 //               should be ASCII-sorted according to service_name. great for directories.
