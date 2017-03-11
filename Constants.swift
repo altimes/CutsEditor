@@ -76,12 +76,24 @@ public struct voiceCommands {
   static let done = "done"
   static let reset = "reset"
   static let inCut = "in"
-  static let out = "out"
-  static let skipTwoForward = "skip two forward"
-  static let skipTwoBackward = "skip two backward"
+  static let outCut = "out"
+  static let skipForward = "skip forward"
+  static let skipBackward = "skip backward"
   static let next = "next"
   static let previous = "previous"
   static let repeatLast = "repeat"
+}
+
+public struct keyBoardCommands {
+  static let inCut = "x"
+  static let outCut = "."
+  static let skipForward = " "
+  static let skipBackward = "s"
+  static let reset = ";"
+  static let rhAddMatching = ","
+  static let lhAddMatching = "c"
+  static let program = "z"
+  static let advert = "/"
 }
 
 typealias PtsType = UInt64

@@ -58,14 +58,31 @@ struct namePair {
 
 /// Configuration parameters for deciding colouring of
 /// list of programs in the popup button
+
+enum FileColourStates: String {
+  case  allDoneColour = "allDoneColour"
+  case  noBookmarksColour = "noBookmarksColour"
+  case  readyToCutColour = "readyToCutColour"
+  case partiallyReadyToCutColour = "partiallyReadyToCut"
+}
+
 struct fileColourParameters {
   static let BOOKMARK_THRESHOLD_COUNT = 3        // number of bookmarks that is considered as raw file
   static let PROGRAM_LENGTH_THRESHOLD = 900.0    // 15 minute or less programs do not need cutting
-  static let allDoneColor = NSColor(red: 0.2, green: 0.5, blue: 0.2, alpha: 1.0)
-  static let noBookmarksColor = NSColor(red: 0.5, green: 0.2, blue: 0.2, alpha: 1.0)
-  static let readyToCutColor = NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 1.0)
-  static let partiallyReadyToCutColor = NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 0.7)
 }
+
+// TODO: enable user config to change colours to suit
+/// default colour lookup table for pop list of filenames
+let defaultColourLookup : [FileColourStates:NSColor] =
+  [.allDoneColour:NSColor(red: 0.2, green: 0.5, blue: 0.2, alpha: 1.0),
+   .noBookmarksColour:NSColor(red: 0.5, green: 0.2, blue: 0.2, alpha: 1.0),
+   .readyToCutColour:NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 1.0),
+   .partiallyReadyToCutColour:NSColor(red: 0.2, green: 0.2, blue: 0.5, alpha: 0.7)
+ ]
+
+/// Lookup table for colours to use on filename popUp list
+/// Utimately to be stored in user configuration and able to be reset to defaults
+let colourLookup = defaultColourLookup
 
 /// Dictionary that maps mark types to GUI button identifier strings
 let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT, "addLastPlay":MARK_TYPE.LASTPLAY]
@@ -137,7 +154,6 @@ struct skipPreferences {
 }
 
 /// Configuration of users system and path to sh and ssh
-/// FIXME: add to preferences panel
 public struct systemConfiguration {
   var pvrSettings = [pvrPreferences(title:mcutConsts.fixedLocalName),pvrPreferences(title:"Beyonwiz T4"),pvrPreferences(title: "Beyonwiz T2")]
   

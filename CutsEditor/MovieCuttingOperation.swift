@@ -111,7 +111,7 @@ class MovieCuttingOperation: Operation
     {
       cutTask.standardOutput = outPipe
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
-      if(debug) {print("\(timestamp) Launching for >\(shortTitle)<")}
+      if (debug) {print("\(timestamp) Launching for >\(shortTitle)<")}
       DispatchQueue.main.async { [weak weakSelf = self] in
         // callback that job has been started for name returned (update tooltip entry)
         weakSelf?.onStart(shortTitle)

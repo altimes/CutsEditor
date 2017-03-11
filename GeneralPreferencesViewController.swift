@@ -233,6 +233,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
         NSBeep()
       }
     }
+    // else not interested
   }
   
   @IBAction func autoWriteChanged(_ sender: NSButton)

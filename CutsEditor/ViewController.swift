@@ -6,6 +6,8 @@
 //  Copyright © 2016 Alan Franklin. All rights reserved.
 //
 
+// icons from http://icon-icons.com/icon/scissors/50046
+
 import Cocoa
 import AVFoundation
 import AVKit
@@ -31,9 +33,9 @@ typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 struct logMessage {
   static let noTrashFolder = "Cannot find folder %@"
   static let adHuntReset = "Reset search state"
+  static let indexOfSelectedFileMsg = "file %d of %d"
+  static let huntDoneMsg = "Advert hunt done (%@)"
 }
-
-
 
 class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
 {
@@ -192,10 +194,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// alias for typical button action from storyboard.
   /// function that has a NSButton arg and returns nothing
   typealias buttonAction = (NSButton) -> ()
-  
+  typealias FunctionAndButton = (action: buttonAction, button:NSButton)
+//  typealias buttonAction = (NSButton) -> ()
   /// Dictionary of voice commands with keys that have a one-to-one map to a GUI Button.
   /// TODO: do the I18N to make configurable.  Currrently static english
-  var speechDictionary = [String: (action: buttonAction, button: NSButton)]()
+  var speechDictionary = [String: FunctionAndButton]()
+  var defaultControlKeyDictionary = [String: FunctionAndButton]()
+  
+  /// speech creator
+  let voice = NSSpeechSynthesizer()
+  
+  /// observer ID
+  let progressBarVisibilityChange = "progressBarVisibilityChange"
   
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -227,7 +237,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     NotificationCenter.default.addObserver(self, selector: #selector(fileToOpenChange(_:)), name: NSNotification.Name(rawValue: fileOpenDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(fileSelectPopUpChange(_:)), name: NSNotification.Name.NSPopUpButtonWillPopUp, object: nil )
     
-//    NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(progressBarVisibilityChange(_:)), name: NSNotification.Name(rawValue: progressBarVisibilityChange), object: nil)
+    
+    NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
     
 //    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
 //    
@@ -244,25 +256,41 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
     stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
     stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
-    typealias buttonAction = (NSButton) -> ()
     speechDictionary =
       [voiceCommands.advert: (inAdvertisment,backwardHuntButton),
        voiceCommands.program:(inProgram,forwardHuntButton),
        voiceCommands.done:(huntDone,doneHuntButton),
        voiceCommands.reset:(huntReset,resetHuntButton),
        voiceCommands.inCut:(addMark,inButton),
-       voiceCommands.out:(addMark,outButton),
-       voiceCommands.skipTwoForward:(seekToAction,seekButton2c),
-       voiceCommands.skipTwoBackward:(seekToAction,seekButton1c),
+       voiceCommands.outCut:(addMark,outButton),
+       voiceCommands.skipForward:(seekToAction,seekButton2c),
+       voiceCommands.skipBackward:(seekToAction,seekButton1c),
        voiceCommands.next:(nextButton,nextButton),
        voiceCommands.previous:(prevButton,previousButton),
        voiceCommands.repeatLast:(seekToAction,seekButton2c)  // non-destructive initial value for "repeat last voice command"
     ]
+    
+    defaultControlKeyDictionary =
+      [keyBoardCommands.advert: (inAdvertisment,backwardHuntButton),
+        keyBoardCommands.program:(inProgram,forwardHuntButton),
+//        keyBoardCommands.done:(huntDone,doneHuntButton),
+        keyBoardCommands.reset:(huntReset,resetHuntButton),
+        keyBoardCommands.inCut:(addMark,inButton),
+        keyBoardCommands.outCut:(addMark,outButton),
+        keyBoardCommands.skipForward:(seekToAction,seekButton2c),
+        keyBoardCommands.skipBackward:(seekToAction,seekButton1c),
+      ]
  }
-
+  
+//  override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [NSObject : AnyObject]?, context: UnsafeMutablePointer<Void>) {
+//    
+//  }
+  
   override func viewDidAppear() {
     // set window delegate
     self.view.window?.delegate = self
+    let origin = CGPoint(x:50,y:5)
+    self.view.window?.setFrameOrigin(origin)
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
@@ -272,7 +300,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func windowWillClose(_ notification: Notification) {
 //    print(#file+" "+#function)
-    
     if let token = timeObserverToken
     {
       self.monitorView.player?.removeTimeObserver(token)
@@ -450,6 +477,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     mouseDownPopUpIndex = self.currentFile.indexOfSelectedItem
   }
   
+  /// Observer function that responds change of visibility of progress bar.
+  /// This function disables the "Delete Recording" button whilst the
+  /// colour coding is being worked out
+  /// It is a hack to prevent crashes if a file is deleted whilst
+  /// scanning for colour coding is going on (array content changes)
+  func progressBarVisibilityChange(_ notification: Notification)
+  {
+    deleteRecordingButton.isEnabled = progressBar.isHidden
+  }
+  
   override var representedObject: Any? {
     didSet {
       // Update the view, if already loaded.
@@ -477,7 +514,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var abandonWrite = false
     let validCuts = movie.isCuttable
     guard (validCuts) else {
-      setStatusFieldStringValue(message: movie.cuts.lastValidationMessage, isLoggable: true)
+      setStatusFieldStringValue(isLoggable: true, message: movie.cuts.lastValidationMessage)
       NSBeep()
       return false
     }
@@ -512,7 +549,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         return true
       }
       else {
-        setStatusFieldStringValue(message: StringsCuts.FILE_SAVE_FAILED, isLoggable: true)
+        setStatusFieldStringValue(isLoggable: true, message: StringsCuts.FILE_SAVE_FAILED )
         // TODO:  needs some sort of try again / give up options
         return false
       }
@@ -779,6 +816,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         selectedDirectory = rootPath
         let foundRootPath = rootPath
         self.progressBar.isHidden = false
+        NotificationCenter.default.post(name: Notification.Name(rawValue: progressBarVisibilityChange), object: nil)
+
         (isRemote, pvrIndex) = pvrLocalMount(containedIn: rootPath)
         if let maxFiles = countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath)
         {
@@ -1118,8 +1157,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           if let menuItem = self.currentFile.item(at: index)
           {
             attributedStrings.append(NSAttributedString(string: menuItem.title, attributes:[NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName:fontAttribute]))
-//            let path = weakself?.filelist[index].replacingOccurrences(of: "file://", with: "")
-//            let tooltip = (path?.removingPercentEncoding!)! + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
             if let pathURL = weakself?.filelist[index],
                let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
             {
@@ -1143,6 +1180,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             {
               self.statusField.stringValue = StringsCuts.COLOUR_CODING_CANCELLED
               self.progressBar.isHidden = true
+              NotificationCenter.default.post(name: Notification.Name(rawValue: (weakself?.progressBarVisibilityChange)!), object: nil)
             }
           )
         }
@@ -1157,6 +1195,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               // back into sync with the current user selection
               self.setStatusFieldToCurrentSelection()
               self.progressBar.isHidden = true
+              NotificationCenter.default.post(name: Notification.Name(rawValue: (weakself?.progressBarVisibilityChange)!), object: nil)
             }
           )
         }
@@ -1170,6 +1209,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Determine the colour and font for an attributed string for the program at the given Index
   /// - parameter index: index into filelist array
   /// - returns: tuple of NSColor and NSFont
+  
+  // FIXME: fails if file is deleted during operation
   
   func getFontAttributesDurationForIndex( _ index : Int) -> (font :NSFont, colour: NSColor, apDuration:Double)
   {
@@ -1186,8 +1227,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     let durations = thisMovie.getBestDurationAndApDurationInSeconds()
     thisProgramDuration = durations.best
+    var colourState: FileColourStates = FileColourStates.noBookmarksColour
     if (thisMovie.cuts.count != 0) {
-      attributeColour = (thisMovie.cuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? fileColourParameters.allDoneColor : fileColourParameters.noBookmarksColor
+      colourState = (thisMovie.cuts.count > fileColourParameters.BOOKMARK_THRESHOLD_COUNT) ? .allDoneColour : .noBookmarksColour
       
       // override if we have in/out pairs
       if ( thisMovie.cuts.containsINorOUT()) {
@@ -1195,23 +1237,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         // set unbalanced if there are not pairs of in/out - typically flagging MacOS player has trouble with ts file
         // get one in, but cannot seek to set the other
         let unbalanced = (thisMovie.cuts.inOutOnly.count % 2 == 1)
-        attributeColour = (unbalanced) ? fileColourParameters.partiallyReadyToCutColor : fileColourParameters.readyToCutColor
+        colourState = (unbalanced) ? .partiallyReadyToCutColour : .readyToCutColour
       }
       
       // override if it is a short
-      if (attributeColour == fileColourParameters.noBookmarksColor  &&
+      if (colourState == .noBookmarksColour  &&
           (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD)) {
-        attributeColour = fileColourParameters.allDoneColor
+          colourState = .allDoneColour
       }
     }
     else { // no cuts data implies unprocessed (not guaranteed since a cut program, may simply have no bookmarks but....)
       if (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD) {
-        attributeColour = fileColourParameters.allDoneColor
+        colourState = .allDoneColour
       }
       else {
-        attributeColour = fileColourParameters.noBookmarksColor
+        colourState = .noBookmarksColour
       }
     }
+    attributeColour = colourLookup[colourState] ?? attributeColour
     return (font, attributeColour, durations.ap)
   }
   
@@ -1260,6 +1303,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func setCurrentFileListColors()
   {
     self.progressBar.isHidden = false
+    NotificationCenter.default.post(name: Notification.Name(rawValue: progressBarVisibilityChange), object: nil)
     self.progressBar.needsDisplay = true
     self.view.needsDisplay = true
     currentFileColouringBlock = colourCodeProgramList()
@@ -1341,12 +1385,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (state)
     {
      setPrevNextButtonState(filelistIndex)
-     deleteRecordingButton.isEnabled = (filelist.count > 0)
+     deleteRecordingButton.isEnabled = (filelist.count > 0) && progressBar.isHidden
     }
     else {
       previousButton.isEnabled = state
       nextButton.isEnabled = state
-      deleteRecordingButton.isEnabled = state
+      deleteRecordingButton.isEnabled = state && progressBar.isHidden
     }
     enableAdHuntingButtons(state)
   }
@@ -1654,16 +1698,26 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func setStatusFieldToCurrentSelection()
   {
     let arrayIndex = currentFile.indexOfSelectedItem
-    self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
+    let message = String(format:logMessage.indexOfSelectedFileMsg, arrayIndex+1, filelist.count)
+    setStatusFieldStringValue(isLoggable: true, message: message)
+//    self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
   }
   
   /// Conceptual start for a logging mechanism.  Use a function
   /// as a gateway to setting the string value of the status field
-  func setStatusFieldStringValue(message: String, isLoggable: Bool)
+  func setStatusFieldStringValue(isLoggable: Bool, message: String )
   {
     self.statusField.stringValue = message
-    // and log...
+    // TODO: and log...
   }
+  
+  /// Wrapper function to save needing discrete message formatting
+  func setStatusFieldFormat(isLoggable loggable: Bool, format withFormat:String, args:CVarArg)
+  {
+    let message = String(format:withFormat, args)
+    setStatusFieldStringValue(isLoggable: loggable, message: message)
+  }
+  
   
   // MARK: - Player related functions
   
@@ -2062,7 +2116,30 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cuttable = movie.isCuttable
     }
   }
-  
+
+  /// Delete a row from the cuts table when user presses "Delete" key on
+  /// keyboard
+  func deleteRowByKeyPress ()
+  {
+    let selectedRow = cutsTable.selectedRow
+    if (selectedRow >= 0) {
+      movie.cuts.remove(at: selectedRow)
+      cutsTable.reloadData()
+//      print("Current row =\(selectedRow)")
+      // reselect the previous row if possible, if not, then the top row if any
+      
+      if (movie.cuts.count>0)
+      {
+        let newRow = selectedRow - (((selectedRow-1 < movie.cuts.count) && selectedRow-1 >= 0) ? 1 : 0)
+//        print("New row =\(newRow)")
+        cutsTable.selectRowIndexes(IndexSet(integer:newRow), byExtendingSelection: false)
+      }
+      cuttable = movie.isCuttable
+      cutsUndoRedo?.add(state: movie.cuts)
+      //      print ("cell is \(cutEntry?.asString())")
+    }
+
+  }
   /// register swipe actions for table
   func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
     if edge == NSTableRowActionEdge.trailing {
@@ -2101,6 +2178,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.suppressTimedUpdates = true
     if (debug) { print("Saw tableViewSelectionIsChanging change") }
   }
+  
   
   /// Called when user clicks in column
   func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
@@ -2410,7 +2488,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     guard self.monitorView.player != nil else { return }
     guard boundaryAdHunter != nil else { return }
     boundaryAdHunter?.reset()
-    setStatusFieldStringValue(message: logMessage.adHuntReset, isLoggable: false)
+    setStatusFieldStringValue(isLoggable: false, message: logMessage.adHuntReset)
     huntButtonsReset()
   }
   
@@ -2419,8 +2497,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func huntDone(_ sender: NSButton) {
     huntButtonsReset()
     let outCutDuration = movie.cuts.simpleOutCutDurationInSecs()
-    let doneMessage = "Advert hunt done ("+CutEntry.hhMMssFromSeconds(outCutDuration)+")"
-    setStatusFieldStringValue(message: doneMessage, isLoggable: false)
+//    let doneMessage = "Advert hunt done ("+CutEntry.hhMMssFromSeconds(outCutDuration)+")"
+//    setStatusFieldStringValue(isLoggable: false, message: doneMessage)
+    setStatusFieldStringValue(isLoggable: false, message: String(format: logMessage.huntDoneMsg, CutEntry.hhMMssFromSeconds(outCutDuration)))
   }
   
   var voiceRecognition = false
@@ -2459,55 +2538,90 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       speechDictionary.updateValue(voiceCommandActionAndButton, forKey: "repeat")
     }
   }
-  
+
+//  let defaultControlKeyDictionary : [String:FunctionAndButton] = [
+//    keyBoardCommands.advert: (inAdvertisment,backwardHuntButton),
+//    keyBoardCommands.program:(inProgram,forwardHuntButton),
+//    keyBoardCommands.done:(huntDone,doneHuntButton),
+//    keyBoardCommands.reset:(huntReset,resetHuntButton),
+//    keyBoardCommands.inCut:(addMark,inButton),
+//    keyBoardCommands.out:(addMark,outButton),
+//    keyBoardCommands.skipTwoForward:(seekToAction,seekButton2c),
+//    keyBoardCommands.skipTwoBackward:(seekToAction,seekButton1c),
+//  ]
   
   override func keyDown(with event: NSEvent) {
 //    print("saw keyDown keycode value \(event.keyCode)")
     
-    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
+//    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
+    // with thanks based on: http://stackoverflow.com/questions/35539256/detect-when-delete-key-pressed-on-control
+   let controlKeyDictionary = defaultControlKeyDictionary
+   if let uniCodeDelete = UnicodeScalar(NSDeleteCharacter)
+    {
+      if event.charactersIgnoringModifiers == String(Character(uniCodeDelete))
+      {
+        // check that the viewController window has focus
+        if (event.window == self.view.window)
+        {
+          deleteRowByKeyPress()
+          print("Saw delete keypress")
+          return
+        }
+      }
+    }
     if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown) && NSEvent.modifierFlags().isEmpty
     {
       if let keyString = event.characters {
 //        print(">>\(keyString)<<")
 
-        if (keyString == "z") { // z
+        if let keyStrokeCommand = controlKeyDictionary[keyString]
+        {
+          keyStrokeCommand.action(keyStrokeCommand.button)
+          if keyString == keyBoardCommands.inCut || keyString == keyBoardCommands.outCut
+          {
+            huntDone(doneHuntButton)
+          }
+          return
+        }
+        /*
+        if (keyString == keyBoardCommands.program) { // z
           inProgram(forwardHuntButton)
           return
         }
         
-        if (keyString == "/") {
+        if (keyString == keyBoardCommands.advert) {
           inAdvertisment(backwardHuntButton)
           return
         }
         
-        if (keyString == "s") {
+        if (keyString == keyBoardCommands.skipBackward) {
           seekToAction(seekButton1c)
           return
         }
         
-        if (keyString == "x") {
+        if (keyString == keyBoardCommands.inCut) {
           addMark(sender: inButton)
           huntDone(doneHuntButton)
           return
         }
-        if (keyString == ".") {
+        if (keyString == keyBoardCommands.outCut) {
           addMark(sender: outButton)
           huntDone(doneHuntButton)
           return
         }
         
-        if (keyString == " ") {
+        if (keyString == keyBoardCommands.skipForward) {
           seekToAction(seekButton2c)
           return
         }
         
-        if (keyString == ";" ) {
+        if (keyString == keyBoardCommands.reset ) {
           huntReset(resetHuntButton)
           return
         }
-        
+        */
         // add a mark that is the complement of previous in / out
-        if (keyString == "c" || keyString == ",") {
+        if (keyString == keyBoardCommands.lhAddMatching || keyString == keyBoardCommands.rhAddMatching) {
           addMatchingCutMark(toMark: prevCut)
           return
         }
@@ -2533,20 +2647,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       default: NSBeep()
     }
   }
-  
-  /// Respond to user taping the "delete" button on the keyboard to remove IN or OUT mark
+  /// Delegate function
+  /// Respond to user taping the "delete" button on the keyboard to remove mark
   override func deleteBackward(_ sender: Any?) {
 //    print("Backward delete?")
     let selectedRow = cutsTable.selectedRow
     if (selectedRow >= 0) {
-      let cutEntry = movie.cuts.entry(at: selectedRow)
-      if (cutEntry?.type == MARK_TYPE.OUT || cutEntry?.type == MARK_TYPE.IN)
-      {
+//      let cutEntry = movie.cuts.entry(at: selectedRow)
+//      if (cutEntry?.type == MARK_TYPE.OUT || cutEntry?.type == MARK_TYPE.IN)
+//      {
         movie.cuts.remove(at: selectedRow)
         cutsTable.reloadData()
         cuttable = movie.isCuttable
         cutsUndoRedo?.add(state: movie.cuts)
-      }
+//      }
 //      print ("cell is \(cutEntry?.asString())")
     }
   }
@@ -2595,7 +2709,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     let result = deleteRecording(recording: self.movie, with: NSDocumentController.shared())
     if result.status != true {
-      setStatusFieldStringValue(message: result.message, isLoggable: true)
+      setStatusFieldStringValue(isLoggable: true, message: result.message)
       NSBeep()
     }
   }
