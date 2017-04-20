@@ -102,6 +102,14 @@ struct sortingPreferences {
   var sortBy: String = ""
 }
 
+/// Advert Hunter configuration
+struct adHunterPreferences {
+  var nearEnough: Double = 0.3 // seconds
+  var closingReport: Double = 3.0 // seconds
+  var isSpeechReporting = false
+  var isOverlayReporting = true
+}
+
 /// Mimics Cocoa
 enum videoControlStyle : Int {
   case inLine, floating

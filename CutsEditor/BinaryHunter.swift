@@ -55,8 +55,10 @@ class boundaryHunter {
   var isFirstJump = true
   var player: AVPlayer
   var startPlayerPos: CMTime
+  
   // TODO: make runtime configurable
   static let seekToleranceValue = 1.0/25.0 // Seconds
+  static let reportGapValue = 3.0 // seconds: nearness to start reporting
   
   static let seekTolerance = CMTime(seconds: seekToleranceValue, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
   

@@ -757,6 +757,7 @@ class CutsFile: NSObject, NSCopying {
     // Check for having a trailing OUT without matching IN,
     // that is, pruning the end of a recording
     // trailing out cut
+    // FIXME: UInt64 arithmetic fails on PTS reset during recording.
     if index == inOut.count-1
     {
       // try using the derived value from the ap file

@@ -260,7 +260,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
         case generalStringConsts.localProgramPath: pvr.cutProgramLocalPath = sender.stringValue
         case generalStringConsts.localMountPoint: pvr.cutLocalMountRoot = sender.stringValue
         case generalStringConsts.remoteExport: pvr.cutRemoteExport = sender.stringValue
-      default: print("Argh unknown \(sender.identifier) "+#function)
+      default: print("Argh unknown \(sender.identifier ?? "missing id") "+#function)
       }
     }
   }
@@ -294,7 +294,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
       case generalStringConsts.shPath: general.systemConfig.pvrSettings[pvrIndex].shPath = sender.stringValue
       case generalStringConsts.sshPath: general.systemConfig.pvrSettings[pvrIndex].sshPath = sender.stringValue
       case generalStringConsts.remoteLogin: general.systemConfig.pvrSettings[pvrIndex].remoteMachineAndLogin = sender.stringValue
-      default: print("Argh unknown \(sender.identifier) "+#function)
+      default: print("Argh unknown \(sender.identifier ?? "missing id") "+#function)
       }
     }
   }

@@ -227,9 +227,8 @@ struct DVBTextString
     }
     else  {
       contentText = String.init(bytes: bytes[1..<bytes.count], encoding: String.Encoding.utf8)
-//      let hexCodeTable = String.init(format: "%02.2x", characterTable)
       let hexCodeTable = characterTable.asHexString()
-      contentText = "Unimpl code \(hexCodeTable) raw text = \(contentText)"
+      contentText = "Unimpl code \(hexCodeTable) raw text = \(contentText ?? "")"
     }
   }
   
@@ -247,7 +246,7 @@ struct DVBTextString
   
   var asString : String? {
     get {
-      return String(format:"02.2X",characterTable)+":\(contentText)"
+      return String(format:"02.2X",characterTable)+":\(contentText ?? "")"
     }
   }
 }

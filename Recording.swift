@@ -191,7 +191,7 @@ class Recording
       data = fileMgr.contents(atPath: fullFileName)
       if (debug)  {
         print("Found file ")
-        print("Found file of \((data?.count))! size")
+        print("Found file of \((data?.count ?? 0))! size")
       }
       // not interested in empty files.... may as well be missing
       if (data?.count == 0 ) {

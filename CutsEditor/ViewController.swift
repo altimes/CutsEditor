@@ -37,6 +37,8 @@ struct logMessage {
   static let huntDoneMsg = "Advert hunt done (%@)"
 }
 
+let nilString = "nil"
+
 class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
 {
   @IBOutlet weak var previousButton: NSButton!
@@ -557,6 +559,108 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return abandonWrite
   }
   
+  
+  let overlayViewId = "1001"
+  let overlayHeight = CGFloat(100.0)
+  let overlayWidth = CGFloat(150.0)
+  
+  func createVideoOverlayView() -> NSTextView
+  {
+    var overlayFrame = NSRect(x: 50.0, y: 50.0, width: overlayWidth, height: overlayHeight)
+    let monitorFrame = self.monitorView.frame
+    let labelYpos = (monitorFrame.height - overlayHeight) / 2.0
+    let labelXpos = (monitorFrame.width - overlayWidth) / 2.0
+    overlayFrame = NSRect(x: labelXpos, y: labelYpos, width: overlayWidth, height: overlayHeight)
+    let label = NSTextView(frame: overlayFrame)
+    label.identifier = overlayViewId
+    label.isHorizontallyResizable = true
+    label.isVerticallyResizable = false
+    //        print("inset is \(label.textContainerInset)")
+    //        print(label.bounds)
+    self.monitorView.contentOverlayView?.addSubview(label)
+    return label
+  }
+  
+  func removeOverlayView() {
+    if let view = getVideoOverlayView()
+    {
+      view.removeFromSuperview()
+    }
+  }
+  
+  func getVideoOverlayView() -> NSTextView?
+  {
+    if let subViews = self.monitorView.contentOverlayView?.subviews {
+      for view in subViews {
+        if view.identifier == overlayViewId {
+          if let textView = view as? NSTextView
+          {
+            return textView
+          }
+          else {
+            return nil
+          }
+        }
+      }
+    }
+    return nil
+  }
+  
+  /// creates / updates an overlay on the video plane.
+  ///
+  func updateVideoOverlay(updateText: String?) {
+    var label: NSTextView
+    guard updateText != nil else {
+      removeOverlayView()
+      return
+    }
+    
+    if (debug && updateText != nil) { print("\n\n<\(updateText!)>")}
+    if let newText = updateText {
+      if let subView = getVideoOverlayView() {
+        label = subView
+        label.string = ""
+      }
+      else
+      {
+        label = createVideoOverlayView()
+      }
+      
+      var fontSize:CGFloat = 64
+      let fudgeFactor:CGFloat = 1.0   // size is NOT returning a sizeThatFits (due to Kerning?), so fudge it
+      // the frame size is being automagically increased and text is folding
+      let labelText = NSMutableAttributedString(string: newText, attributes: [NSFontAttributeName:NSFont(name: "Helvetica-Bold",size: fontSize)!])
+      labelText.setAlignment(NSTextAlignment.center, range: NSMakeRange(0, labelText.length))
+      var boundingRect = labelText.boundingRect(with: label.bounds.size, options: [])
+      var stringWidth = boundingRect.width
+      var stringHeight = boundingRect.height
+//      print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
+      while (stringWidth >= overlayWidth*fudgeFactor || stringHeight > overlayHeight*fudgeFactor && fontSize > CGFloat(12.0)) {
+        fontSize -= 1.0
+        labelText.setAttributes([NSFontAttributeName: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
+            boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSStringDrawingOptions.truncatesLastVisibleLine)
+        stringWidth = boundingRect.width
+        stringHeight = boundingRect.height
+//        print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
+      }
+//      print("using font size \(fontSize)")
+      label.textStorage?.append(labelText)
+      label.textContainer?.widthTracksTextView = false
+      label.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+      label.textContainer?.heightTracksTextView = true
+      label.sizeToFit()
+      label.alphaValue = 0.3
+      NSAnimationContext.runAnimationGroup({ (context) -> Void in
+        context.duration = 2.0
+        label.animator().alphaValue = 0.0
+      }, completionHandler: {
+//        Swift.print("completed")
+      })
+      
+    }
+  }
+  
+  
   /// Change the selected file to
   /// the one corrensponding to the given index.  Open the
   /// file, extract various information from the related files
@@ -587,11 +691,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     resetGUI()
     resetCurrentMovie()
     setStatusFieldToCurrentSelection()
+    
    
     currentFile.toolTip = currentFile.selectedItem?.toolTip
     let actualFileName = filelist[filelistIndex].components(separatedBy: CharacterSet(charactersIn: "/")).last
     fileWorkingName = actualFileName!.removingPercentEncoding!
     let baseNameURL = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
+    
+    updateVideoOverlay(updateText: nil)
+//    updateHintOverlay(updateText: fileWorkingName)
     
     // load up a recording
     movie = Recording(rootURLName: baseNameURL)
@@ -1342,11 +1450,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       return cuttable && (filelist.count > 0 )
     }
     else if (menuItem.action == #selector(undo(_:))) {
-      print("undo is \(cutsUndoRedo?.undoEmpty)")
+      print("undo is \(cutsUndoRedo?.undoEmpty ?? false)")
       return cutsUndoRedo?.undoEmpty ?? false
     }
     else if ( menuItem.action == #selector(redo(_:))) {
-      print("redo is \(cutsUndoRedo?.isRedoPossible)")
+      print("redo is \(cutsUndoRedo?.isRedoPossible ?? false)")
     return cutsUndoRedo?.isRedoPossible ?? false
     }
     else {
@@ -1494,7 +1602,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       directory = (files.count>0) ? files[0]  : nil;
     }
     if (self.debug) {
-      print("Selected "+((directory != nil) ? "\(directory)" : "nothing picked"))
+      print("Selected "+((directory != nil) ? "\(String(describing: directory))" : "nothing picked"))
     }
     return directory?.path
   }
@@ -1509,13 +1617,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         print (label, value)
       }
     }
-    if (debug) { print ("keypath <\(keyPath)> for  \((object as AnyObject).className)") }
+    if (debug) { print ("keypath <\(keyPath ?? "missing keypath")> for  \((object as AnyObject).className)") }
     if (keyPath == "tracks") {
       if let tracks = change?[NSKeyValueChangeKey.newKey] as? [AVPlayerItemTrack] {
         for track in tracks
         {
           if (debug) {
-            print("videoFieldMode: \(track.videoFieldMode)")
+            print("videoFieldMode: \(track.videoFieldMode ?? "No videoFieldMode")")
             print("assetTrack.trackID: \(track.assetTrack.trackID)")
             print("track.assetTrack.mediaType: \(track.assetTrack.mediaType)")
             print("track.assetTrack.playable: \(track.assetTrack.isPlayable)")
@@ -2367,6 +2475,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
     if (markType == .IN || markType == .OUT)  {
       cuttable = movie.isCuttable
+      updateVideoOverlay(updateText: nil)
     }
   }
   

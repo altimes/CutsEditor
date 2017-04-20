@@ -191,8 +191,8 @@ class MovieCuttingOperation: Operation
     if (debug) {
       let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
       if (debug) {
-        print("\(timestamp) Creating launch >\(cutTask.launchPath)<")
-        print("with args:< \(cutTask.arguments)>")
+        print("\(timestamp) Creating launch >\(cutTask.launchPath ?? "missing launchPath")<")
+        print("with args:< \(cutTask.arguments ?? ["no args"])>")
       }
     }
     return cutTask

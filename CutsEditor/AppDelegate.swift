@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   var defaultGeneral = generalPreferences()
   var defaultVideoPlayerPrefs = videoPlayerPreferences()
   var defaults : UserDefaults?
+  var defaultAdHunter = adHunterPreferences()
   var skipDisplayArray      = [String](repeating: "", count: 10)   // display 1..10
   var skipValueArray        = [Double](repeating: 0.0, count: 10)  // values 1..10
   var fileToOpen: String?
@@ -196,6 +197,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   {
 //    print(defaultSorting)
     return defaultSorting
+  }
+  
+  /// return ad hunting preferences
+  func adHunterPreference() -> adHunterPreferences
+  {
+    return defaultAdHunter
   }
  
   /// return current preferences

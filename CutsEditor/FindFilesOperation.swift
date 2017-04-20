@@ -95,7 +95,7 @@ class FindFilesOperation: Operation
       let trimmedString = resultString.trimmingCharacters(in: CharacterSet(charactersIn:" \n"))
       if (!trimmedString.isEmpty ) {
         let fileNameArray = trimmedString.components(separatedBy: "\n")
-        // typically replace the /hdd/media with /Volumes/Harddisk for local handling
+        // typically replace the /hdd/media with /Volumes/Movie for local handling
         let reducedFileNameArray = fileNameArray.map({$0.replacingOccurrences(of: self.remoteExportPath, with: self.localMountPoint)})
         builtURLArray = reducedFileNameArray.map({NSURL(fileURLWithPath: $0.replacingOccurrences(of: "//", with: "/")).absoluteString!})
         //

@@ -365,7 +365,7 @@ public struct EServiceReference
     resultString += "\nParent TSID = " + formatHexAndDecimal(UInt(self.parent_transport_stream_id!))
     resultString += "\nUnused = <\(self.unused!)>"
     resultString += "\nPath = <\(self.path!)>"
-    resultString += "\nName = <\(self.name)>"
+    resultString += "\nName = <\(self.name ?? "")>"
     
     return resultString
   }
