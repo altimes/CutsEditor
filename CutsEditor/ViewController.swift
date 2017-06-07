@@ -190,6 +190,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// object to perform speech processing
   var mySpeechRecogizer : NSSpeechRecognizer?
   
+  var timelineView : TimelineView?
+  
 //  /// track advert boundary hunting state
 //  var boundaryDoubleGreen = false
 
@@ -282,6 +284,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         keyBoardCommands.skipForward:(seekToAction,seekButton2c),
         keyBoardCommands.skipBackward:(seekToAction,seekButton1c),
       ]
+//    timeLine = createTimelineOverlayView()
+//    timeLine?.setNeedsDisplay((timeLine?.frame)!)
  }
   
 //  override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [NSObject : AnyObject]?, context: UnsafeMutablePointer<Void>) {
@@ -293,6 +297,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.view.window?.delegate = self
     let origin = CGPoint(x:50,y:5)
     self.view.window?.setFrameOrigin(origin)
+    
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
@@ -579,6 +584,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     //        print(label.bounds)
     self.monitorView.contentOverlayView?.addSubview(label)
     return label
+    
   }
   
   func removeOverlayView() {
@@ -606,6 +612,34 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return nil
   }
   
+  func getTimeLineView() -> TimelineView?
+  {
+    if let subViews = self.monitorView?.subviews {
+      for view in subViews {
+        if view.identifier == timelineViewId {
+          if let timelineView = view as? TimelineView
+          {
+            return timelineView
+          }
+          else {
+            return nil
+          }
+        }
+      }
+    }
+    return nil
+  }
+  
+  func removeTimelineView()
+  {
+    if let view = getTimeLineView()
+    {
+      view.layer?.removeFromSuperlayer()
+      view.removeFromSuperview()
+    }
+  }
+  
+
   /// creates / updates an overlay on the video plane.
   ///
   func updateVideoOverlay(updateText: String?) {
@@ -659,6 +693,34 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
     }
   }
+  
+  /// Create a video plane overlay which displays the marks  on a timeline that sits at bottom
+  /// of the video view.
+  
+  let timelineViewId = "1002"
+  let timelineHeight = CGFloat(25.0)
+  var timelineWidth = CGFloat(1000.0)
+  
+  func createTimelineOverlayView() -> TimelineView
+  {
+    removeTimelineView()
+    var timelineFrame = NSRect(x: 50.0, y: 50.0, width: timelineWidth, height: timelineHeight)
+    let monitorFrame = self.monitorView.frame
+    timelineWidth = (monitorFrame.width - 100.0)
+    timelineFrame = NSRect(x: 50.0, y: 50.0, width: timelineWidth, height: timelineHeight)
+    let thisTimeline = TimelineView(frame: timelineFrame)
+    thisTimeline.identifier = timelineViewId
+    let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.2)
+    thisTimeline.backgroundColor = timelineBackground
+
+//    timelineView.isHorizontallyResizable = true
+//    timelineView.isVerticallyResizable = false
+    //        print("inset is \(label.textContainerInset)")
+    //        print(label.bounds)
+    self.monitorView.addSubview(thisTimeline)
+    return thisTimeline
+  }
+  
   
   
   /// Change the selected file to
@@ -1355,7 +1417,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
     }
     else { // no cuts data implies unprocessed (not guaranteed since a cut program, may simply have no bookmarks but....)
-      if (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD) {
+      if (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD
+        || thisMovie.cuts.bookMarks.count > 3) {
         colourState = .allDoneColour
       }
       else {
@@ -1799,6 +1862,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else {
       self.statusField.stringValue = "Invalid Time duration cannot work with"
     }
+    timelineView = createTimelineOverlayView()
+    updateCutsMarksGUI()
+  }
+  
+  func updateCutsMarksGUI()
+  {
+    timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
+    timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
+    timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
+    timelineView?.setCutBoxPositions(normalizedPositions: movie.cuts.wellOrdered().normalizedInOutMarks)
+    timelineView?.setNeedsDisplay((timelineView?.bounds)!)
   }
   
   /// Common function to write the status field GUI entry to match
@@ -1957,6 +2031,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         else {
           self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
         }
+        // update timeline gui
+        let currentPositionArray = [UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))]
+        self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray))!
+//        self?.timelineView?.currentTimePts = UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))
+        self?.updateCutsMarksGUI()
         if (debug) { print("Saw callback end for \(currentTime)") }
     }
     // end closure addition
@@ -2221,6 +2300,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if let cutEntry = self.movie.cuts.entry(at: indexPath)  {
       _ = movie.cuts.removeEntry(cutEntry)
       self.cutsTable.reloadData()
+      updateCutsMarksGUI()
       cuttable = movie.isCuttable
     }
   }
@@ -2233,6 +2313,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (selectedRow >= 0) {
       movie.cuts.remove(at: selectedRow)
       cutsTable.reloadData()
+      updateCutsMarksGUI()
 //      print("Current row =\(selectedRow)")
       // reselect the previous row if possible, if not, then the top row if any
       
@@ -2317,7 +2398,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func updateTableGUIEntry(_ cutEntry: CutEntry?)
   {
     self.cutsTable.reloadData()
-    selectCutTableEntry(cutEntry)
+    updateCutsMarksGUI()
+   selectCutTableEntry(cutEntry)
+    updateCutsMarksGUI()
   }
   
   // MARK: - Menu file handling
@@ -2398,6 +2481,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     suppressPlayerUpdate = false
     cutsTable.reloadData()
+    updateCutsMarksGUI()
     seekPlayerToMark(movie.firstVideoPosition())
     cuttable = movie.isCuttable
     cutsUndoRedo?.add(state: self.movie.cuts)
@@ -2419,6 +2503,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     movie.cuts.removeEntriesOfType(markType)
     cuttable = movie.isCuttable
     cutsTable.reloadData()
+    updateCutsMarksGUI()
     suppressPlayerUpdate = false
   }
   
@@ -2434,6 +2519,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     cuttable = movie.isCuttable
     cutsTable.reloadData()
+    updateCutsMarksGUI()
     suppressPlayerUpdate = false
   }
   
@@ -2445,6 +2531,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     suppressPlayerUpdate = true
     movie.cuts.addPercentageBookMarks()
     cutsTable.reloadData()
+    updateCutsMarksGUI()
     suppressPlayerUpdate = false
     seekPlayerToMark(movie.firstVideoPosition())
     cuttable = movie.isCuttable
@@ -2457,6 +2544,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (movie.cuts.removeEntry(cutEntry) )
     {
       cutsTable.reloadData()
+      updateCutsMarksGUI()
       cuttable = movie.isCuttable
       cutsUndoRedo?.add(state: self.movie.cuts)
     }
@@ -2487,6 +2575,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
      {
       self.movie.cuts = lastCuts
       cutsTable.reloadData()
+      updateCutsMarksGUI()
       cuttable = movie.isCuttable
      }
      else  {
@@ -2501,6 +2590,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       self.movie.cuts = nextCuts
       cutsTable.reloadData()
+      updateCutsMarksGUI()
       cuttable = movie.isCuttable
     }
     else {
@@ -2767,6 +2857,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //      {
         movie.cuts.remove(at: selectedRow)
         cutsTable.reloadData()
+        updateCutsMarksGUI()
         cuttable = movie.isCuttable
         cutsUndoRedo?.add(state: movie.cuts)
 //      }

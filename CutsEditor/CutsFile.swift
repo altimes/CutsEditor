@@ -105,6 +105,41 @@ class CutsFile: NSObject, NSCopying {
     }
   }
   
+  /// Array of only the bookmarks
+  public var bookMarks: [CutEntry] {
+    get {
+      let arrayOfBookMarks = cutsArray.filter{$0.cutType == MARK_TYPE.BOOKMARK.rawValue}
+      return arrayOfBookMarks
+    }
+  }
+ 
+  public var normalizedBookmarks: [ Double] {
+    get {
+      return self.normalizedMarks(typeOfMark: MARK_TYPE.BOOKMARK)
+    }
+  }
+  
+  public var normalizedInMarks: [ Double] {
+    get {
+      return self.normalizedMarks(typeOfMark: MARK_TYPE.IN)
+    }
+  }
+  
+  public var normalizedOutMarks: [ Double] {
+    get {
+      return self.normalizedMarks(typeOfMark: MARK_TYPE.OUT)
+    }
+  }
+  
+  public var normalizedInOutMarks: [ Double] {
+    get {
+      let inOutArray = self.inOutOnly
+      let markPts = inOutArray.map {$0.cutPts}
+      return normalizePTSArray(ptsArray: markPts)
+    }
+  }
+  
+  
   /// Returns the result of checking the cuts list for consistency.
   /// That is, ensure OUTs and INs are always alternating
   /// - returns: changed state
@@ -770,6 +805,108 @@ class CutsFile: NSObject, NSCopying {
     outDuration = Double(outDurationInPTS) * CutsTimeConst.PTS_DURATION
     return outDuration
   }
+  public func normalizePTSArray(ptsArray: [PtsType]) -> [ Double ]
+  {
+    // need duration >= last bookmark
+    var normalizedResult = [Double]()
+    guard container?.ap != nil else {
+      return normalizedResult
+    }
+    let durations = container!.getBestDurationAndApDurationInSeconds()
+    let range = ((durations.ap == 0) ? durations.best : durations.ap) * Double(CutsTimeConst.PTS_TIMESCALE)
+    for pts in ptsArray
+    {
+      let position = (Double(pts))/Double(range)
+      print("\(pts) div \(range) -> \(position)")
+      normalizedResult.append(position)
+    }
+    return normalizedResult
+  }
+  
+  // return a cutsFile that is "well ordered".  This is defined
+  // a one in which all IN and OUT marks a interleaved and contains
+  // no IN,IN or OUT,OUT sequences.
+  // it also covers the whole range of the video and starts with an IN
+  // In reducing excess entries always
+  // take the earliest IN mark and the latest OUT mark
+  // if the first mark is a non-zero IN mark, then insert a OUT mark at 0.0
+  // if the last mark in NOT a 1.0 IN mark, insert an IN at 1.0
+  // assert: array is time ordered
+  func wellOrdered() -> CutsFile
+  {
+    let newCutsFile = CutsFile(self)
+    if !self.isCuttable
+    {
+      var newCutsArray = self.inOutOnly
+      if newCutsArray.first?.cutType != MARK_TYPE.IN.rawValue
+      {
+        let outStarter = CutEntry(cutPts: (container?.ap.firstPTS)!, cutType: MARK_TYPE.IN.rawValue)
+        newCutsArray.insert(outStarter, at: 0)
+      }
+      if newCutsArray.last?.cutType == MARK_TYPE.OUT.rawValue
+      {
+        newCutsArray.append(CutEntry(cutPts: (container?.ap.lastPTS)!, cutType: MARK_TYPE.IN.rawValue))
+      }
+      var entry = newCutsArray.first
+      var index = 1
+      while entry != nil && entry != newCutsArray.last {
+        let nextEntry = newCutsArray[index]
+        // check is the next is the same as the current
+        if entry?.cutType == nextEntry.cutType
+        {
+          if entry?.cutType == MARK_TYPE.IN.rawValue  // in remove later
+          {
+//            print("removing IN at \(nextEntry.asSeconds()), keeping \(entry!.asSeconds())")
+            newCutsArray.remove(at: index)
+          }
+          else // out remove earlier
+          {
+//            print("removing OUT at \(entry!.asSeconds()), keeping \(nextEntry.asSeconds())")
+            newCutsArray.remove(at: index-1)
+            entry = nextEntry
+          }
+        }
+        else {
+          if (index+1) < newCutsArray.count {
+            index += 1
+          }
+          entry = nextEntry
+        }
+      }
+      newCutsArray.append(contentsOf: self.bookMarks)
+      newCutsArray.append(contentsOf: self.cutsArray.filter({$0.cutType == MARK_TYPE.LASTPLAY.rawValue}))
+      newCutsArray.sort()
+      newCutsFile.cutsArray = newCutsArray
+      if !newCutsFile.isCuttable {
+        print("Argh what the ....")
+      }
+    }
+    return newCutsFile
+  }
+  
+  // Normalize (0.0 ... 1.0) the selected type of cutmark
+  func normalizedMarks(typeOfMark: MARK_TYPE) -> [ Double ]
+  {
+    let markArray = cutsArray.filter() {$0.cutType == typeOfMark.rawValue}
+    let markPts = markArray.map {$0.cutPts}
+    return normalizePTSArray(ptsArray: markPts)
+    //    // need duration >= last bookmark
+    //    var normalizedResult = [Double]()
+    //    guard container?.ap != nil else {
+    //      return normalizedResult
+    //    }
+    //    let durations = container!.getBestDurationAndApDurationInSeconds()
+    //    let range = ((durations.ap == 0) ? durations.best : durations.ap) * Double(CutsTimeConst.PTS_TIMESCALE)
+    //    let markArray = cutsArray.filter() {$0.cutType == typeOfMark.rawValue}
+    //    for mark in markArray
+    //    {
+    //      let position = (Double(mark.cutPts))/Double(range)
+    //      print("\(mark.cutPts) div \(range) -> \(position)")
+    //      normalizedResult.append(position)
+    //    }
+    //    return normalizedResult
+  }
+  
   
 //  /// Calculate and return the duration of the material being removed from
 //  /// Try to be more accurate using ap PTS value to get GOP boundary calcuation
