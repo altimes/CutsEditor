@@ -143,6 +143,38 @@ public struct  CutEntry {
     return Double(self.cutPts) * CutsTimeConst.PTS_DURATION
   }
   
+  /// Convert N seconds in to HH:MM:SS[.ss] format for display
+  static func hhMMssFromSeconds(_ seconds: Double, resolution:Double) -> String
+  {
+    var inputSeconds = seconds
+    var remainderSeconds = inputSeconds.truncatingRemainder(dividingBy: 60.0)
+    // rounding
+    if (60.0/resolution - remainderSeconds/resolution) < 0.5 {
+      remainderSeconds = 0.0
+      inputSeconds += 0.5/resolution
+    }
+    let minutes = inputSeconds / 60.0
+    
+    let hours = minutes / 60.0
+    let days = hours / 24.0
+    let intMinutes = Int(minutes) % 60
+    let intHours = Int(hours) % 24
+    let intDays = Int(days)
+    // compose significant elements only
+    var result = String.init(format: "%04.2f", remainderSeconds)
+    if (intMinutes > 0  || intHours>0 || intDays > 0) {
+      result = String.init(format: "%2.2d:\(result)", intMinutes)
+    }
+    if (intHours > 0 || intDays > 0)
+    {
+      result = String.init(format: "%2.2d:%@", intHours, result)
+    }
+    if (intDays>0) {
+      result = String.init(format: "%d:%@", intDays, result)
+    }
+    return result
+  }
+  
   /// Convert N seconds in to HH:MM:SS.ss format for display
   static func hhMMssFromSeconds(_ seconds: Double) -> String
   {

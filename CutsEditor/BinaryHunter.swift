@@ -55,6 +55,7 @@ class boundaryHunter {
   var isFirstJump = true
   var player: AVPlayer
   var startPlayerPos: CMTime
+  var seekCompletionHandler : (_ completed: Bool) -> Void
   
   // TODO: make runtime configurable
   static let seekToleranceValue = 1.0/25.0 // Seconds
@@ -64,7 +65,8 @@ class boundaryHunter {
   
   var debug = false
   
-  init(firstJump: Double, player avPlayer: AVPlayer) {
+  init(firstJump: Double, player avPlayer: AVPlayer, completionHander: @escaping ((_: Bool) -> Void)) {
+    seekCompletionHandler = completionHander
     jumpDistance = firstJump
     initialJump = jumpDistance
     player = avPlayer
@@ -158,7 +160,7 @@ class boundaryHunter {
     let seekPos = CMTimeAdd(player.currentTime(), seekStep)
     if (debug)
     {print(String(format: "jumping %6.2f, from %6.2f, to: %6.2f", distance, player.currentTime().seconds, seekPos.seconds))}
-    player.seek(to: seekPos, toleranceBefore: boundaryHunter.seekTolerance, toleranceAfter: boundaryHunter.seekTolerance)
+    player.seek(to: seekPos, toleranceBefore: boundaryHunter.seekTolerance, toleranceAfter: boundaryHunter.seekTolerance, completionHandler: seekCompletionHandler)
     lastDirection = direction
     isFirstJump = false
   }

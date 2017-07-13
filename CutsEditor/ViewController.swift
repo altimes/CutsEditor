@@ -73,9 +73,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   @IBOutlet weak var progressBar: NSProgressIndicator!
   
+  @IBOutlet weak var Thumbnail1: NSImageView!
+  @IBOutlet weak var filmstrip: NSStackView!
   // MARK: model
   
   var movie = Recording()
+  var imageGenerator : AVAssetImageGenerator?
+  
   let debug = false
   var startDate = Date()
   var fileSearchCancelled = false
@@ -123,7 +127,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var isPlaying: Bool {
     get {
       if (self.monitorView.player != nil) {
-        return (self.monitorView.player!.rate > 0.0)
+        return (self.monitorView.player!.rate != 0.0)
       }
       else {
         return false
@@ -180,6 +184,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// value to track periodic callbacks in player and suppress execution of multiples at the same time
   var lastPeriodicCallBackTime : Float = -1.0
+  var lastPeriodicClocktime = DispatchTime.now()
   
   /// ensure that user selecting a row is not overriden with timed observed updates
   var suppressTimedUpdates = false
@@ -190,7 +195,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// object to perform speech processing
   var mySpeechRecogizer : NSSpeechRecognizer?
   
+  let frameGap: Double = 0.1         // seconds
   var timelineView : TimelineView?
+  
+  /// track when frame changes to control suppression of
+  /// player rate changes
+  var monitorFrameChangeDate: Date?
+  var oldPlayerRate : Float?
   
 //  /// track advert boundary hunting state
 //  var boundaryDoubleGreen = false
@@ -244,6 +255,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     NotificationCenter.default.addObserver(self, selector: #selector(progressBarVisibilityChange(_:)), name: NSNotification.Name(rawValue: progressBarVisibilityChange), object: nil)
     
     NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(sawMonitorViewFrameChange(_:)), name: NSNotification.Name.NSViewFrameDidChange, object: self.monitorView)
     
 //    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
 //    
@@ -286,6 +298,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       ]
 //    timeLine = createTimelineOverlayView()
 //    timeLine?.setNeedsDisplay((timeLine?.frame)!)
+    addTimeTextLabelsToFilmStrip()
  }
   
 //  override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [NSObject : AnyObject]?, context: UnsafeMutablePointer<Void>) {
@@ -297,14 +310,37 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.view.window?.delegate = self
     let origin = CGPoint(x:50,y:5)
     self.view.window?.setFrameOrigin(origin)
-    
+    self.monitorView.window!.delegate = self
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
 //    print(#file+" "+#function)
     return true
   }
+ 
+  func sawMonitorViewFrameChange(_ notification: Notification)
+  {
+    printLog(log: "Saw Monitor View Frame Change \(self.monitorView.frame)" as AnyObject)
+    printLog(log: "was playing \(wasPlaying)" as AnyObject)
+    wasPlaying = isPlaying
+    resetTimeLineViewFrame()
+    monitorFrameChangeDate = Date()
+    if (wasPlaying) {
+      if (oldPlayerRate != nil) {
+        self.monitorView.player?.rate = oldPlayerRate!
+      }
+      else {
+        self.monitorView.player?.play()
+      }
+    }
+    else {
+      self.monitorView.player?.pause()
+    }
+    printLog(log: "\(String(describing: oldPlayerRate))" as AnyObject)
+  }
   
+  // brute force shutdown app on window RED X window closure - I don't want to think about issues
+  // related to multiple concurrent edits - does not have a valid use case IMHO
   func windowWillClose(_ notification: Notification) {
 //    print(#file+" "+#function)
     if let token = timeObserverToken
@@ -320,8 +356,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func windowWillMiniaturize(_ notification: Notification)
   {
 //    print(#file+" "+#function+" \(self.monitorView.player?.rate)")
-    wasPlaying = (self.monitorView.player?.rate)! > Float(0.0)
-    self.monitorView.player?.pause()
+    if let activePlayer = self.monitorView.player
+    {
+      wasPlaying = (activePlayer.rate) > Float(0.0)
+      self.monitorView.player!.pause()
+    }
   }
   
 //  func windowDidMiniaturize(_ notification: Notification) {
@@ -348,6 +387,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //    print(#file+" "+#function)
 //    super.viewWillDisappear()
 //    NotificationCenter.default.removeObserver(self)
+  }
+  
+  func resetTimeLineViewFrame()
+  {
+    if timelineView != nil {
+      let timelineWidth = self.monitorView.frame.width - 2.0*timeLineOrigin.x
+      let timelineFrame = NSRect(x: timeLineOrigin.x, y: timeLineOrigin.y, width: timelineWidth, height: timelineHeight)
+      timelineView!.frame = timelineFrame
+      timelineView?.setNeedsDisplay((timelineView?.bounds)!)
+    }
+  }
+  
+  override func viewDidLayout() {
+    super.viewDidLayout()
+    resetTimeLineViewFrame()
+//    print("viewDidLayoutCalled")
+//    print("monitor frame size \(self.monitorView.frame)")
   }
   
   /// Observer function to handle the "seek" changes that are made
@@ -699,29 +755,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   let timelineViewId = "1002"
   let timelineHeight = CGFloat(25.0)
-  var timelineWidth = CGFloat(1000.0)
+  let timeLineOrigin = CGPoint(x:50.0, y:50.0)
   
   func createTimelineOverlayView() -> TimelineView
   {
     removeTimelineView()
-    var timelineFrame = NSRect(x: 50.0, y: 50.0, width: timelineWidth, height: timelineHeight)
-    let monitorFrame = self.monitorView.frame
-    timelineWidth = (monitorFrame.width - 100.0)
-    timelineFrame = NSRect(x: 50.0, y: 50.0, width: timelineWidth, height: timelineHeight)
-    let thisTimeline = TimelineView(frame: timelineFrame)
+    let timelineWidth = (self.monitorView.frame.width - 2.0*timeLineOrigin.x)
+    let timeLineViewSize = CGSize(width: timelineWidth, height: timelineHeight)
+    let timelineFrame = NSRect(origin: timeLineOrigin, size: timeLineViewSize)
+    let timeRange = movie.getBestDurationAndApDurationInSeconds()
+    let thisTimeline = TimelineView(frame: timelineFrame, seconds: timeRange.ap)
     thisTimeline.identifier = timelineViewId
-    let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.2)
+    let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.4)
     thisTimeline.backgroundColor = timelineBackground
 
-//    timelineView.isHorizontallyResizable = true
-//    timelineView.isVerticallyResizable = false
-    //        print("inset is \(label.textContainerInset)")
-    //        print(label.bounds)
     self.monitorView.addSubview(thisTimeline)
     return thisTimeline
   }
-  
-  
   
   /// Change the selected file to
   /// the one corrensponding to the given index.  Open the
@@ -1608,6 +1658,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     movie = Recording()
     preferences.setMovie(movie: nil)
     cutsUndoRedo = nil
+    removeTimelineView()
+    monitorFrameChangeDate = Date()
   }
   
   /// Clear all of the current model/state back to program startup condition
@@ -1778,16 +1830,55 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else if (keyPath == "rate" && object is AVPlayer)
     {
-      if let newRate = change?[NSKeyValueChangeKey.newKey]
+      print("change dict \(keyPath!) = \(String(describing: change))")
+      if let newRate = change?[NSKeyValueChangeKey.newKey] as? Double
       {
-        if (debug) { print ("new value of player rate = \(newRate)") }
+//        wasPlaying = newRate != 0.0
+        let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
+        print("time control = \(timeControlString)")
+        if let errorState = self.monitorView.player?.error
+        {
+          print("Error state= \(errorState)")
+        }
+
+        if let timeDelta = monitorFrameChangeDate?.timeIntervalSinceNow {
+//          print("diff to frame change = \(timeDelta)")
+//          if timeDelta < -0.1
+//          {
+//            
+//            oldPlayerRate = self.monitorView.player?.rate
+//          }
+//          else {
+//            oldPlayerRate = nil
+//          }
+        }
+        if (debug) { printLog(log: "new value of player rate = \(newRate)" as AnyObject) }
+        if (newRate == 0.0  && imageGenerator != nil)
+        {
+          print("Saw rate Change")
+//          updateFilmStripSynchronous(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+          updateFilmStripFor(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+        }
       }
     }
     else {
       super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
     }
  }
-
+  
+  // from https://stackoverflow.com/questions/33364491/why-print-in-swift-does-not-log-the-time-stamp-as-nslog-in-objective-c
+  func printLog(log: AnyObject?) {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS "
+    print(formatter.string(from: Date()), terminator: "")
+    if log == nil {
+      print("nil")
+    }
+    else {
+      print(log!)
+    }
+  }
+  
   /// Removew all registered observers when the observee is changed
   func removePlayerObserversAndItem()
   {
@@ -1829,6 +1920,26 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // write bad video recovery functions
     var durationIsValid = true
     for trackAsset in avAsset.tracks {
+      if (debug) {
+        print("Asset description:\(trackAsset.description)")
+        print("Asset sample Cursor:\(trackAsset.canProvideSampleCursors)")
+        print("Asset formatDescriptions:\(trackAsset.formatDescriptions)")
+        print("Asset mediaType:\(trackAsset.mediaType)")
+      }
+      if (trackAsset.mediaType == AVMediaTypeVideo)
+      {
+        imageGenerator = AVAssetImageGenerator(asset: avAsset)
+        imageGenerator!.requestedTimeToleranceBefore = CMTime(seconds: 1.0/25.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
+        imageGenerator!.requestedTimeToleranceAfter = CMTime(seconds: 1.0/25.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
+//        imageGenerator?.requestedTimeToleranceAfter = kCMTimeZero
+//        imageGenerator?.requestedTimeToleranceBefore = kCMTimeZero
+        let imageSize = CGSize(width:self.filmstrip.frame.height*(16.0/9.0), height:self.filmstrip.frame.height)
+
+        imageGenerator?.maximumSize = imageSize
+        imageGenerator?.appliesPreferredTrackTransform = true
+//        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
+        updateFilmStripFor(time: CMTime(seconds:10.0+3.0*frameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
+      }
       let track = trackAsset.asset!
       let duration = track.duration
       durationIsValid = durationIsValid && !duration.isIndefinite && duration.isValid && !duration.isNegativeInfinity && !duration.isPositiveInfinity
@@ -1866,12 +1977,313 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     updateCutsMarksGUI()
   }
   
+  func singleImageAtTime( seconds: Double, generator: AVAssetImageGenerator, imageSize:CGSize?) -> NSImage?
+  {
+    let fiveMinutes = CMTimeMakeWithSeconds(seconds, 600)
+    var actualTime = CMTime()
+    var scaledImage : NSImage?
+    do {
+      let image = try generator.copyCGImage(at:fiveMinutes, actualTime: &actualTime)
+      let actualTimeString = String(describing: CMTimeCopyDescription(nil, actualTime))
+      let requestedTimeString = String(describing: CMTimeCopyDescription(nil, fiveMinutes))
+      print("Got image at times: Asked for  \(requestedTimeString), got \(actualTimeString)");
+      
+      // Do something interesting with the image.
+//      print("image size is \(image.width)/\(image.height)")
+      scaledImage = (imageSize != nil) ? NSImage(cgImage: image, size: imageSize!):NSImage(cgImage: image, size:NSSize(width:image.width, height: image.height))
+    }
+    catch let error as NSError {
+      print(error.localizedDescription)
+    }
+    return scaledImage
+  }
+  
+  
+  /// Create  text label
+  
+  let textFontName = "Helvetica-Bold"
+  
+  func timeDeltaTextLabel(deltaValue : String, in frame:NSRect, withId: Int) -> NSTextField
+  {
+    // 10 % inset from image
+    let insetWidth = 0.1 * frame.width
+    let insetHeight = 0.1 * frame.height
+    let textframe = frame.insetBy(dx: insetWidth, dy: insetHeight)
+    let label = NSTextField(frame: textframe)
+    label.stringValue = deltaValue
+//    label.sizeToFit()
+    let textBackgroundColour = NSColor.yellow.withAlphaComponent(0.01)
+    label.backgroundColor = textBackgroundColour
+    label.identifier = "timetextLabel" + "\(withId)"
+    label.alphaValue = 0.4
+    label.font = NSFont(name: textFontName, size: 20.0)
+    label.alignment = NSTextAlignment.justified
+    return label
+  }
+  
+  func timeDeltaCATextLayer(deltaValue : String, in frame:NSRect, withId: Int) -> CATextLayer
+  {
+    // 10 % inset from image
+    let fontHeight = CGFloat(20.0)
+    let insetWidth = 0.15 * frame.width
+    let insetHeight = 0.25 * frame.height
+    let textframe = frame.insetBy(dx: insetWidth, dy: insetHeight)
+    let deltaTextLayer = CATextLayer()
+    deltaTextLayer.frame = textframe
+    deltaTextLayer.cornerRadius = 0.15 * deltaTextLayer.bounds.width
+    deltaTextLayer.string = deltaValue
+    let textBackgroundColour = NSColor.white.withAlphaComponent(0.3)
+    deltaTextLayer.backgroundColor = textBackgroundColour.cgColor
+    let textFont = NSFont(name: textFontName, size: fontHeight)
+    deltaTextLayer.font = textFont
+    deltaTextLayer.fontSize = fontHeight
+    deltaTextLayer.contentsScale = (NSScreen.main()?.backingScaleFactor)!
+    let transWhite = NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.7)
+    deltaTextLayer.alignmentMode = kCAAlignmentCenter
+    deltaTextLayer.foregroundColor = transWhite.cgColor
+//    deltaTextLayer.alignment = NSTextAlignment.justified
+    return deltaTextLayer
+  }
+ 
+  let defaultFilmstripImage = NSImage(imageLiteralResourceName: "scissors_icon-icons.com_50046-128.png")
+  
+  func getDefaultFilmStripImageForView(_ bounds:NSRect) -> NSImage
+  {
+    let frameImage = defaultFilmstripImage
+    var imageRect = CGRect(x: 0, y: 0, width: defaultFilmstripImage.size.width, height: defaultFilmstripImage.size.height)
+    let cgFrameImageRef = frameImage.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+    let viewWidth = bounds.height * (16.0/9.0)
+    let viewSize = CGSize(width: viewWidth, height: bounds.height)
+    let resizedImage = NSImage(cgImage: cgFrameImageRef!, size: viewSize)
+    return resizedImage
+  }
+  
+  func scaleImageForFilmStripSize(filmStripSize: CGSize, image: CGImage) -> NSImage
+  {
+    let imageSize = CGSize(width:filmStripSize.height*(16.0/9.0), height:filmStripSize.height)
+//    var imageRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+//    let cgFrameImageRef = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+//    let viewWidth = bounds.height * (16.0/9.0)
+//    let viewSize = CGSize(width: viewWidth, height: bounds.height)
+    let resizedImage = NSImage(cgImage: image, size: imageSize)
+    return resizedImage
+    
+  }
+  // add a transparent overlay label to show the time delta of the frame
+  // in relationship to the centre frame
+  // only called at view setup time (ie once only)
+  
+  func addTimeTextLabelsToFilmStrip()
+  {
+    // TODO: Add to user configuration
+    let secondsApart = 0.1    // nominal initial value
+    let nominalCentreFrametime = 0.3
+    let frames = self.filmstrip.arrangedSubviews.count
+    let startDelta = Double(frames / 2) * secondsApart
+    var frameDelta = startDelta * -1.0
+    var startTimeInSeconds = nominalCentreFrametime - startDelta
+    // static starter image
+    let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
+    let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
+//    print("image frame is \(imageFrame)")
+    
+    var identifierIndex = 0
+    for view in self.filmstrip.arrangedSubviews
+    {
+      // round the corners of the "frame"
+      view.wantsLayer = true
+      if let layer = view.layer {
+        layer.backgroundColor = NSColor.blue.cgColor
+        layer.cornerRadius = 0.1 * layer.bounds.width
+        layer.masksToBounds = true
+        let imageLayer = CALayer()
+        imageLayer.contents = resizedImage
+        imageLayer.frame = imageFrame
+        layer.addSublayer(imageLayer)
+          
+        var deltaString = String.init(format: "%.2f", frameDelta)
+        // suppress "-0.0" output from formatting
+        if abs(frameDelta) <= 0.0001 {
+          deltaString = " 0.00"
+        }
+        if frameDelta >= 0.0001 {
+          deltaString = "+"+deltaString
+        }
+        let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame, withId: identifierIndex)
+        
+        imageLayer.addSublayer(textLayer)
+      }
+      frameDelta += secondsApart
+      startTimeInSeconds += secondsApart
+      identifierIndex += 1
+    }
+  }
+  
+  /* original function before trying layers instead of views
+   
+  func addTimeTextLabelsToFilmStrip()
+  {
+    // TODO: Add to user configuration
+    let secondsApart = 0.1    // nominal initial value
+    let nominalCentreFrametime = 0.3
+    let frames = self.filmstrip.arrangedSubviews.count
+    let startDelta = Double(frames / 2) * secondsApart
+    var frameDelta = startDelta * -1.0
+    var startTimeInSeconds = nominalCentreFrametime - startDelta
+    // static starter image
+    let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
+    let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
+    //    print("image frame is \(imageFrame)")
+    
+    var identifierIndex = 0
+    for view in self.filmstrip.arrangedSubviews
+    {
+      // round the corners of the "frame"
+      view.wantsLayer = true
+      if let layer = view.layer {
+        layer.backgroundColor = NSColor.blue.cgColor
+        layer.cornerRadius = 0.1 * layer.bounds.width
+        layer.masksToBounds = true
+      }
+      //      print("intrinsic view size is \(view.intrinsicContentSize)")
+      //      print("initial view frame is \(view.frame)")
+      let imageView = view as! NSImageView
+      //      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
+      imageView.image = resizedImage
+      imageView.frame = imageFrame
+      var deltaString = String.init(format: "%.2f", frameDelta)
+      // suppress "-0.0" output from formatting
+      if abs(frameDelta) <= 0.0001 {
+        deltaString = " 0.00"
+      }
+      if frameDelta >= 0.0001 {
+        deltaString = "+"+deltaString
+      }
+      let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame, withId: identifierIndex)
+      //      print ("label position =\(label.frame), label size = \(label.bounds)")
+      frameDelta += secondsApart
+      imageView.addSubview(label)
+      imageView.setFrameSize(imageFrame.size)
+      //      print("post view frame is \(view.frame)")
+      //      print("post processing view size \(view.fittingSize)")
+      startTimeInSeconds += secondsApart
+      identifierIndex += 1
+    }
+  }
+  
+*/
+  
+  // slow and synchronous for developement testing only
+  func updateFilmStripSynchronous(time: CMTime, secondsApart: Double, imageGenerator: AVAssetImageGenerator)
+  {
+    let frames = self.filmstrip.arrangedSubviews.count
+    let startDelta = Double(frames / 2) * secondsApart
+//    var frameDelta = startDelta * -1.0
+    var startTimeInSeconds = time.seconds - startDelta
+    for view in self.filmstrip.arrangedSubviews
+    {
+//      var textLabel : NSTextField?
+      let imageView = view as! NSImageView
+//      for v in imageView.subviews {
+//        if (v.identifier?.contains("timetextLabel"))! {
+//          textLabel = (v as! NSTextField)
+//        }
+//      }
+      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
+      let viewSize = CGSize(width: viewWidth, height: view.bounds.height)
+      if let frameImage = singleImageAtTime(seconds: startTimeInSeconds, generator: imageGenerator, imageSize: viewSize)
+      {
+        imageView.image = frameImage
+        imageView.frame = NSRect(x: 0, y: 0, width: frameImage.size.width, height: frameImage.size.height)
+//        let deltaString = String.init(format: "%.2f", frameDelta)
+//        let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame)
+//        textLabel?.stringValue = deltaString
+//        frameDelta += secondsApart
+//        imageView.addSubview(label)
+      }
+      startTimeInSeconds += secondsApart
+    }
+  }
+  
+  /// Main queue callback from handler to update user interface with 
+  /// image generated for filmstrip display
+  
+  func updateFilmstripWithImage(_ image: CGImage, atStripIndex index: Int)
+  {
+//    let pixelData = image.pixelData()
+//    for i in 0 ... 10 {
+//      let startByte = i*4
+//      
+//      print("InitialBytes[\(index)] \(i): \(pixelData![startByte+0]):\(pixelData![startByte+1]):\(pixelData![startByte+2]):\(pixelData![startByte+3])")
+//    }
+    /*
+    let view = self.filmstrip.arrangedSubviews[index] as! NSImageView
+    let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
+    let viewSize = CGSize(width: viewWidth, height: view.bounds.height)
+    view.frame = NSRect(x: 0, y: 0, width: (view.image?.size.width)!, height: (view.image?.size.height)!)
+    
+    view.image = NSImage(cgImage:image, size:CGSize(width: image.width, height: image.height))
+ */
+    if let layer = self.filmstrip.arrangedSubviews[index].layer {
+      layer.sublayers?[0].contents = image
+//      layer.contents = image
+    }
+  }
+  
+  /// Handler to deal with each image as it becomes available.
+  /// Needs to determine which array element it belongs to.
+  /// To do this, we need the base start time to calculate an array index
+  /// from the "requested" time.
+  /// Also need to access the "spacing" of the frames
+  func assetImageCompletionHandler (time:CMTime, image: CGImage?, actualTime:CMTime, result:AVAssetImageGeneratorResult, error: Error?)
+  {
+//    let resultAsString = result == AVAssetImageGeneratorResult.succeeded ? "Succeeded" : (result == AVAssetImageGeneratorResult.failed) ? "Failed": "Cancelled"
+//    print("result: \(resultAsString) requested at time \(time.seconds)")
+    if (result == AVAssetImageGeneratorResult.failed) {
+      print("error: \(String(describing: error))")
+      print("requestedTime \(time.seconds)")
+      print("actualTime \(actualTime.seconds)")
+    }
+    if let _image = image, let viewIndex = requestedTimes.index(of: time as NSValue)
+    {
+      DispatchQueue.main.async  {
+        self.updateFilmstripWithImage(_image, atStripIndex: viewIndex)
+      }
+    }
+  }
+
+  var requestedTimes = [NSValue]()
+  
+  /// Generate and display thumbnails either size of the current position
+  /// Only do this if the player is paused
+  func updateFilmStripFor(time: CMTime, secondsApart: Double, imageGenerator: AVAssetImageGenerator)
+  {
+    let  handler = assetImageCompletionHandler
+    if (self.monitorView.player?.rate == 0.0) {
+      imageGenerator.cancelAllCGImageGeneration()
+      // Create array of 7 times for filmstrip (never negative)
+      let startSeconds = (time.seconds - 3.0*secondsApart) > 0.0 ? (time.seconds - 3.0*secondsApart) : 0.0
+      
+      requestedTimes.removeAll()
+      for position in 0 ... 6
+      {
+        requestedTimes.append(CMTime(seconds: startSeconds + Double(position)*secondsApart, preferredTimescale: CutsTimeConst.PTS_TIMESCALE) as NSValue)
+//        (filmstrip.arrangedSubviews[position] as! NSImageView).image = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
+        // sublayers[0] is the image layer
+        filmstrip.arrangedSubviews[position].layer?.sublayers?[0].contents = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
+      }
+      imageGenerator.generateCGImagesAsynchronously(forTimes: requestedTimes, completionHandler: handler)
+    }
+  }
+  
+  /// Update the timeline view
   func updateCutsMarksGUI()
   {
     timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
     timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
     timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
-    timelineView?.setCutBoxPositions(normalizedPositions: movie.cuts.wellOrdered().normalizedInOutMarks)
+    let cutBoxPositions = movie.cuts.wellOrdered().normalizedInOutMarks
+    timelineView?.setCutBoxPositions(normalizedPositions: cutBoxPositions)
     timelineView?.setNeedsDisplay((timelineView?.bounds)!)
   }
   
@@ -1909,7 +2321,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (debug) { print("Seek Canceled") }
     }
     else {
-      if (debug) { print("Seek completed") }
+      if (true) { print("Seek completed") }
+//            updateFilmStripSynchronous(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+      updateFilmStripFor(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
       if (wasPlaying) {
         self.monitorView.player?.play()
       }
@@ -1960,6 +2374,40 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return UInt64((playPosition?.value)!)
   }
   
+  func clockSeconds() -> String
+  {
+    // get the current date and time
+    let currentDateTime = Date()
+    
+    // get the user's calendar
+    let userCalendar = Calendar.current
+    
+    // choose which date and time components are needed
+    let requestedComponents: Set<Calendar.Component> = [
+      .year,
+      .month,
+      .day,
+      .hour,
+      .minute,
+      .second
+    ]
+    
+    // get the components
+    let dateTimeComponents = userCalendar.dateComponents(requestedComponents, from: currentDateTime)
+    
+    // now the components are available
+//    dateTimeComponents.year   // 2016
+//    dateTimeComponents.month  // 10
+//    dateTimeComponents.day    // 8
+//    dateTimeComponents.hour   // 22
+//    dateTimeComponents.minute // 42
+    var retStr = "??"
+    if let secondsString = dateTimeComponents.second {
+      retStr = "\(secondsString)"
+    }
+    return retStr
+  }
+  
   /// Highlight (without triggering selection actions) the cuttable entry that is
   /// before the given time into the recording in seconds.  This is providing the
   /// "table highlight tracks the playing recording" UI feedback
@@ -1984,7 +2432,40 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  let callbackTimePeriodSecs = 0.25
+  let callbackTimePeriodSecs = 1.0
+  
+  // playback rate must be one of [-60, -30, -10, -5, -2, -1, 0 , 1, 2, 5, 10, 30, 60]
+  // so find and return the "nearest"
+  func getPlaybackRate( calculatedRate: Double) -> Int
+  {
+    let rates:[Double] = [-60.0, -30.0, -10.0, -5.0, -2.0, -1.0, 0.0 , 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
+    guard calculatedRate > rates.first! else {
+      return Int(rates.first!)
+    }
+    guard calculatedRate < rates.last! else {
+      return Int(rates.last!)
+    }
+    var returnRate: Int?
+    var i = 0
+    while i < rates.count-1 && returnRate == nil {
+      if calculatedRate >= rates[i] && calculatedRate <= rates[i+1]
+      {
+        let midpoint = (rates[i+1] + rates[i]) / 2
+        if (rates[i] < 0.0) {
+          returnRate = Int((calculatedRate > midpoint) ? rates[i+1] : rates[i])
+        }
+        else {
+          returnRate = Int((calculatedRate < midpoint) ? rates[i] : rates[i+1])
+        }
+      }
+      if (returnRate != nil && true) {
+        print("returning \(returnRate!) from \(calculatedRate) at index \(i)")
+      }
+      i += 1
+    }
+    return returnRate!
+  }
+  
   // from apple code sample
   func addPeriodicTimeObserver() {
     let debug = false
@@ -1997,9 +2478,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     timeObserverToken =
       self.monitorView.player?.addPeriodicTimeObserver(forInterval: interval, queue: mainQueue) {
         [weak self] time in
+//        print("Called back at \(self?.clockSeconds() ?? "??")")
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
         let currentCMTime =  self?.monitorView.player?.currentTime()
+        let currentClock = DispatchTime.now()
+//        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
         
         let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
         if (debug)  { print("Saw callback start at \(currentTime)") }
@@ -2010,7 +2494,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           if (self?.suppressTimedUpdates == true && debug ) {print("timed updates suppressed")}
           return
         }
-        self?.lastPeriodicCallBackTime = currentTime
+        let deltaRealWorld = currentClock.uptimeNanoseconds - (self?.lastPeriodicClocktime.uptimeNanoseconds)!
+        let deltaVideoTime = currentTime - (self?.lastPeriodicCallBackTime)!
+        if (debug) { print("callback at video time/elapsed \(currentTime)") }
+        if (deltaRealWorld > 1000000000) // once per second in the real world
+        {
+          let deltaRate = Double(deltaVideoTime)/(Double(deltaRealWorld) * 1.0e-9)
+          let derivedRate = self?.getPlaybackRate(calculatedRate: deltaRate)
+          print("calculated rate =            ---------------------------->>>>>>    \(derivedRate!)")
+          print("calculated deltaTime= \(deltaVideoTime)")
+          print("calculated elapse time = \(deltaRealWorld)")
+          self?.lastPeriodicClocktime = currentClock
+          self?.lastPeriodicCallBackTime = currentTime
+       }
         let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
         self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
         if (self?.honourOutInMarks)! {
@@ -2032,10 +2528,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
         }
         // update timeline gui
+        if (currentCMTime?.seconds)! > 0.0 {
         let currentPositionArray = [UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))]
-        self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray))!
-//        self?.timelineView?.currentTimePts = UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))
+          
+        self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray, ignorGaps: true))!
         self?.updateCutsMarksGUI()
+        }
+        else {
+          print("Argh! negative currentTime \(currentCMTime!)")
+        }
         if (debug) { print("Saw callback end for \(currentTime)") }
     }
     // end closure addition
@@ -2550,7 +3051,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  /// Add a  bookmark at the current position
+  /// Add a  mark at the current position
   /// TODO: current unused whilst CUT button is in the same GUI location
   /// TODO: shuffle buttons and re-enable
   @IBAction func addMark(sender: NSButton) {

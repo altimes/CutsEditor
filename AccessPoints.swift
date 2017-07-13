@@ -27,6 +27,7 @@ class AccessPoints {
   var debug = false
   var apFileName: String
   private(set) var hasGaps : Bool = false
+  private var sequenceHasGaps : Bool = false
   private(set) var runtimePTS: PtsType
   var container: Recording?
   
@@ -63,7 +64,7 @@ class AccessPoints {
     let littleEndian = data.withUnsafeBytes {
       Array(UnsafeBufferPointer<UInt64>(start: $0, count: data.count/MemoryLayout<UInt64>.size))
     }
-    while (index < dataElementCount)
+    while (index+1 < dataElementCount)
     {
       d[0] = littleEndian[index].bigEndian  // file offset
       d[1] = littleEndian[index+1].bigEndian  // pts
@@ -232,10 +233,17 @@ class AccessPoints {
   /// - returns: runtime calculated in PCR ticks (~1/90000 of a sec)
   private func deriveRunTimePTS() -> PtsType
   {
-    // derive duration with analysis for gaps
     guard m_access_points_array.count > 1 else {
       return PtsType(0)
     }
+    
+    let runTimeDurationPTS = deriveRunTimePTSBetweenIndices(startIndex: 0, endIndex: m_access_points_array.count-1)
+    self.hasGaps = self.sequenceHasGaps
+    return runTimeDurationPTS
+    
+    /*
+    
+    // derive duration with analysis for gaps
     var deltaSecs: Double
     var lastDeltas: String
     var seqStart = 0
@@ -292,6 +300,8 @@ class AccessPoints {
     }
     self.hasGaps = (seqStart != 0)
     return cummulativeDurationPTS
+    */
+    
   }
   
   /// find the ap index nearest the given PTS
@@ -357,5 +367,93 @@ class AccessPoints {
       durationInPTS = m_access_points_array[endIndex].pts - m_access_points_array[startIndex].pts
     }
     return durationInPTS
+  }
+  
+  /// Determine the elapsed duration from a pts in the sequence that may contains gaps
+  /// Used to map PTS fed back from the AVPlayer currentTime into a "played video"
+  /// duration.  
+  func deriveRunTimeFrom(ptsTime: PtsType) -> PtsType {
+    let endIndex = nearestApIndex(ptsValue: ptsTime)
+    return deriveRunTimeDurationToIndex(endIndex: endIndex)
+  }
+  
+  ///
+  private func deriveRunTimePTSBetweenIndices(startIndex: Int, endIndex: Int) -> PtsType
+    
+  {
+    // derive duration with analysis for gaps
+    guard m_access_points_array.count > 1 else {
+      return PtsType(0)
+    }
+    
+    var deltaSecs: Double
+    var lastDeltas: String
+    var seqStart = 0
+    var ptsDiscontinuity = false
+    var cummulativeDurationPTS = PtsType(0)
+    if (debug) {
+      print("checking Ap for \(container?.movieName! ?? apFileName)")
+      print("Simple duration: \(simpleDurationInHMS())")
+    }
+    for index in startIndex ..< endIndex
+    {
+      let entry  = m_access_points_array[index]
+      let entry2 = m_access_points_array[index+1]
+      if entry2.pts > entry.pts {
+        let delta1 = Double(entry2.pts - entry.pts)*CutsTimeConst.PTS_DURATION
+        let deltaInt = Int(delta1*10)
+        deltaSecs = Double(deltaInt)/10.0
+        lastDeltas =  String("deltas \(delta1): \(deltaInt) : \(deltaSecs)")
+      }
+      else {
+        // pts discontinuity, treat as virtual gap
+        lastDeltas = "--------- undetermined"
+        // ascribe an "typical step"
+        deltaSecs = 3.0
+        ptsDiscontinuity = true
+      }
+      // check for significant break in sequence of ap's
+      // accumulate duration and reset for next sequence
+      if (deltaSecs > 30.0 || ptsDiscontinuity) {
+        if (debug) {
+          print(lastDeltas)
+          print("[\(index)] - \(entry.pts)/\(entry2.pts)  - \(Int(Double(entry.pts) * CutsTimeConst.PTS_DURATION))/\(Int(Double(entry2.pts)*CutsTimeConst.PTS_DURATION)) delta = \(deltaSecs)")
+        }
+        let sequenceDurationPTS = m_access_points_array[index].pts - m_access_points_array[seqStart].pts
+        cummulativeDurationPTS += sequenceDurationPTS
+        if (debug) {
+          let sequenceDurationSecs = Double(sequenceDurationPTS) * CutsTimeConst.PTS_DURATION
+          let sequenceDurationHMS = CutEntry.hhMMssFromSeconds(sequenceDurationSecs)
+          let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
+          let readableCummulativeTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+          print("\(sequenceDurationPTS) - \(cummulativeDurationPTS): \(sequenceDurationHMS) - \(readableCummulativeTime)")
+        }
+        seqStart = index+1
+        ptsDiscontinuity = false
+      }
+    }
+    let sequenceDurationPTS = m_access_points_array[endIndex].pts - m_access_points_array[seqStart].pts
+    cummulativeDurationPTS += sequenceDurationPTS
+    if (debug) {
+      let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
+      let readableTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+      print("Run time of \(cummulativeDurationPTS) pts / \(readableTime)")
+    }
+    self.sequenceHasGaps = (seqStart != 0)
+    return cummulativeDurationPTS
+  }
+  
+  private func deriveRunTimeDurationToIndex(endIndex: Int) -> PtsType
+  {
+    return deriveRunTimePTSBetweenIndices(startIndex: 0, endIndex: endIndex)
+  }
+  
+  private func deriveRunTimeDurationFromIndex(startIndex first: Int) -> PtsType
+  {
+    guard m_access_points_array.count > 0  else {
+      return PtsType(0)
+    }
+    let last = m_access_points_array.count-1
+    return deriveRunTimePTSBetweenIndices(startIndex: first, endIndex: last)
   }
 }

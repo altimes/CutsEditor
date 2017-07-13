@@ -135,7 +135,7 @@ class CutsFile: NSObject, NSCopying {
     get {
       let inOutArray = self.inOutOnly
       let markPts = inOutArray.map {$0.cutPts}
-      return normalizePTSArray(ptsArray: markPts)
+      return normalizePTSArray(ptsArray: markPts, ignorGaps: false)
     }
   }
   
@@ -805,19 +805,26 @@ class CutsFile: NSObject, NSCopying {
     outDuration = Double(outDurationInPTS) * CutsTimeConst.PTS_DURATION
     return outDuration
   }
-  public func normalizePTSArray(ptsArray: [PtsType]) -> [ Double ]
+  public func normalizePTSArray(ptsArray: [PtsType], ignorGaps:Bool) -> [ Double ]
   {
     // need duration >= last bookmark
     var normalizedResult = [Double]()
     guard container?.ap != nil else {
       return normalizedResult
     }
+    let ap = container!.ap
     let durations = container!.getBestDurationAndApDurationInSeconds()
     let range = ((durations.ap == 0) ? durations.best : durations.ap) * Double(CutsTimeConst.PTS_TIMESCALE)
     for pts in ptsArray
     {
-      let position = (Double(pts))/Double(range)
-      print("\(pts) div \(range) -> \(position)")
+      var position = 0.0
+      if (ap.hasGaps && !ignorGaps) {
+        position = (Double(ap.deriveRunTimeFrom(ptsTime: pts))) / Double(range)
+      }
+      else {
+        position = (Double(pts))/Double(range)
+      }
+//      print("\(pts) div \(range) -> \(position)")
       normalizedResult.append(position)
     }
     return normalizedResult
@@ -826,27 +833,45 @@ class CutsFile: NSObject, NSCopying {
   // return a cutsFile that is "well ordered".  This is defined
   // a one in which all IN and OUT marks a interleaved and contains
   // no IN,IN or OUT,OUT sequences.
-  // it also covers the whole range of the video and starts with an IN
-  // In reducing excess entries always
+  // it  starts with an OUT
+  // When reducing excess entries always
   // take the earliest IN mark and the latest OUT mark
   // if the first mark is a non-zero IN mark, then insert a OUT mark at 0.0
   // if the last mark in NOT a 1.0 IN mark, insert an IN at 1.0
   // assert: array is time ordered
   func wellOrdered() -> CutsFile
   {
+    var changed = false
     let newCutsFile = CutsFile(self)
+    
+    // check boundary conditions
+    var newCutsArray = self.inOutOnly
+    if !newCutsArray.isEmpty {
+      if newCutsArray.first?.cutType != MARK_TYPE.OUT.rawValue
+      {
+        let outStarter = CutEntry(cutPts: 0, cutType: MARK_TYPE.OUT.rawValue)
+        newCutsArray.insert(outStarter, at: 0)
+        changed = true
+      }
+      if newCutsArray.last?.cutType != MARK_TYPE.IN.rawValue
+      {
+        var pts = UInt64((container?.videoDurationFromPlayer)! * Double(CutsTimeConst.PTS_TIMESCALE))
+        if (pts == PtsType(0))  // bugger
+          {
+            if let apPts = container?.ap.lastPTS
+            {
+              pts = apPts
+            }
+            // FIXME: give up ? how
+          }
+        newCutsArray.append(CutEntry(cutPts: pts, cutType: MARK_TYPE.IN.rawValue))
+        changed = true
+      }
+    }
+    
+    // now check for multiple serial INs or OUTs
     if !self.isCuttable
     {
-      var newCutsArray = self.inOutOnly
-      if newCutsArray.first?.cutType != MARK_TYPE.IN.rawValue
-      {
-        let outStarter = CutEntry(cutPts: (container?.ap.firstPTS)!, cutType: MARK_TYPE.IN.rawValue)
-        newCutsArray.insert(outStarter, at: 0)
-      }
-      if newCutsArray.last?.cutType == MARK_TYPE.OUT.rawValue
-      {
-        newCutsArray.append(CutEntry(cutPts: (container?.ap.lastPTS)!, cutType: MARK_TYPE.IN.rawValue))
-      }
       var entry = newCutsArray.first
       var index = 1
       while entry != nil && entry != newCutsArray.last {
@@ -856,15 +881,14 @@ class CutsFile: NSObject, NSCopying {
         {
           if entry?.cutType == MARK_TYPE.IN.rawValue  // in remove later
           {
-//            print("removing IN at \(nextEntry.asSeconds()), keeping \(entry!.asSeconds())")
             newCutsArray.remove(at: index)
           }
           else // out remove earlier
           {
-//            print("removing OUT at \(entry!.asSeconds()), keeping \(nextEntry.asSeconds())")
             newCutsArray.remove(at: index-1)
             entry = nextEntry
           }
+          changed = true
         }
         else {
           if (index+1) < newCutsArray.count {
@@ -873,38 +897,28 @@ class CutsFile: NSObject, NSCopying {
           entry = nextEntry
         }
       }
+    }
+    // update copy if needed
+    if (changed) {
       newCutsArray.append(contentsOf: self.bookMarks)
       newCutsArray.append(contentsOf: self.cutsArray.filter({$0.cutType == MARK_TYPE.LASTPLAY.rawValue}))
       newCutsArray.sort()
       newCutsFile.cutsArray = newCutsArray
-      if !newCutsFile.isCuttable {
-        print("Argh what the ....")
-      }
+    }
+    if !newCutsFile.isCuttable {
+      print("Argh what the ....")
     }
     return newCutsFile
   }
   
-  // Normalize (0.0 ... 1.0) the selected type of cutmark
+  /// Normalize (0.0 ... 1.0) the selected type of cutmark
+  /// Recording Gaps are ignored for bookmarks since they are not in the
+  /// same PTS number scale as other embedded marks (I think)
   func normalizedMarks(typeOfMark: MARK_TYPE) -> [ Double ]
   {
     let markArray = cutsArray.filter() {$0.cutType == typeOfMark.rawValue}
     let markPts = markArray.map {$0.cutPts}
-    return normalizePTSArray(ptsArray: markPts)
-    //    // need duration >= last bookmark
-    //    var normalizedResult = [Double]()
-    //    guard container?.ap != nil else {
-    //      return normalizedResult
-    //    }
-    //    let durations = container!.getBestDurationAndApDurationInSeconds()
-    //    let range = ((durations.ap == 0) ? durations.best : durations.ap) * Double(CutsTimeConst.PTS_TIMESCALE)
-    //    let markArray = cutsArray.filter() {$0.cutType == typeOfMark.rawValue}
-    //    for mark in markArray
-    //    {
-    //      let position = (Double(mark.cutPts))/Double(range)
-    //      print("\(mark.cutPts) div \(range) -> \(position)")
-    //      normalizedResult.append(position)
-    //    }
-    //    return normalizedResult
+    return normalizePTSArray(ptsArray: markPts, ignorGaps: (typeOfMark == MARK_TYPE.BOOKMARK))
   }
   
   

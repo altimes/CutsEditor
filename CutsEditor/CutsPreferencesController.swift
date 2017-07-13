@@ -64,6 +64,8 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
         // Do view setup here.
       loadCurrentSkips()
       loadCurrentVideoPlayerConfig()
+      let toggle = SwitchControl( isOn: true, frameRect: NSRect(origin:NSPoint(x:50,y:100), size:CGSize(width: 250, height: 25)), textOn: "hello", textOff: "goodBye", tintColor: NSColor.blue, _isFixedWidth:true, _fixedWidth: 100.0 )
+      self.view.addSubview(toggle)
     }
     
   @IBAction func saveAction(_ sender: NSButton)
