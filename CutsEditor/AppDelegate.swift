@@ -51,6 +51,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       defaultSorting.sortBy = (defaults?.string(forKey: sortStringConsts.sortBy))!
       NotificationCenter.default.post(name: Notification.Name(rawValue: sortDidChange), object: nil)
       
+      // adHunter preferences
+      if defaults?.value(forKey: adHunterStringConsts.visualClosing) !=  nil
+      {
+        defaultAdHunter.isOverlayReporting = (defaults?.bool(forKey: adHunterStringConsts.visualClosing)) ?? defaultAdHunter.isOverlayReporting
+        defaultAdHunter.isSpeechReporting = (defaults?.bool(forKey: adHunterStringConsts.speechClosing)) ?? defaultAdHunter.isSpeechReporting
+        defaultAdHunter.closingReport = (defaults?.double(forKey: adHunterStringConsts.closingBoundary)) ?? defaultAdHunter.closingReport
+        defaultAdHunter.nearEnough = (defaults?.double(forKey: adHunterStringConsts.nearEngoughThreshold)) ?? defaultAdHunter.nearEnough
+      }
+      else {
+        initAdHunterPreferences()
+        saveAdHunterPreference(defaultAdHunter)
+      }
+      NotificationCenter.default.post(name: Notification.Name(rawValue: adHunterDidChange), object: nil)
+      
       // skip setting preferences
       let skipDisplayArray = defaults?.array(forKey: sortStringConsts.skipDisplayArray) as! [String]
       let skipValueArray = defaults?.array(forKey: sortStringConsts.skipValueArray) as! [Double]
@@ -66,6 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       defaultVideoPlayerPrefs.playbackControlStyle = videoControlStyle(rawValue: (defaults?.integer(forKey: playerConfigKeys.playerControlStyle))!)!
       defaultVideoPlayerPrefs.playbackShowFastForwardControls = (defaults?.bool(forKey: playerConfigKeys.playerSecondaryButtons))!
       defaultVideoPlayerPrefs.skipCutSections = (defaults?.bool(forKey: playerConfigKeys.playerHonourCuts))!
+      defaultVideoPlayerPrefs.filmStripSpacing = (defaults?.double(forKey: playerConfigKeys.filmStripSpacing))!
       NotificationCenter.default.post(name: Notification.Name(rawValue: playerDidChange), object: nil)
       
       // general preferences
@@ -103,10 +118,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     else {  // create initial userdefaults entry
       initSkipSettings()
       initSortPreferences()
+      initAdHunterPreferences()
       initGeneralSettings()
       initVideoPlayerPrefs()
       saveSkipPreference(defaultSkips)
       saveSortPreference(defaultSorting)
+      saveAdHunterPreference(defaultAdHunter)
       saveGeneralPreference(defaultGeneral)
       saveVideoPlayerPreference(defaultVideoPlayerPrefs)
     }
@@ -149,7 +166,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     defaultSorting.sortBy = sortStringConsts.byDate
     NotificationCenter.default.post(name: Notification.Name(rawValue: sortDidChange), object: nil)
   }
-  
+
+  /// create a system default sorting preferences
+  func initAdHunterPreferences()
+  {
+    defaultAdHunter.closingReport = 3.0
+    defaultAdHunter.nearEnough = 0.3
+    defaultAdHunter.isOverlayReporting = true
+    defaultAdHunter.isSpeechReporting = false
+    NotificationCenter.default.post(name: Notification.Name(rawValue: adHunterDidChange), object: nil)
+  }
+
   /// create system default skip button settings
   func initSkipSettings()
   {
@@ -222,6 +249,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     defaultSorting = sortOrder
     defaults?.set(sortOrder.isAscending, forKey: sortStringConsts.order)
     defaults?.set(sortOrder.sortBy, forKey: sortStringConsts.sortBy)
+  }
+  
+  /// commit preferences to userdefaults
+  func saveAdHunterPreference(_ hunterPreference: adHunterPreferences)
+  {
+    defaultAdHunter = hunterPreference
+    defaults?.set(hunterPreference.isOverlayReporting, forKey: adHunterStringConsts.visualClosing)
+    defaults?.set(hunterPreference.isSpeechReporting, forKey: adHunterStringConsts.speechClosing)
+    defaults?.set(hunterPreference.closingReport, forKey: adHunterStringConsts.closingBoundary)
+    defaults?.set(hunterPreference.nearEnough, forKey: adHunterStringConsts.nearEngoughThreshold)
   }
   
   /// commit preferences to userdefaults
@@ -312,6 +349,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     defaults?.set(defaultVideoPlayerPrefs.skipCutSections, forKey:playerConfigKeys.playerHonourCuts)
     defaults?.set(defaultVideoPlayerPrefs.playbackControlStyle.rawValue, forKey:playerConfigKeys.playerControlStyle)
     defaults?.set(defaultVideoPlayerPrefs.playbackShowFastForwardControls, forKey:playerConfigKeys.playerSecondaryButtons)
+    defaults?.set(defaultVideoPlayerPrefs.filmStripSpacing, forKey: playerConfigKeys.filmStripSpacing)
   }
  
   /// catch and handle menu "File Open Recent" selection

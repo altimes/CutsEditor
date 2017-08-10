@@ -43,6 +43,7 @@ enum CheckMarkState: Int {
 /// Notification identifiers
 let skipsDidChange = "CutsPreferenceControllerSkipsDidChange"
 let sortDidChange = "SortPreferenceControllerSortDidChange"
+let adHunterDidChange = "AdHunterPreferenceControllerDidChange"
 let generalDidChange = "GeneralPreferencesControllerGeneralDidChange"
 let playerDidChange = "PlayerPreferencesControllerDidChange"
 let fileOpenDidChange = "FileToOpenFromMenuDidChange"
@@ -120,6 +121,7 @@ struct videoPlayerPreferences {
   var playbackControlStyle : videoControlStyle = .inLine
   var playbackShowFastForwardControls: Bool = true // iff style is floating
   var skipCutSections: Bool = true  // play through out/in pairs (alternate is to skip over)
+  var filmStripSpacing: Double = 0.1
 }
 
 /// User configuration enum for type of bulk entry

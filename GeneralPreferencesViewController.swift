@@ -49,6 +49,7 @@ struct playerConfigKeys {
   static let playerControlStyle = "PlayerControlStyle"
   static let playerSecondaryButtons = "PlayerSecondaryButtons"
   static let playerHonourCuts = "PlayerHonourCuts"
+  static let filmStripSpacing = "FilmStripSpacing"
 }
 
 class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate

@@ -22,7 +22,7 @@ typealias MovieCutStartBlock  = (_ shortTitle: String) -> ()
 //  mutating func merge(with dictionary: Dictionary) {
 //    dictionary.forEach { updateValue($1, forKey: $0) }
 //  }
-//  
+//
 //  func merged(with dictionary: Dictionary) -> Dictionary {
 //    var dict = self
 //    dict.merge(with: dictionary)
@@ -39,7 +39,7 @@ struct logMessage {
 
 let nilString = "nil"
 
-class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate
+class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate, keyStrokeCatch
 {
   @IBOutlet weak var previousButton: NSButton!
   @IBOutlet weak var nextButton: NSButton!
@@ -67,7 +67,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBOutlet weak var seekButton2e: NSButton!
   @IBOutlet weak var inButton: NSButton!
   @IBOutlet weak var outButton: NSButton!
-//  @IBOutlet weak var markButton: NSButton!
+  //  @IBOutlet weak var markButton: NSButton!
   @IBOutlet weak var cutButton: NSButton!
   @IBOutlet weak var tenMarkButton: NSButton!
   
@@ -78,6 +78,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // MARK: model
   
   var movie = Recording()
+  
   var imageGenerator : AVAssetImageGenerator?
   
   let debug = false
@@ -143,7 +144,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if let entry = movie.cuts.firstInCutMark
       {
         if movie.cuts.inOutOnly.index(of: entry) == 0 {
-         pts = entry.cutPts
+          pts = entry.cutPts
         }
       }
       return pts
@@ -158,7 +159,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var finderOperationsQueue : OperationQueue?
   var localCutterOperationsQueue = CuttingQueue.localQueue()
   var systemSetup = systemConfiguration()
-
+  
   var currentFileColouringBlock : BlockOperation?
   var cutsModified : Bool {
     get {
@@ -168,6 +169,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   var skips = skipPreferences()
   var sortPrefs = sortingPreferences()
+  var adHunterPrefs = adHunterPreferences()
   var generalPrefs = generalPreferences()
   var playerPrefs = videoPlayerPreferences()
   
@@ -195,7 +197,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// object to perform speech processing
   var mySpeechRecogizer : NSSpeechRecognizer?
   
-  let frameGap: Double = 0.1         // seconds
+  var filestripFrameGap: Double = 0.2         // seconds
   var timelineView : TimelineView?
   
   /// track when frame changes to control suppression of
@@ -203,14 +205,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var monitorFrameChangeDate: Date?
   var oldPlayerRate : Float?
   
-//  /// track advert boundary hunting state
-//  var boundaryDoubleGreen = false
-
+  //  /// track advert boundary hunting state
+  //  var boundaryDoubleGreen = false
+  
   /// alias for typical button action from storyboard.
   /// function that has a NSButton arg and returns nothing
   typealias buttonAction = (NSButton) -> ()
   typealias FunctionAndButton = (action: buttonAction, button:NSButton)
-//  typealias buttonAction = (NSButton) -> ()
+  //  typealias buttonAction = (NSButton) -> ()
   /// Dictionary of voice commands with keys that have a one-to-one map to a GUI Button.
   /// TODO: do the I18N to make configurable.  Currrently static english
   var speechDictionary = [String: FunctionAndButton]()
@@ -229,6 +231,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     previousButton.isEnabled = false
     nextButton.isEnabled = false
+    cutButton.isEnabled = false
     fileWorkingName = StringsCuts.NO_FILE_CHOOSEN
     statusField.stringValue = StringsCuts.NO_DIRECTORY_SELECTED
     currentFile.removeAllItems()
@@ -246,6 +249,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     NotificationCenter.default.addObserver(self, selector: #selector(skipsChange(_:)), name: NSNotification.Name(rawValue: skipsDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sortChange(_:)), name: NSNotification.Name(rawValue: sortDidChange), object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(adHunterChange(_:)), name: NSNotification.Name(rawValue: adHunterDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(generalChange(_:)), name: NSNotification.Name(rawValue: generalDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(playerChange(_:)), name: NSNotification.Name(rawValue: playerDidChange), object: nil )
     
@@ -257,9 +261,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sawMonitorViewFrameChange(_:)), name: NSNotification.Name.NSViewFrameDidChange, object: self.monitorView)
     
-//    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
-//    
-//    addMatchingCutMark(toMark: prevCut)
+    //    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
+    //
+    //    addMatchingCutMark(toMark: prevCut)
     
     self.progressBar.controlTint = NSControlTint.clearControlTint
     self.view.window?.title = "CutListEditor"
@@ -272,6 +276,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
     stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
     stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
+    
+    /// Define voice commands that are equivalent to button clicks.
+    /// Dictionary key is the voice phrase required, value is a touple of the equivalent button
+    /// and its associated function.
     speechDictionary =
       [voiceCommands.advert: (inAdvertisment,backwardHuntButton),
        voiceCommands.program:(inProgram,forwardHuntButton),
@@ -286,24 +294,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
        voiceCommands.repeatLast:(seekToAction,seekButton2c)  // non-destructive initial value for "repeat last voice command"
     ]
     
+    /// Define keyboard commands that are equivalent to button clicks.
+    /// Dictionary key is the keystroke required, value is a touple of the equivalent button
+    /// and its associated function.
     defaultControlKeyDictionary =
       [keyBoardCommands.advert: (inAdvertisment,backwardHuntButton),
-        keyBoardCommands.program:(inProgram,forwardHuntButton),
-//        keyBoardCommands.done:(huntDone,doneHuntButton),
+       keyBoardCommands.program:(inProgram,forwardHuntButton),
+       //        keyBoardCommands.done:(huntDone,doneHuntButton),
         keyBoardCommands.reset:(huntReset,resetHuntButton),
         keyBoardCommands.inCut:(addMark,inButton),
         keyBoardCommands.outCut:(addMark,outButton),
         keyBoardCommands.skipForward:(seekToAction,seekButton2c),
         keyBoardCommands.skipBackward:(seekToAction,seekButton1c),
-      ]
-//    timeLine = createTimelineOverlayView()
-//    timeLine?.setNeedsDisplay((timeLine?.frame)!)
+    ]
     addTimeTextLabelsToFilmStrip()
- }
-  
-//  override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [NSObject : AnyObject]?, context: UnsafeMutablePointer<Void>) {
-//    
-//  }
+  }
   
   override func viewDidAppear() {
     // set window delegate
@@ -311,17 +316,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let origin = CGPoint(x:50,y:5)
     self.view.window?.setFrameOrigin(origin)
     self.monitorView.window!.delegate = self
+    updateTimeTextLabelsOfFilmStrip()
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
-//    print(#file+" "+#function)
+    if (debug) { printLog(log:(#file+" "+#function) as AnyObject) }
     return true
   }
- 
+  
   func sawMonitorViewFrameChange(_ notification: Notification)
   {
-    printLog(log: "Saw Monitor View Frame Change \(self.monitorView.frame)" as AnyObject)
-    printLog(log: "was playing \(wasPlaying)" as AnyObject)
+    if (debug) {
+      printLog(log: "Saw Monitor View Frame Change \(self.monitorView.frame)" as AnyObject)
+      printLog(log: "was playing \(wasPlaying)" as AnyObject)
+    }
     wasPlaying = isPlaying
     resetTimeLineViewFrame()
     monitorFrameChangeDate = Date()
@@ -342,7 +350,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // brute force shutdown app on window RED X window closure - I don't want to think about issues
   // related to multiple concurrent edits - does not have a valid use case IMHO
   func windowWillClose(_ notification: Notification) {
-//    print(#file+" "+#function)
+    //    print(#file+" "+#function)
     if let token = timeObserverToken
     {
       self.monitorView.player?.removeTimeObserver(token)
@@ -355,7 +363,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func windowWillMiniaturize(_ notification: Notification)
   {
-//    print(#file+" "+#function+" \(self.monitorView.player?.rate)")
+    //    print(#file+" "+#function+" \(self.monitorView.player?.rate)")
     if let activePlayer = self.monitorView.player
     {
       wasPlaying = (activePlayer.rate) > Float(0.0)
@@ -363,30 +371,30 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-//  func windowDidMiniaturize(_ notification: Notification) {
-////    print(#file+" "+#function)
-//  }
+  //  func windowDidMiniaturize(_ notification: Notification) {
+  ////    print(#file+" "+#function)
+  //  }
   
   func windowDidDeminiaturize(_ notification: Notification) {
     if wasPlaying {
       self.monitorView.player?.play()
     }
-//    print(#file+" "+#function)
+    //    print(#file+" "+#function)
   }
   
   
   /// Housekeeping Things to do on window closure
   override func viewDidDisappear() {
-//    print(#file+" "+#function)
-        super.viewDidDisappear()
+    //    print(#file+" "+#function)
+    super.viewDidDisappear()
   }
   
   /// Housekeeping Things to do after window closure
- 
+  
   override func viewWillDisappear() {
-//    print(#file+" "+#function)
-//    super.viewWillDisappear()
-//    NotificationCenter.default.removeObserver(self)
+    //    print(#file+" "+#function)
+    //    super.viewWillDisappear()
+    //    NotificationCenter.default.removeObserver(self)
   }
   
   func resetTimeLineViewFrame()
@@ -402,8 +410,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   override func viewDidLayout() {
     super.viewDidLayout()
     resetTimeLineViewFrame()
-//    print("viewDidLayoutCalled")
-//    print("monitor frame size \(self.monitorView.frame)")
+    //    print("viewDidLayoutCalled")
+    //    print("monitor frame size \(self.monitorView.frame)")
   }
   
   /// Observer function to handle the "seek" changes that are made
@@ -414,7 +422,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.skips = preferences.skipPreference()
     skipButtonGUISetup(self.skips)
   }
-
+  
   /// Performance function.  Retrieve the attributed strings
   /// from the currentFile NSPopUpButton and return for later
   /// re-use.  Working out the attributes is very costly and
@@ -446,7 +454,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     return (itemTitles, menuItemArray)
   }
- 
+  
   /// Restore the saved attributed strings to the popUpButton.
   /// find the index of the old string in the new popup button and
   /// transcribe the related tooltip and attributed title string
@@ -487,13 +495,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.currentFile.removeAllItems()
       self.currentFile.addItems(withTitles: namelist)
       restoreAttributedStringList(currentFile, itemTitles: itemTitles, menuItems: itemArray)
-
+      
       // reselect the current program in the resorted list
       currentFile.selectItem(at: filelist.index(of: savedCurrentDiskURL)!)
       mouseDownPopUpIndex = nil
       setPrevNextButtonState(filelistIndex)
       changeFile(filelistIndex)
     }
+  }
+  
+  /// Observer function to handle the "ad Hunter" changes that are made
+  /// during changes in the preferences dialog
+  
+  func adHunterChange(_ notification: Notification)
+  {
+    //    print("Saw call "+#function)
+    // get the changed ad hunter parameters and update the system responses to match
+    self.adHunterPrefs = preferences.adHunterPreference()
+    boundaryAdHunter?.setFromPreferences(prefs: self.adHunterPrefs)
   }
   
   /// Observer function to handle the "General Preferences" changes that are made
@@ -518,6 +537,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
     stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
     self.honourOutInMarks = playerPrefs.skipCutSections
+    self.filestripFrameGap = playerPrefs.filmStripSpacing
+    updateTimeTextLabelsOfFilmStrip()
   }
   
   /// Observer function that responds to the selection of
@@ -575,15 +596,36 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let index = (indexSelector == FileToHandle.current) ? filelistIndex : lastfileIndex
     var proceedWithWrite = true
     var abandonWrite = false
-    let validCuts = movie.isCuttable
-    guard (validCuts) else {
-      setStatusFieldStringValue(isLoggable: true, message: movie.cuts.lastValidationMessage)
-      NSBeep()
-      return false
-    }
+    let validCutsEntries = movie.hasCutsToPerform ? movie.isCuttable : true
+    
     guard cutsModified else {
       return true
     }
+    
+    if (!validCutsEntries)
+    {
+      setStatusFieldStringValue(isLoggable: true, message: movie.cuts.lastValidationMessage)
+      NSBeep()
+      let badCuts = NSAlert()
+      badCuts.alertStyle = NSAlertStyle.warning
+      let informativeText = movie.cuts.lastValidationMessage
+      badCuts.informativeText = informativeText
+      badCuts.window.title = "Cut Marks Problem"
+      badCuts.messageText = "Marks unbalanced"
+      badCuts.addButton(withTitle: "Abandon File Change")
+      badCuts.addButton(withTitle: "Save anyway")
+      badCuts.addButton(withTitle: "Abandon Save")
+      let result = badCuts.runModal()
+      if (result == NSAlertFirstButtonReturn)
+      {
+        return false
+      }
+      // do nothing, let the write process
+      proceedWithWrite = result == NSAlertSecondButtonReturn
+      // abandon write and proceed
+      abandonWrite = result == NSAlertThirdButtonReturn
+    }
+    
     if (generalPrefs.autoWrite == CheckMarkState.unchecked) {
       // pop up a modal dialog to confirm overwrite of cuts file
       let overWriteDialog = NSAlert()
@@ -595,7 +637,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       overWriteDialog.addButton(withTitle: "OK")
       overWriteDialog.addButton(withTitle: "Cancel")
       overWriteDialog.addButton(withTitle: "Don't Save")
-
+      
       let result = overWriteDialog.runModal()
       proceedWithWrite = result == NSAlertFirstButtonReturn
       abandonWrite = result == NSAlertThirdButtonReturn
@@ -644,28 +686,31 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   func removeOverlayView() {
-    if let view = getVideoOverlayView()
+    if let view = videoOverlayView
     {
       view.removeFromSuperview()
     }
   }
   
-  func getVideoOverlayView() -> NSTextView?
+  
+  var videoOverlayView : NSTextView?
   {
-    if let subViews = self.monitorView.contentOverlayView?.subviews {
-      for view in subViews {
-        if view.identifier == overlayViewId {
-          if let textView = view as? NSTextView
-          {
-            return textView
-          }
-          else {
-            return nil
+    get {
+      if let subViews = self.monitorView.contentOverlayView?.subviews {
+        for view in subViews {
+          if view.identifier == overlayViewId {
+            if let textView = view as? NSTextView
+            {
+              return textView
+            }
+            else {
+              return nil
+            }
           }
         }
       }
+      return nil
     }
-    return nil
   }
   
   func getTimeLineView() -> TimelineView?
@@ -690,12 +735,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     if let view = getTimeLineView()
     {
+      view.resignFirstResponder()
       view.layer?.removeFromSuperlayer()
       view.removeFromSuperview()
     }
   }
   
-
+  
   /// creates / updates an overlay on the video plane.
   ///
   func updateVideoOverlay(updateText: String?) {
@@ -707,7 +753,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     if (debug && updateText != nil) { print("\n\n<\(updateText!)>")}
     if let newText = updateText {
-      if let subView = getVideoOverlayView() {
+      if let subView = videoOverlayView {
         label = subView
         label.string = ""
       }
@@ -724,16 +770,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       var boundingRect = labelText.boundingRect(with: label.bounds.size, options: [])
       var stringWidth = boundingRect.width
       var stringHeight = boundingRect.height
-//      print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
+      //      print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
       while (stringWidth >= overlayWidth*fudgeFactor || stringHeight > overlayHeight*fudgeFactor && fontSize > CGFloat(12.0)) {
         fontSize -= 1.0
         labelText.setAttributes([NSFontAttributeName: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
-            boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSStringDrawingOptions.truncatesLastVisibleLine)
+        boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSStringDrawingOptions.truncatesLastVisibleLine)
         stringWidth = boundingRect.width
         stringHeight = boundingRect.height
-//        print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
+        //        print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
       }
-//      print("using font size \(fontSize)")
+      //      print("using font size \(fontSize)")
       label.textStorage?.append(labelText)
       label.textContainer?.widthTracksTextView = false
       label.textContainer?.containerSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -744,7 +790,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         context.duration = 2.0
         label.animator().alphaValue = 0.0
       }, completionHandler: {
-//        Swift.print("completed")
+        //        Swift.print("completed")
       })
       
     }
@@ -757,6 +803,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   let timelineHeight = CGFloat(25.0)
   let timeLineOrigin = CGPoint(x:50.0, y:50.0)
   
+  func timelineChanged()
+  {
+    let targetPosition = self.timelineView!.normalizedXPos
+    print("new Position = \(targetPosition)")
+    // calculate absolution seek to postion
+    let newAVPositionInSeconds = targetPosition * timelineView!.timeRangeSeconds
+    let seekTime = CMTime(seconds: newAVPositionInSeconds, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
+    self.monitorView.player?.currentItem?.seek(to: seekTime)
+  }
+  
   func createTimelineOverlayView() -> TimelineView
   {
     removeTimelineView()
@@ -764,12 +820,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let timeLineViewSize = CGSize(width: timelineWidth, height: timelineHeight)
     let timelineFrame = NSRect(origin: timeLineOrigin, size: timeLineViewSize)
     let timeRange = movie.getBestDurationAndApDurationInSeconds()
-    let thisTimeline = TimelineView(frame: timelineFrame, seconds: timeRange.ap)
+    // trap missing ap file gives an ap duration of 0
+    let useableRange = timeRange.ap != 0 ? timeRange.ap : timeRange.best
+    let thisTimeline = TimelineView(frame: timelineFrame, seconds: useableRange)
     thisTimeline.identifier = timelineViewId
+    thisTimeline.action = #selector(timelineChanged)
+    thisTimeline.target = self
     let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.4)
     thisTimeline.backgroundColor = timelineBackground
-
+    thisTimeline.keyCatchDelegate = self
+    
     self.monitorView.addSubview(thisTimeline)
+    thisTimeline.becomeFirstResponder()
     return thisTimeline
   }
   
@@ -804,35 +866,39 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     resetCurrentMovie()
     setStatusFieldToCurrentSelection()
     
-   
+    
     currentFile.toolTip = currentFile.selectedItem?.toolTip
     let actualFileName = filelist[filelistIndex].components(separatedBy: CharacterSet(charactersIn: "/")).last
     fileWorkingName = actualFileName!.removingPercentEncoding!
     let baseNameURL = filelist[filelistIndex].replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
     
     updateVideoOverlay(updateText: nil)
-//    updateHintOverlay(updateText: fileWorkingName)
+    //    updateHintOverlay(updateText: fileWorkingName)
     
     // load up a recording
     movie = Recording(rootURLName: baseNameURL)
     preferences.setMovie(movie: movie)
     if (debug) { movie.cuts.printCutsData() }
     self.cutsTable.reloadData()
+    cuttable = movie.isCuttable
     cutsUndoRedo = CutsEditCommnands(movie.cuts)
     
     // select begining of file or earliest bookmark if just a few
     if (movie.cuts.count>0 && movie.cuts.count<=3)
     {
-      let startPTS = Int64(movie.cuts.first!.cutPts)
-      startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
+      //      let startPTS = Int64(movie.cuts.first!.cutPts)
+      startTime = CMTimeMake(Int64(movie.ap.firstPTS), CutsTimeConst.PTS_TIMESCALE)
+      //      startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
     }
     else {
       startTime = CMTime(seconds: 0.0, preferredTimescale: 1)
     }
+    //    startTime = CMTime(seconds: 0.0, preferredTimescale: 1)
     
     // extract eit file information
     programTitle.stringValue = movie.eit.programNameText()
-    epsiodeTitle.stringValue = movie.eit.episodeText()
+    programTitle.textColor = movie.ap.hasPCRReset ? NSColor.orange : NSColor.black
+    epsiodeTitle.stringValue = movie.eit.episodeText
     programDescription.string = movie.eit.descriptionText()
     
     if (debug) { print(movie.meta.description()) }
@@ -849,7 +915,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let title  = titlewords[0..<min(ConstsCuts.titleWordsPick,titlewords.count)].joined(separator: " ")
         epsiodeTitle.stringValue = title
       }
-      programDescription.string = movie.eit.episodeText()
+      programDescription.string = movie.eit.episodeText
     }
     let TSNameURL = baseNameURL+ConstsCuts.TS_SUFFIX
     setupAVPlayerFor(TSNameURL, startTime: startTime)
@@ -858,14 +924,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let fileURL = URL(string: cutsNameURL)!
     if  let doc = try? TxDocument(contentsOf: fileURL, ofType: ConstsCuts.CUTS_SUFFIX)
     {
-       NSDocumentController.shared().noteNewRecentDocument(doc)
+      NSDocumentController.shared().noteNewRecentDocument(doc)
     }
     if (voiceWasOn) { toggleVoiceRecognition(microphoneButton)}
-//    print(mySpeechRecogizer?.commands)
-//    print("Have I started?")
+    //    print(mySpeechRecogizer?.commands)
+    //    print("Have I started?")
     NotificationCenter.default.post(name: Notification.Name(rawValue: movieDidChange), object: nil)
+    cuttable = movie.isCuttable
   }
-
+  
   // MARK: - button responders
   
   /// Direction choice used for stepping through a list of programs
@@ -895,7 +962,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       let adjustment = direction == .NEXT ? 1 : -1
       lastfileIndex = filelistIndex
-//      print("filelistIndex is now \(filelistIndex)")
+      //      print("filelistIndex is now \(filelistIndex)")
       currentFile.selectItem(at: lastfileIndex+adjustment)
       changeFile(filelistIndex)
       // check sucess of change file, filelistIndex reset to last file on failure
@@ -987,7 +1054,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         currentFile.toolTip = currentFile.selectedItem?.toolTip
         setPrevNextButtonState(indexSelected)
-     }
+      }
     }
     mouseDownPopUpIndex = nil
     boundaryAdHunter = nil
@@ -1004,7 +1071,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       return
     }
     resetSearch()
-
+    
     let completionBlock : FindCompletionBlock = {  foundList,  forSuffix,  wasCancelled in
       /// Call back function for each completed operation.
       /// Can return list of files, no files and SUCCESS
@@ -1020,6 +1087,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         self.listingOfFilesFinished()
         self.actionsSetEnabled(true)
+        //        self.cutButton.isEnabled = self.movie.isCuttable
       } else {
         self.fileSearchCancelled = false
         self.selectDirectory.isEnabled = true
@@ -1037,7 +1105,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let foundRootPath = rootPath
         self.progressBar.isHidden = false
         NotificationCenter.default.post(name: Notification.Name(rawValue: progressBarVisibilityChange), object: nil)
-
+        
         (isRemote, pvrIndex) = pvrLocalMount(containedIn: rootPath)
         if let maxFiles = countFilesWithSuffix(ConstsCuts.TS_SUFFIX, belowPath: foundRootPath)
         {
@@ -1070,8 +1138,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       sender.isEnabled = false
       statusField.stringValue = "Waiting on cancellation of search opertion"
     }
-   }
-
+  }
+  
   
   /// Used to determine from recording path which configuration should be used for
   /// setting up the "Cut" task.  Uses a the unchangable local name determining fi
@@ -1097,20 +1165,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func seekToAction(_ sender: NSButton) {
     if let key = skipButtons(rawValue: sender.tag) {
       switch key {
-        case skipButtons.MINUS_A: seekToSkip(skips.lhs[0].value)
-        case skipButtons.PLUS_A: seekToSkip(skips.rhs[0].value)
+      case skipButtons.MINUS_A: seekToSkip(skips.lhs[0].value)
+      case skipButtons.PLUS_A: seekToSkip(skips.rhs[0].value)
         
-        case skipButtons.MINUS_B: seekToSkip(skips.lhs[1].value)
-        case skipButtons.PLUS_B: seekToSkip(skips.rhs[1].value)
+      case skipButtons.MINUS_B: seekToSkip(skips.lhs[1].value)
+      case skipButtons.PLUS_B: seekToSkip(skips.rhs[1].value)
         
-        case skipButtons.MINUS_C: seekToSkip(skips.lhs[2].value)
-        case skipButtons.PLUS_C: seekToSkip(skips.rhs[2].value)
+      case skipButtons.MINUS_C: seekToSkip(skips.lhs[2].value)
+      case skipButtons.PLUS_C: seekToSkip(skips.rhs[2].value)
         
-        case skipButtons.MINUS_D: seekToSkip(skips.lhs[3].value)
-        case skipButtons.PLUS_D: seekToSkip(skips.rhs[3].value)
+      case skipButtons.MINUS_D: seekToSkip(skips.lhs[3].value)
+      case skipButtons.PLUS_D: seekToSkip(skips.rhs[3].value)
         
-        case skipButtons.MINUS_E: seekToSkip(skips.lhs[4].value)
-        case skipButtons.PLUS_E: seekToSkip(skips.rhs[4].value)
+      case skipButtons.MINUS_E: seekToSkip(skips.lhs[4].value)
+      case skipButtons.PLUS_E: seekToSkip(skips.rhs[4].value)
       }
     }
     boundaryHuntReset()
@@ -1128,8 +1196,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let names1Array = s1.programeName.components(separatedBy: kHyphen)
     let names2Array = s2.programeName.components(separatedBy: kHyphen)
     if (names1Array.count >= 3 && names2Array.count >= 3) { // pick name from expected
-     names1 = names1Array[2 ... names1Array.count-1].joined(separator: kHyphen)
-     names2 = names2Array[2 ... names2Array.count-1].joined(separator: kHyphen)
+      names1 = names1Array[2 ... names1Array.count-1].joined(separator: kHyphen)
+      names2 = names2Array[2 ... names2Array.count-1].joined(separator: kHyphen)
     }
     else { // not expected format use full name
       names1 = s1.programeName
@@ -1177,7 +1245,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     return greaterThan
   }
- 
+  
   /// Build a namePair array using the namelist as a base
   /// and sort it by name.
   /// Used when user changes the preference sorting configuration
@@ -1270,7 +1338,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     // check that a file of the given name exists
     // can still get into trouble after this from network failures
-    // but that level of network robustness needs to be built in at a 
+    // but that level of network robustness needs to be built in at a
     // much lower level and is for another day
     guard (fileManager.fileExists(atPath: filename) ) else {
       return false
@@ -1305,46 +1373,46 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func sortFilelist()
   {
-      var namePairs = [namePair]()
-      for diskName in filelist
-      {
-        let programNameComponent = diskName.components(separatedBy: CharacterSet(charactersIn: "/")).last
-        let programName = programNameComponent!.removingPercentEncoding!
-        let pair = namePair(diskURL: diskName, programeName: programName)
-        namePairs.append(pair)
-      }
-      
-      sortNamePairs(&namePairs)
-      buildNameFileListFrom(namePairs)
-      
-      self.currentFile.removeAllItems()
-      self.currentFile.addItems(withTitles: namelist)
-//      var durations = [Double](repeating:0.0, count:namelist.count)
-//      durations = apDurations(files: filelist)
-      // add a tip of the actual file path
-      for index in 0 ..< self.currentFile.itemArray.count {
-        let path = filelist[index].replacingOccurrences(of: "file://", with: "")
-//        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding! + " (" + CutEntry.hhMMssFromSeconds(durations[index])+")"
-        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding!
-      }
+    var namePairs = [namePair]()
+    for diskName in filelist
+    {
+      let programNameComponent = diskName.components(separatedBy: CharacterSet(charactersIn: "/")).last
+      let programName = programNameComponent!.removingPercentEncoding!
+      let pair = namePair(diskURL: diskName, programeName: programName)
+      namePairs.append(pair)
+    }
+    
+    sortNamePairs(&namePairs)
+    buildNameFileListFrom(namePairs)
+    
+    self.currentFile.removeAllItems()
+    self.currentFile.addItems(withTitles: namelist)
+    //      var durations = [Double](repeating:0.0, count:namelist.count)
+    //      durations = apDurations(files: filelist)
+    // add a tip of the actual file path
+    for index in 0 ..< self.currentFile.itemArray.count {
+      let path = filelist[index].replacingOccurrences(of: "file://", with: "")
+      //        self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding! + " (" + CutEntry.hhMMssFromSeconds(durations[index])+")"
+      self.currentFile.item(at: index)?.toolTip = path.removingPercentEncoding!
+    }
   }
   
-//  /// Build an array matching the list of files with the correspodning
-//  /// calculated rutime of the recording
-//  /// - parameter files: array of fully specified disk paths
-//  /// - returns: array of same size as input with duration of related file in seconds
-//  func apDurations(files list:[String]) -> [Double]
-//  {
-//    var durations = [Double](repeating: 0.0, count:list.count)
-//    for fileIndex in 0 ..< list.count {
-//      let filename = list[fileIndex]
-//      if let urlName = URL(string: filename.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))
-//      {
-//        durations[fileIndex] = AccessPoints(url:urlName)?.durationInSecs() ?? 0.0
-//      }
-//    }
-//    return durations
-//  }
+  //  /// Build an array matching the list of files with the correspodning
+  //  /// calculated rutime of the recording
+  //  /// - parameter files: array of fully specified disk paths
+  //  /// - returns: array of same size as input with duration of related file in seconds
+  //  func apDurations(files list:[String]) -> [Double]
+  //  {
+  //    var durations = [Double](repeating: 0.0, count:list.count)
+  //    for fileIndex in 0 ..< list.count {
+  //      let filename = list[fileIndex]
+  //      if let urlName = URL(string: filename.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.AP_SUFFIX))
+  //      {
+  //        durations[fileIndex] = AccessPoints(url:urlName)?.durationInSecs() ?? 0.0
+  //      }
+  //    }
+  //    return durations
+  //  }
   
   /// Routine to work out the colour coding for the list of programs.
   /// This can be a lengthy task and is done as a detached process with
@@ -1364,9 +1432,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     blockOperation.addExecutionBlock (
       { [weak weakself = self] in
         var attributedStrings = [NSAttributedString]()
-//        let trailingDurationRegexString = " ([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\)$" // eg " (01:23:35)"
+        //        let trailingDurationRegexString = " ([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\)$" // eg " (01:23:35)"
         // progressively construct a duplicate of NSPopUpButton to query & update without interfering with UI
-        for index in 0 ..< self.namelist.count
+        var index = 0
+        var moreToDo = (weakself != nil) ? index < weakself!.namelist.count : false
+        while moreToDo
         {
           // each time through the loop check that we are still wanted
           if blockOperation.isCancelled {
@@ -1374,32 +1444,35 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             break
           }
           if let (fontAttribute, colourAttribute, apDuration) = weakself?.getFontAttributesDurationForIndex(index) {
-          if let menuItem = self.currentFile.item(at: index)
-          {
-            attributedStrings.append(NSAttributedString(string: menuItem.title, attributes:[NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName:fontAttribute]))
-            if let pathURL = weakself?.filelist[index],
-               let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
+            if let menuItem = weakself?.currentFile.item(at: index)
             {
-              menuItem.toolTip = tooltip
+              attributedStrings.append(NSAttributedString(string: menuItem.title, attributes:[NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName:fontAttribute]))
+              if let pathURL = weakself?.filelist[index],
+                let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
+              {
+                menuItem.toolTip = tooltip
+              }
+              // else: no path == no tooltip (duh)
             }
-            // else: no path == no tooltip (duh)
-          }
-          // update the application each time we have completed one program except the last
-          if (index < self.namelist.count-1) {
-            OperationQueue.main.addOperation (
-            {
-              self.progressBar.doubleValue = Double(index)
-              self.statusField.stringValue = "Working out title colour coding in background"
-            })
+            // update the application each time we have completed one program except the last
+            if (index < (weakself?.namelist.count)!-1) {
+              OperationQueue.main.addOperation (
+                {
+                  weakself?.progressBar.doubleValue = Double(index)
+                  weakself?.statusField.stringValue = "Working out title colour coding in background"
+              })
             }
           }
+          // increment loop and update control flag
+          index += 1
+          moreToDo = (weakself != nil) ? index < weakself!.namelist.count : false
         }
         
         if (resultNotWanted) {
           OperationQueue.main.addOperation (
             {
-              self.statusField.stringValue = StringsCuts.COLOUR_CODING_CANCELLED
-              self.progressBar.isHidden = true
+              weakself?.statusField.stringValue = StringsCuts.COLOUR_CODING_CANCELLED
+              weakself?.progressBar.isHidden = true
               NotificationCenter.default.post(name: Notification.Name(rawValue: (weakself?.progressBarVisibilityChange)!), object: nil)
             }
           )
@@ -1407,15 +1480,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         else {        // completed normally
           OperationQueue.main.addOperation (
             {
-              for index in 0 ..< self.namelist.count
+              if let listCount = weakself?.namelist.count
               {
-                self.currentFile.item(at: index)?.attributedTitle = attributedStrings[index]
+                for index in 0 ..< listCount
+                {
+                  weakself?.currentFile.item(at: index)?.attributedTitle = attributedStrings[index]
+                }
+                // now as we have been scribbling in the status field, we ensure that is brought
+                // back into sync with the current user selection
+                weakself?.setStatusFieldToCurrentSelection()
+                weakself?.progressBar.isHidden = true
+                NotificationCenter.default.post(name: Notification.Name(rawValue: (weakself?.progressBarVisibilityChange)!), object: nil)
               }
-              // now as we have been scribbling in the status field, we ensure that is brought
-              // back into sync with the current user selection
-              self.setStatusFieldToCurrentSelection()
-              self.progressBar.isHidden = true
-              NotificationCenter.default.post(name: Notification.Name(rawValue: (weakself?.progressBarVisibilityChange)!), object: nil)
             }
           )
         }
@@ -1462,8 +1538,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       // override if it is a short
       if (colourState == .noBookmarksColour  &&
-          (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD)) {
-          colourState = .allDoneColour
+        (thisProgramDuration > 0.0 && thisProgramDuration < fileColourParameters.PROGRAM_LENGTH_THRESHOLD)) {
+        colourState = .allDoneColour
       }
     }
     else { // no cuts data implies unprocessed (not guaranteed since a cut program, may simply have no bookmarks but....)
@@ -1487,14 +1563,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Processed fully if more that 5 bookmarks (green)
   /// Processed partially if IN and/or OUT marks present (blue)
   /// Unprocessed if less than 5 bookmarks (red)
-
+  
   func setDropDownColourForIndex(_ index: Int)
   {
     let (fontAttribute, colourAttribute, apDuration) = getFontAttributesDurationForIndex(index)
     if  let menuItem = currentFile.item(at: index)
     {
-//      let path = filelist[index].replacingOccurrences(of: "file://", with: "")
-//      let tooltip = (path.removingPercentEncoding!) + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
+      //      let path = filelist[index].replacingOccurrences(of: "file://", with: "")
+      //      let tooltip = (path.removingPercentEncoding!) + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
       let tooltip = tooltipFrom(url: filelist[index], duration: apDuration)
       
       menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName: fontAttribute])
@@ -1505,7 +1581,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Construct the dropdown tool tip to be full (local) path and the calculated duration
   /// of the recording
   /// - parameter url: file:// style url
-  /// - parameter apDuration: the duration of the recording in seconds
+  /// - parameter duration: the duration of the recording in seconds
   /// - returns: formatted string
   
   func tooltipFrom(url: String, duration: Double ) -> String
@@ -1531,7 +1607,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// callback function when detached file search process has finished
-  /// creates the NSPopButton (dropdown list) of programs to be 
+  /// creates the NSPopButton (dropdown list) of programs to be
   /// handled
   
   func listingOfFilesFinished()
@@ -1549,7 +1625,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     setPrevNextButtonState(filelistIndex)
     changeFile(filelistIndex)
   }
-
+  
   override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if (menuItem.action == #selector(clearBookMarks(_:))
       || menuItem.action == #selector(clearCutMarks(_:))
@@ -1560,7 +1636,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       return (filelist.count > 0 )
     }
     else if (menuItem.action == #selector(add10Bookmarks(_:))) {
-      return cuttable && (filelist.count > 0 )
+      return (filelist.count > 0 )
     }
     else if (menuItem.action == #selector(undo(_:))) {
       print("undo is \(cutsUndoRedo?.undoEmpty ?? false)")
@@ -1568,7 +1644,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else if ( menuItem.action == #selector(redo(_:))) {
       print("redo is \(cutsUndoRedo?.isRedoPossible ?? false)")
-    return cutsUndoRedo?.isRedoPossible ?? false
+      return cutsUndoRedo?.isRedoPossible ?? false
     }
     else {
       return true
@@ -1598,15 +1674,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     seekButton2d.isEnabled = state
     seekButton2e.isEnabled = state
     //    markButton.enabled = state
-    cutButton.isEnabled = state
+    //    cutButton.isEnabled = state
     tenMarkButton.isEnabled = state
     inButton.isEnabled = state
     outButton.isEnabled = state
     currentFile.isEnabled = state
     if (state)
     {
-     setPrevNextButtonState(filelistIndex)
-     deleteRecordingButton.isEnabled = (filelist.count > 0) && progressBar.isHidden
+      setPrevNextButtonState(filelistIndex)
+      deleteRecordingButton.isEnabled = (filelist.count > 0) && progressBar.isHidden
     }
     else {
       previousButton.isEnabled = state
@@ -1620,6 +1696,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func resetGUI()
   {
     programTitle.stringValue = ""
+    programTitle.textColor = NSColor.black
     programDescription.string = ""
     epsiodeTitle.stringValue = ""
     cutsTable.reloadData()
@@ -1772,16 +1849,31 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             }
             
             let videoDuration = CMTimeGetSeconds((self.monitorView.player?.currentItem?.duration)!)
+            movie.videoDurationFromPlayer = videoDuration
             let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
             let durationsInSecs = movie.getBestDurationAndApDurationInSeconds(playerDuration: videoDuration)
             programDurationInSecs = durationsInSecs.best
             
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
-            self.programDuration.toolTip = recordingDurations(movie: movie).joined(separator: "\n").appending(videoDurationString)
-            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
+            self.programDuration.toolTip = movie.durationStrings.joined(separator: "\n").appending(videoDurationString)
+//            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
+            let startTime = CMTimeMake(Int64(0), CutsTimeConst.PTS_TIMESCALE)
+            
             if (self.monitorView.player?.status == .readyToPlay)
             {
               self.monitorView.player?.seek(to: startTime, completionHandler: seekCompletedOK)
+              updateCutsMarksGUI()
+              // report seekable ranges
+              if let availableRanges = self.monitorView.player?.currentItem?.seekableTimeRanges
+              {
+                for range in availableRanges
+                {
+                  if let timeRange = range as? CMTimeRange
+                  {
+                    print("range of \(timeRange.start.seconds)  duration: \(timeRange.duration.seconds)")
+                  }
+                }
+              }
             }
             self.actionsSetEnabled(true)
           case .unknown:
@@ -1809,12 +1901,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             let videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
             let durationsInSecs = movie.getBestDurationAndApDurationInSeconds(playerDuration: videoDuration)
             programDurationInSecs = durationsInSecs.best
-           if (debug) {
+            if (debug) {
               print("Player ready to play")
               print("metadata duration = \(movie.meta.duration)")
             }
             self.programDuration.stringValue = CutEntry.timeTextFromPTS(UInt64(movie.meta.duration)!).appending(videoDurationString)
-            self.programDuration.toolTip = recordingDurations(movie: movie).joined(separator: "\n")
+            self.programDuration.toolTip = movie.durationStrings.joined(separator: "\n")
             let startTime = (movie.cuts.count>=1) ? movie.cuts.firstMarkTime : CMTime(seconds: 0, preferredTimescale: 1)
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -1833,38 +1925,38 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       print("change dict \(keyPath!) = \(String(describing: change))")
       if let newRate = change?[NSKeyValueChangeKey.newKey] as? Double
       {
-//        wasPlaying = newRate != 0.0
+        //        wasPlaying = newRate != 0.0
         let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
-        print("time control = \(timeControlString)")
+        if (debug) { print("time control = \(timeControlString)") }
         if let errorState = self.monitorView.player?.error
         {
           print("Error state= \(errorState)")
         }
-
+        
         if let timeDelta = monitorFrameChangeDate?.timeIntervalSinceNow {
-//          print("diff to frame change = \(timeDelta)")
-//          if timeDelta < -0.1
-//          {
-//            
-//            oldPlayerRate = self.monitorView.player?.rate
-//          }
-//          else {
-//            oldPlayerRate = nil
-//          }
+          //          print("diff to frame change = \(timeDelta)")
+          //          if timeDelta < -0.1
+          //          {
+          //
+          //            oldPlayerRate = self.monitorView.player?.rate
+          //          }
+          //          else {
+          //            oldPlayerRate = nil
+          //          }
         }
         if (debug) { printLog(log: "new value of player rate = \(newRate)" as AnyObject) }
         if (newRate == 0.0  && imageGenerator != nil)
         {
           print("Saw rate Change")
-//          updateFilmStripSynchronous(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
-          updateFilmStripFor(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+          //          updateFilmStripSynchronous(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+          updateFilmStripFor(time: (monitorView.player?.currentTime())!, secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
         }
       }
     }
     else {
       super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
     }
- }
+  }
   
   // from https://stackoverflow.com/questions/33364491/why-print-in-swift-does-not-log-the-time-stamp-as-nslog-in-objective-c
   func printLog(log: AnyObject?) {
@@ -1908,7 +2000,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func setupAVPlayerFor(_ fileURL:String, startTime: CMTime)
   {
     if (debug) { print ("Setting up av Player with string <\(fileURL)") }
-
+    
     // remove observers before instantiating new objects
     removePlayerObserversAndItem()
     
@@ -1916,7 +2008,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let avAsset = AVURLAsset(url: videoURL)
     if (debug) { print("available formats:  \(avAsset.availableMetadataFormats)") }
     
-    // ensure all track durations are valid - don't known enough video to 
+    // ensure all track durations are valid - don't known enough video to
     // write bad video recovery functions
     var durationIsValid = true
     for trackAsset in avAsset.tracks {
@@ -1926,19 +2018,23 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         print("Asset formatDescriptions:\(trackAsset.formatDescriptions)")
         print("Asset mediaType:\(trackAsset.mediaType)")
       }
+      let frameRate = Double(trackAsset.nominalFrameRate)
+      if (debug) { print ("Found frame rate of \(frameRate)") }
       if (trackAsset.mediaType == AVMediaTypeVideo)
       {
         imageGenerator = AVAssetImageGenerator(asset: avAsset)
-        imageGenerator!.requestedTimeToleranceBefore = CMTime(seconds: 1.0/25.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
-        imageGenerator!.requestedTimeToleranceAfter = CMTime(seconds: 1.0/25.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
-//        imageGenerator?.requestedTimeToleranceAfter = kCMTimeZero
-//        imageGenerator?.requestedTimeToleranceBefore = kCMTimeZero
+        let frameTolerance = 1.0/(frameRate/2.0) // twice the frame rate to give some slack and allow picking I frame
+        imageGenerator!.requestedTimeToleranceBefore = CMTime(seconds: frameTolerance, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
+        imageGenerator!.requestedTimeToleranceAfter = CMTime(seconds: frameTolerance, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
+        //        imageGenerator?.requestedTimeToleranceAfter = kCMTimeZero
+        //        imageGenerator?.requestedTimeToleranceBefore = kCMTimeZero
         let imageSize = CGSize(width:self.filmstrip.frame.height*(16.0/9.0), height:self.filmstrip.frame.height)
-
+        
         imageGenerator?.maximumSize = imageSize
         imageGenerator?.appliesPreferredTrackTransform = true
-//        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
-        updateFilmStripFor(time: CMTime(seconds:10.0+3.0*frameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
+        imageGenerator?.apertureMode = AVAssetImageGeneratorApertureModeProductionAperture
+        //        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
+        updateFilmStripFor(time: CMTime(seconds:10.0+3.0*filestripFrameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
       }
       let track = trackAsset.asset!
       let duration = track.duration
@@ -1948,13 +2044,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (durationIsValid)
     {
       let avItem = AVPlayerItem(asset: avAsset)
-//      print("canPlayReverse -> \(avItem.canPlayReverse)")
-//      print("canStepForward -> \(avItem.canStepForward)")
-//      print("canStepBackward -> \(avItem.canStepBackward)")
-//      print("canPlayFastForward -> \(avItem.canPlayFastForward)")
-//      print("canPlayFastReverse -> \(avItem.canPlayFastReverse)")
-//      print("canPlaySlowForward -> \(avItem.canPlaySlowForward)")
-//      print("canPlaySlowReverse -> \(avItem.canPlaySlowReverse)")
+      //      print("canPlayReverse -> \(avItem.canPlayReverse)")
+      //      print("canStepForward -> \(avItem.canStepForward)")
+      //      print("canStepBackward -> \(avItem.canStepBackward)")
+      //      print("canPlayFastForward -> \(avItem.canPlayFastForward)")
+      //      print("canPlayFastReverse -> \(avItem.canPlayFastReverse)")
+      //      print("canPlaySlowForward -> \(avItem.canPlaySlowForward)")
+      //      print("canPlaySlowReverse -> \(avItem.canPlaySlowReverse)")
       
       avItem.addObserver(self, forKeyPath: "tracks", options: NSKeyValueObservingOptions.new, context: nil)
       avItem.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
@@ -1969,12 +2065,28 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle : playerStringConsts.stepButtonTitle
       self.monitorView.player?.seek(to: startTime)
       self.addPeriodicTimeObserver()
-   }
+    }
     else {
       self.statusField.stringValue = "Invalid Time duration cannot work with"
     }
     timelineView = createTimelineOverlayView()
-    updateCutsMarksGUI()
+    if (debug) {
+      printResponderChain(responder: timelineView)
+      print("++")
+      updateCutsMarksGUI()
+      printResponderChain(responder: self)
+      print("--")
+    }
+  }
+  
+  // Curtesy of stackoverflow
+  func printResponderChain( responder: NSResponder?)
+  {
+    guard let thisResponder = responder else {
+      return
+    }
+    printLog(log: thisResponder)
+    printResponderChain(responder: thisResponder.nextResponder)
   }
   
   func singleImageAtTime( seconds: Double, generator: AVAssetImageGenerator, imageSize:CGSize?) -> NSImage?
@@ -1989,7 +2101,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       print("Got image at times: Asked for  \(requestedTimeString), got \(actualTimeString)");
       
       // Do something interesting with the image.
-//      print("image size is \(image.width)/\(image.height)")
+      //      print("image size is \(image.width)/\(image.height)")
       scaledImage = (imageSize != nil) ? NSImage(cgImage: image, size: imageSize!):NSImage(cgImage: image, size:NSSize(width:image.width, height: image.height))
     }
     catch let error as NSError {
@@ -1999,7 +2111,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   
-  /// Create  text label
+  /// Create text label
   
   let textFontName = "Helvetica-Bold"
   
@@ -2011,7 +2123,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let textframe = frame.insetBy(dx: insetWidth, dy: insetHeight)
     let label = NSTextField(frame: textframe)
     label.stringValue = deltaValue
-//    label.sizeToFit()
+    //    label.sizeToFit()
     let textBackgroundColour = NSColor.yellow.withAlphaComponent(0.01)
     label.backgroundColor = textBackgroundColour
     label.identifier = "timetextLabel" + "\(withId)"
@@ -2021,7 +2133,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return label
   }
   
-  func timeDeltaCATextLayer(deltaValue : String, in frame:NSRect, withId: Int) -> CATextLayer
+  func timeDeltaCATextLayer(deltaValue : String, in frame:NSRect) -> CATextLayer
   {
     // 10 % inset from image
     let fontHeight = CGFloat(20.0)
@@ -2041,10 +2153,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let transWhite = NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.7)
     deltaTextLayer.alignmentMode = kCAAlignmentCenter
     deltaTextLayer.foregroundColor = transWhite.cgColor
-//    deltaTextLayer.alignment = NSTextAlignment.justified
+    //    deltaTextLayer.alignment = NSTextAlignment.justified
     return deltaTextLayer
   }
- 
+  
   let defaultFilmstripImage = NSImage(imageLiteralResourceName: "scissors_icon-icons.com_50046-128.png")
   
   func getDefaultFilmStripImageForView(_ bounds:NSRect) -> NSImage
@@ -2061,14 +2173,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func scaleImageForFilmStripSize(filmStripSize: CGSize, image: CGImage) -> NSImage
   {
     let imageSize = CGSize(width:filmStripSize.height*(16.0/9.0), height:filmStripSize.height)
-//    var imageRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-//    let cgFrameImageRef = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
-//    let viewWidth = bounds.height * (16.0/9.0)
-//    let viewSize = CGSize(width: viewWidth, height: bounds.height)
+    //    var imageRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+    //    let cgFrameImageRef = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+    //    let viewWidth = bounds.height * (16.0/9.0)
+    //    let viewSize = CGSize(width: viewWidth, height: bounds.height)
     let resizedImage = NSImage(cgImage: image, size: imageSize)
     return resizedImage
     
   }
+  
   // add a transparent overlay label to show the time delta of the frame
   // in relationship to the centre frame
   // only called at view setup time (ie once only)
@@ -2076,18 +2189,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func addTimeTextLabelsToFilmStrip()
   {
     // TODO: Add to user configuration
-    let secondsApart = 0.1    // nominal initial value
-    let nominalCentreFrametime = 0.3
+    let secondsApart = filestripFrameGap    // nominal initial value
     let frames = self.filmstrip.arrangedSubviews.count
+    let nominalCentreFrametime = Double(frames/2) * secondsApart
     let startDelta = Double(frames / 2) * secondsApart
     var frameDelta = startDelta * -1.0
     var startTimeInSeconds = nominalCentreFrametime - startDelta
     // static starter image
     let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
     let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
-//    print("image frame is \(imageFrame)")
+    //    print("image frame is \(imageFrame)")
     
-    var identifierIndex = 0
     for view in self.filmstrip.arrangedSubviews
     {
       // round the corners of the "frame"
@@ -2100,133 +2212,157 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         imageLayer.contents = resizedImage
         imageLayer.frame = imageFrame
         layer.addSublayer(imageLayer)
-          
-        var deltaString = String.init(format: "%.2f", frameDelta)
-        // suppress "-0.0" output from formatting
-        if abs(frameDelta) <= 0.0001 {
-          deltaString = " 0.00"
-        }
-        if frameDelta >= 0.0001 {
-          deltaString = "+"+deltaString
-        }
-        let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame, withId: identifierIndex)
+        
+        let deltaString = filmStripTextFromDeltaSecs(frameDelta)
+        let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame)
         
         imageLayer.addSublayer(textLayer)
       }
       frameDelta += secondsApart
       startTimeInSeconds += secondsApart
-      identifierIndex += 1
+    }
+  }
+  
+  func filmStripTextFromDeltaSecs(_ frameDelta: Double) -> String
+  {
+    var deltaString = String.init(format: "%.2f", frameDelta)
+    // suppress "-0.0" output from formatting
+    if abs(frameDelta) <= 0.0001 {
+      deltaString = " 0.00"
+    }
+    if frameDelta >= 0.0001 {
+      deltaString = "+"+deltaString
+    }
+    return deltaString
+  }
+  
+  /// replaces the transparent overlay label that shows the time delta of the thumbnail
+  /// called when user changes filmstrip gap in preferences
+  
+  func updateTimeTextLabelsOfFilmStrip()
+  {
+    let secondsApart = filestripFrameGap  // from user prefs
+    let frames = self.filmstrip.arrangedSubviews.count
+    let nominalCentreFrametime = Double(frames/2) * secondsApart
+    let startDelta = Double(frames / 2) * secondsApart
+    var frameDelta = startDelta * -1.0
+    var startTimeInSeconds = nominalCentreFrametime - startDelta
+    
+    for view in self.filmstrip.arrangedSubviews
+    {
+      let deltaString = filmStripTextFromDeltaSecs(frameDelta)
+      if view.wantsLayer {
+        if let imageLayer = view.layer!.sublayers?[0] {
+          let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame)
+          let oldTextLayer = imageLayer.sublayers?[0]
+          oldTextLayer?.removeFromSuperlayer()
+          imageLayer.addSublayer(textLayer)
+        }
+      }
+      frameDelta += secondsApart
+      startTimeInSeconds += secondsApart
     }
   }
   
   /* original function before trying layers instead of views
    
-  func addTimeTextLabelsToFilmStrip()
-  {
-    // TODO: Add to user configuration
-    let secondsApart = 0.1    // nominal initial value
-    let nominalCentreFrametime = 0.3
-    let frames = self.filmstrip.arrangedSubviews.count
-    let startDelta = Double(frames / 2) * secondsApart
-    var frameDelta = startDelta * -1.0
-    var startTimeInSeconds = nominalCentreFrametime - startDelta
-    // static starter image
-    let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
-    let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
-    //    print("image frame is \(imageFrame)")
-    
-    var identifierIndex = 0
-    for view in self.filmstrip.arrangedSubviews
-    {
-      // round the corners of the "frame"
-      view.wantsLayer = true
-      if let layer = view.layer {
-        layer.backgroundColor = NSColor.blue.cgColor
-        layer.cornerRadius = 0.1 * layer.bounds.width
-        layer.masksToBounds = true
-      }
-      //      print("intrinsic view size is \(view.intrinsicContentSize)")
-      //      print("initial view frame is \(view.frame)")
-      let imageView = view as! NSImageView
-      //      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
-      imageView.image = resizedImage
-      imageView.frame = imageFrame
-      var deltaString = String.init(format: "%.2f", frameDelta)
-      // suppress "-0.0" output from formatting
-      if abs(frameDelta) <= 0.0001 {
-        deltaString = " 0.00"
-      }
-      if frameDelta >= 0.0001 {
-        deltaString = "+"+deltaString
-      }
-      let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame, withId: identifierIndex)
-      //      print ("label position =\(label.frame), label size = \(label.bounds)")
-      frameDelta += secondsApart
-      imageView.addSubview(label)
-      imageView.setFrameSize(imageFrame.size)
-      //      print("post view frame is \(view.frame)")
-      //      print("post processing view size \(view.fittingSize)")
-      startTimeInSeconds += secondsApart
-      identifierIndex += 1
-    }
-  }
-  
-*/
+   func addTimeTextLabelsToFilmStrip()
+   {
+   // TODO: Add to user configuration
+   let secondsApart = 0.1    // nominal initial value
+   let nominalCentreFrametime = 0.3
+   let frames = self.filmstrip.arrangedSubviews.count
+   let startDelta = Double(frames / 2) * secondsApart
+   var frameDelta = startDelta * -1.0
+   var startTimeInSeconds = nominalCentreFrametime - startDelta
+   // static starter image
+   let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
+   let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
+   //    print("image frame is \(imageFrame)")
+   
+   var identifierIndex = 0
+   for view in self.filmstrip.arrangedSubviews
+   {
+   // round the corners of the "frame"
+   view.wantsLayer = true
+   if let layer = view.layer {
+   layer.backgroundColor = NSColor.blue.cgColor
+   layer.cornerRadius = 0.1 * layer.bounds.width
+   layer.masksToBounds = true
+   }
+   //      print("intrinsic view size is \(view.intrinsicContentSize)")
+   //      print("initial view frame is \(view.frame)")
+   let imageView = view as! NSImageView
+   //      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
+   imageView.image = resizedImage
+   imageView.frame = imageFrame
+   var deltaString = String.init(format: "%.2f", frameDelta)
+   // suppress "-0.0" output from formatting
+   if abs(frameDelta) <= 0.0001 {
+   deltaString = " 0.00"
+   }
+   if frameDelta >= 0.0001 {
+   deltaString = "+"+deltaString
+   }
+   let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame, withId: identifierIndex)
+   //      print ("label position =\(label.frame), label size = \(label.bounds)")
+   frameDelta += secondsApart
+   imageView.addSubview(label)
+   imageView.setFrameSize(imageFrame.size)
+   //      print("post view frame is \(view.frame)")
+   //      print("post processing view size \(view.fittingSize)")
+   startTimeInSeconds += secondsApart
+   identifierIndex += 1
+   }
+   }
+   
+   */
   
   // slow and synchronous for developement testing only
   func updateFilmStripSynchronous(time: CMTime, secondsApart: Double, imageGenerator: AVAssetImageGenerator)
   {
     let frames = self.filmstrip.arrangedSubviews.count
     let startDelta = Double(frames / 2) * secondsApart
-//    var frameDelta = startDelta * -1.0
+    //    var frameDelta = startDelta * -1.0
     var startTimeInSeconds = time.seconds - startDelta
     for view in self.filmstrip.arrangedSubviews
     {
-//      var textLabel : NSTextField?
+      //      var textLabel : NSTextField?
       let imageView = view as! NSImageView
-//      for v in imageView.subviews {
-//        if (v.identifier?.contains("timetextLabel"))! {
-//          textLabel = (v as! NSTextField)
-//        }
-//      }
+      //      for v in imageView.subviews {
+      //        if (v.identifier?.contains("timetextLabel"))! {
+      //          textLabel = (v as! NSTextField)
+      //        }
+      //      }
       let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
       let viewSize = CGSize(width: viewWidth, height: view.bounds.height)
       if let frameImage = singleImageAtTime(seconds: startTimeInSeconds, generator: imageGenerator, imageSize: viewSize)
       {
         imageView.image = frameImage
         imageView.frame = NSRect(x: 0, y: 0, width: frameImage.size.width, height: frameImage.size.height)
-//        let deltaString = String.init(format: "%.2f", frameDelta)
-//        let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame)
-//        textLabel?.stringValue = deltaString
-//        frameDelta += secondsApart
-//        imageView.addSubview(label)
+        //        let deltaString = String.init(format: "%.2f", frameDelta)
+        //        let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame)
+        //        textLabel?.stringValue = deltaString
+        //        frameDelta += secondsApart
+        //        imageView.addSubview(label)
       }
       startTimeInSeconds += secondsApart
     }
   }
   
-  /// Main queue callback from handler to update user interface with 
+  /// Main queue callback from handler to update user interface with
   /// image generated for filmstrip display
   
   func updateFilmstripWithImage(_ image: CGImage, atStripIndex index: Int)
   {
-//    let pixelData = image.pixelData()
-//    for i in 0 ... 10 {
-//      let startByte = i*4
-//      
-//      print("InitialBytes[\(index)] \(i): \(pixelData![startByte+0]):\(pixelData![startByte+1]):\(pixelData![startByte+2]):\(pixelData![startByte+3])")
-//    }
-    /*
-    let view = self.filmstrip.arrangedSubviews[index] as! NSImageView
-    let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
-    let viewSize = CGSize(width: viewWidth, height: view.bounds.height)
-    view.frame = NSRect(x: 0, y: 0, width: (view.image?.size.width)!, height: (view.image?.size.height)!)
-    
-    view.image = NSImage(cgImage:image, size:CGSize(width: image.width, height: image.height))
- */
+    //    let pixelData = image.pixelData()
+    //    for i in 0 ... 10 {
+    //      let startByte = i*4
+    //
+    //      print("InitialBytes[\(index)] \(i): \(pixelData![startByte+0]):\(pixelData![startByte+1]):\(pixelData![startByte+2]):\(pixelData![startByte+3])")
+    //    }
     if let layer = self.filmstrip.arrangedSubviews[index].layer {
       layer.sublayers?[0].contents = image
-//      layer.contents = image
     }
   }
   
@@ -2237,8 +2373,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Also need to access the "spacing" of the frames
   func assetImageCompletionHandler (time:CMTime, image: CGImage?, actualTime:CMTime, result:AVAssetImageGeneratorResult, error: Error?)
   {
-//    let resultAsString = result == AVAssetImageGeneratorResult.succeeded ? "Succeeded" : (result == AVAssetImageGeneratorResult.failed) ? "Failed": "Cancelled"
-//    print("result: \(resultAsString) requested at time \(time.seconds)")
+    //    let resultAsString = result == AVAssetImageGeneratorResult.succeeded ? "Succeeded" : (result == AVAssetImageGeneratorResult.failed) ? "Failed": "Cancelled"
+    //    print("result: \(resultAsString) requested at time \(time.seconds)")
     if (result == AVAssetImageGeneratorResult.failed) {
       print("error: \(String(describing: error))")
       print("requestedTime \(time.seconds)")
@@ -2251,7 +2387,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
     }
   }
-
+  
   var requestedTimes = [NSValue]()
   
   /// Generate and display thumbnails either size of the current position
@@ -2268,7 +2404,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       for position in 0 ... 6
       {
         requestedTimes.append(CMTime(seconds: startSeconds + Double(position)*secondsApart, preferredTimescale: CutsTimeConst.PTS_TIMESCALE) as NSValue)
-//        (filmstrip.arrangedSubviews[position] as! NSImageView).image = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
+        //        (filmstrip.arrangedSubviews[position] as! NSImageView).image = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
         // sublayers[0] is the image layer
         filmstrip.arrangedSubviews[position].layer?.sublayers?[0].contents = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
       }
@@ -2279,12 +2415,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Update the timeline view
   func updateCutsMarksGUI()
   {
-    timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
-    timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
-    timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
-    let cutBoxPositions = movie.cuts.wellOrdered().normalizedInOutMarks
-    timelineView?.setCutBoxPositions(normalizedPositions: cutBoxPositions)
-    timelineView?.setNeedsDisplay((timelineView?.bounds)!)
+    if (self.monitorView.player?.currentItem?.status == AVPlayerItemStatus.readyToPlay)
+    {
+      timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
+      timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
+      timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
+      let cutBoxPositions = movie.cuts.wellOrdered().normalizedInOutMarks
+      timelineView?.setCutBoxPositions(normalizedPositions: cutBoxPositions)
+      timelineView?.setNeedsDisplay((timelineView?.bounds)!)
+    }
   }
   
   /// Common function to write the status field GUI entry to match
@@ -2294,7 +2433,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let arrayIndex = currentFile.indexOfSelectedItem
     let message = String(format:logMessage.indexOfSelectedFileMsg, arrayIndex+1, filelist.count)
     setStatusFieldStringValue(isLoggable: true, message: message)
-//    self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
+    //    self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
   }
   
   /// Conceptual start for a logging mechanism.  Use a function
@@ -2318,14 +2457,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func seekCompletedOK(_ isFinished:Bool)
   {
     if (!isFinished ) {
-      if (debug) { print("Seek Canceled") }
+      if (true) { print("Seek Cancelled") }
     }
     else {
       if (true) { print("Seek completed") }
-//            updateFilmStripSynchronous(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
-      updateFilmStripFor(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+      //            updateFilmStripSynchronous(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
+      if let centreTime = monitorView.player?.currentTime()
+      {
+        updateFilmStripFor(time: centreTime, secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
+      }
       if (wasPlaying) {
-        self.monitorView.player?.play()
+        monitorView.player?.play()
       }
       suppressTimedUpdates = false
     }
@@ -2365,13 +2507,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// Get the video players current position as a PTS value
   /// - returns: Player position current time converted into an Enigma2 scaled PTS value.
-  /// the value does not related to the file PTS values unless the initial PTS value is
+  /// the value does not relate to the file PTS values unless the initial PTS value is
   /// zero.  That is, to determine a file related position, combine the returned value with
   /// first PTS value from the file.
   func playerPositionInPTS() -> UInt64
   {
-    let playPosition = self.monitorView.player?.currentTime().convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default)
-    return UInt64((playPosition?.value)!)
+    let itemStatus = self.monitorView.player?.currentItem?.status
+    print("status at call to current time\(itemStatus.debugDescription)")
+    var playPosition:Int64
+    //    if self.monitorView.player?.currentItem?.duration.timescale != CutsTimeConst.PTS_TIMESCALE
+    //    {
+    playPosition = (self.monitorView.player?.currentTime().convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default).value)!
+    //    }
+    //    else {
+    //      playPosition = (self.monitorView.player?.currentTime().value)!
+    //    }
+    return playPosition>0 ? UInt64(playPosition) : UInt64(0)
   }
   
   func clockSeconds() -> String
@@ -2396,11 +2547,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let dateTimeComponents = userCalendar.dateComponents(requestedComponents, from: currentDateTime)
     
     // now the components are available
-//    dateTimeComponents.year   // 2016
-//    dateTimeComponents.month  // 10
-//    dateTimeComponents.day    // 8
-//    dateTimeComponents.hour   // 22
-//    dateTimeComponents.minute // 42
+    //    dateTimeComponents.year   // 2016
+    //    dateTimeComponents.month  // 10
+    //    dateTimeComponents.day    // 8
+    //    dateTimeComponents.hour   // 22
+    //    dateTimeComponents.minute // 42
     var retStr = "??"
     if let secondsString = dateTimeComponents.second {
       retStr = "\(secondsString)"
@@ -2478,12 +2629,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     timeObserverToken =
       self.monitorView.player?.addPeriodicTimeObserver(forInterval: interval, queue: mainQueue) {
         [weak self] time in
-//        print("Called back at \(self?.clockSeconds() ?? "??")")
+        //        print("Called back at \(self?.clockSeconds() ?? "??")")
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
         let currentCMTime =  self?.monitorView.player?.currentTime()
         let currentClock = DispatchTime.now()
-//        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
+        //        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
+        print("CT -> \(currentCMTime!.seconds)")
         
         let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
         if (debug)  { print("Saw callback start at \(currentTime)") }
@@ -2506,7 +2658,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           print("calculated elapse time = \(deltaRealWorld)")
           self?.lastPeriodicClocktime = currentClock
           self?.lastPeriodicCallBackTime = currentTime
-       }
+        }
         let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
         self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
         if (self?.honourOutInMarks)! {
@@ -2528,11 +2680,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
         }
         // update timeline gui
-        if (currentCMTime?.seconds)! > 0.0 {
-        let currentPositionArray = [UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))]
-          
-        self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray, ignorGaps: true))!
-        self?.updateCutsMarksGUI()
+        if (currentCMTime?.seconds)! >= 0.0 {
+          let currentPositionArray = [UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))]
+          self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray, ignorGaps: true))!
+          self?.updateCutsMarksGUI()
         }
         else {
           print("Argh! negative currentTime \(currentCMTime!)")
@@ -2544,7 +2695,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func sawDidDeminiaturize(_ notification: Notification) {
     // reset periodic observer
-//    print(#file+#function)
+    //    print(#file+#function)
     addPeriodicTimeObserver()
   }
   
@@ -2627,7 +2778,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
       let cutCompletionBlock : MovieCutCompletionBlock = { resultMessage, statusValue, wasCancelled in
         self.statusField.stringValue = resultMessage
-        self.cutButton.isEnabled = true
+        //        self.cutButton.isEnabled = true
         if (wasCancelled) {
           cutterQ.jobCancelled(moviePath: URLToMovieToCut, result: statusValue, resultMessage: resultMessage)
         }
@@ -2653,7 +2804,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
       let mcutCommandArgs = getCutsCommandLineArgs()
       systemSetup.mcutCommandArgs = mcutCommandArgs
-
+      
       let movieCutter = MovieCuttingOperation(movieToBeCutPath: URLToMovieToCut,
                                               sysConfig: systemSetup,
                                               pvrIndex: pvrIndex,
@@ -2693,7 +2844,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// There is  potential race condition in here but hardly seems worth the effort
   /// to make atomic.  Detail is ensuring that both "title" or "\ntitle" are removed from the tooltip.
   /// - parameter message: string to find and remove from cut button tooltip
-
+  
   func removeFromCutToolTip(message: String)
   {
     if let currentTip = cutButton.toolTip {
@@ -2745,7 +2896,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         cellContent = CutEntry.timeTextFromPTS((cutEntry?.cutPts)!)
       }
       else {
-       cellContent = "?"
+        cellContent = "?"
       }
     }
     else if tableColumn?.identifier == StringsCuts.TABLE_TYPE_COLUMN
@@ -2760,7 +2911,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
     }
     else {
-       cellContent = "???"
+      cellContent = "???"
     }
     let result : NSTableCellView  = tableView.make(withIdentifier: tableColumn!.identifier, owner: self)
       as! NSTableCellView
@@ -2790,10 +2941,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (debug) { print("Seeking to \(entry.asSeconds())") }
         seekPlayerToMark(entry)
         self.suppressTimedUpdates = false
-     }
+      }
     }
   }
-
+  
   /// "swipe" action function to delete rows from table.
   /// Updates model and GUI
   func rowDelete(_ action:NSTableViewRowAction, indexPath:Int)
@@ -2805,7 +2956,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cuttable = movie.isCuttable
     }
   }
-
+  
   /// Delete a row from the cuts table when user presses "Delete" key on
   /// keyboard
   func deleteRowByKeyPress ()
@@ -2815,20 +2966,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       movie.cuts.remove(at: selectedRow)
       cutsTable.reloadData()
       updateCutsMarksGUI()
-//      print("Current row =\(selectedRow)")
+      //      print("Current row =\(selectedRow)")
       // reselect the previous row if possible, if not, then the top row if any
       
       if (movie.cuts.count>0)
       {
         let newRow = selectedRow - (((selectedRow-1 < movie.cuts.count) && selectedRow-1 >= 0) ? 1 : 0)
-//        print("New row =\(newRow)")
+        //        print("New row =\(newRow)")
         cutsTable.selectRowIndexes(IndexSet(integer:newRow), byExtendingSelection: false)
       }
       cuttable = movie.isCuttable
       cutsUndoRedo?.add(state: movie.cuts)
       //      print ("cell is \(cutEntry?.asString())")
     }
-
+    
   }
   /// register swipe actions for table
   func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
@@ -2850,14 +3001,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       switch markType
       {
-        case .IN:
-          colour = NSColor.green
-        case .OUT:
-          colour = NSColor.red
-        case .LASTPLAY:
-          colour = NSColor.blue
-        case .BOOKMARK:
-          colour = NSColor.yellow
+      case .IN:
+        colour = NSColor.green
+      case .OUT:
+        colour = NSColor.red
+      case .LASTPLAY:
+        colour = NSColor.blue
+      case .BOOKMARK:
+        colour = NSColor.yellow
       }
     }
     rowView.backgroundColor = colour.withAlphaComponent(0.75)
@@ -2879,7 +3030,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// Given a valid cut entry, find it and select the row in
-  /// the cuts table display.  Do nothing on a nil entry or 
+  /// the cuts table display.  Do nothing on a nil entry or
   /// entry not found in array
   /// - parameter cutEntry: pts and type structure
   
@@ -2900,7 +3051,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     self.cutsTable.reloadData()
     updateCutsMarksGUI()
-   selectCutTableEntry(cutEntry)
+    selectCutTableEntry(cutEntry)
     updateCutsMarksGUI()
   }
   
@@ -2927,20 +3078,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       appendSingleFileURLToListAndSelect(fileURL)
     }
   }
-
+  
   // MARK: - utility functions
-  
-  /// Build a string from player and recording that shows all possible recording durations
-  /// for use as a tooltip on GUI
-  
-  func recordingDurations(movie: Recording) -> [String]
-  {
-    let (eitDuration, metaDuration, ptsDuration) = movie.getStoredDurations()
-    let eitString =  "eit: " + CutEntry.hhMMssFromSeconds(eitDuration)
-    let metaString = "meta: " + CutEntry.hhMMssFromSeconds(metaDuration)
-    let apString = "ap: " + CutEntry.hhMMssFromSeconds(ptsDuration)
-    return [eitString, metaString, apString]
-  }
   
   // MARK: - cutMark management functions
   
@@ -3061,7 +3200,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     movie.cuts.addEntry(mark)
     updateTableGUIEntry(mark)
     cutsUndoRedo?.add(state: self.movie.cuts)
-
+    
     if (markType == .IN || markType == .OUT)  {
       cuttable = movie.isCuttable
       updateVideoOverlay(updateText: nil)
@@ -3071,22 +3210,22 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Undo the last change to the cuts list. Go BACKWARD in history
   func cutsEditUndo()
   {
-    print(#function)
+    if (debug) { print(#function) }
     if let lastCuts = cutsUndoRedo?.getPrevious()
-     {
+    {
       self.movie.cuts = lastCuts
       cutsTable.reloadData()
       updateCutsMarksGUI()
       cuttable = movie.isCuttable
-     }
-     else  {
+    }
+    else  {
       NSBeep()
     }
   }
   
   /// Redo the last cuts list change to the cuts list.  Go FORWARD in history
   func cutsEditRedo () {
-    print(#function)
+    if (debug) { print(#function) }
     if let nextCuts = cutsUndoRedo?.next()
     {
       self.movie.cuts = nextCuts
@@ -3102,7 +3241,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   // MARK: - Advertisment boundary pickers
   var boundaryAdHunter : boundaryHunter?
   let initialStep = 90.0      // TODO: add to user config panel
-  let nearEnough = 1.0/50.0   // TODO: add to user config panel 1/25 th is frame level
+  let nearEnough = 1.0/25.0   // TODO: add to user config panel 1/25 th is frame level
   
   
   /// Get Nearest cutmark type PRECEEDING the current player position.
@@ -3197,8 +3336,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func huntDone(_ sender: NSButton) {
     huntButtonsReset()
     let outCutDuration = movie.cuts.simpleOutCutDurationInSecs()
-//    let doneMessage = "Advert hunt done ("+CutEntry.hhMMssFromSeconds(outCutDuration)+")"
-//    setStatusFieldStringValue(isLoggable: false, message: doneMessage)
+    //    let doneMessage = "Advert hunt done ("+CutEntry.hhMMssFromSeconds(outCutDuration)+")"
+    //    setStatusFieldStringValue(isLoggable: false, message: doneMessage)
     setStatusFieldStringValue(isLoggable: false, message: String(format: logMessage.huntDoneMsg, CutEntry.hhMMssFromSeconds(outCutDuration)))
   }
   
@@ -3222,7 +3361,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       voiceRecognition = true
       sender.layer?.backgroundColor = NSColor.green.cgColor
       mySpeechRecogizer?.startListening()
-   }
+    }
   }
   
   
@@ -3238,25 +3377,25 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       speechDictionary.updateValue(voiceCommandActionAndButton, forKey: "repeat")
     }
   }
-
-//  let defaultControlKeyDictionary : [String:FunctionAndButton] = [
-//    keyBoardCommands.advert: (inAdvertisment,backwardHuntButton),
-//    keyBoardCommands.program:(inProgram,forwardHuntButton),
-//    keyBoardCommands.done:(huntDone,doneHuntButton),
-//    keyBoardCommands.reset:(huntReset,resetHuntButton),
-//    keyBoardCommands.inCut:(addMark,inButton),
-//    keyBoardCommands.out:(addMark,outButton),
-//    keyBoardCommands.skipTwoForward:(seekToAction,seekButton2c),
-//    keyBoardCommands.skipTwoBackward:(seekToAction,seekButton1c),
-//  ]
+  
+  //  let defaultControlKeyDictionary : [String:FunctionAndButton] = [
+  //    keyBoardCommands.advert: (inAdvertisment,backwardHuntButton),
+  //    keyBoardCommands.program:(inProgram,forwardHuntButton),
+  //    keyBoardCommands.done:(huntDone,doneHuntButton),
+  //    keyBoardCommands.reset:(huntReset,resetHuntButton),
+  //    keyBoardCommands.inCut:(addMark,inButton),
+  //    keyBoardCommands.out:(addMark,outButton),
+  //    keyBoardCommands.skipTwoForward:(seekToAction,seekButton2c),
+  //    keyBoardCommands.skipTwoBackward:(seekToAction,seekButton1c),
+  //  ]
   
   override func keyDown(with event: NSEvent) {
-//    print("saw keyDown keycode value \(event.keyCode)")
+    //    print("saw keyDown keycode value \(event.keyCode)")
     
-//    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
+    //    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
     // with thanks based on: http://stackoverflow.com/questions/35539256/detect-when-delete-key-pressed-on-control
-   let controlKeyDictionary = defaultControlKeyDictionary
-   if let uniCodeDelete = UnicodeScalar(NSDeleteCharacter)
+    let controlKeyDictionary = defaultControlKeyDictionary
+    if let uniCodeDelete = UnicodeScalar(NSDeleteCharacter)
     {
       if event.charactersIgnoringModifiers == String(Character(uniCodeDelete))
       {
@@ -3272,8 +3411,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown) && NSEvent.modifierFlags().isEmpty
     {
       if let keyString = event.characters {
-//        print(">>\(keyString)<<")
-
+        //        print(">>\(keyString)<<")
+        
         if let keyStrokeCommand = controlKeyDictionary[keyString]
         {
           keyStrokeCommand.action(keyStrokeCommand.button)
@@ -3284,42 +3423,42 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           return
         }
         /*
-        if (keyString == keyBoardCommands.program) { // z
-          inProgram(forwardHuntButton)
-          return
-        }
-        
-        if (keyString == keyBoardCommands.advert) {
-          inAdvertisment(backwardHuntButton)
-          return
-        }
-        
-        if (keyString == keyBoardCommands.skipBackward) {
-          seekToAction(seekButton1c)
-          return
-        }
-        
-        if (keyString == keyBoardCommands.inCut) {
-          addMark(sender: inButton)
-          huntDone(doneHuntButton)
-          return
-        }
-        if (keyString == keyBoardCommands.outCut) {
-          addMark(sender: outButton)
-          huntDone(doneHuntButton)
-          return
-        }
-        
-        if (keyString == keyBoardCommands.skipForward) {
-          seekToAction(seekButton2c)
-          return
-        }
-        
-        if (keyString == keyBoardCommands.reset ) {
-          huntReset(resetHuntButton)
-          return
-        }
-        */
+         if (keyString == keyBoardCommands.program) { // z
+         inProgram(forwardHuntButton)
+         return
+         }
+         
+         if (keyString == keyBoardCommands.advert) {
+         inAdvertisment(backwardHuntButton)
+         return
+         }
+         
+         if (keyString == keyBoardCommands.skipBackward) {
+         seekToAction(seekButton1c)
+         return
+         }
+         
+         if (keyString == keyBoardCommands.inCut) {
+         addMark(sender: inButton)
+         huntDone(doneHuntButton)
+         return
+         }
+         if (keyString == keyBoardCommands.outCut) {
+         addMark(sender: outButton)
+         huntDone(doneHuntButton)
+         return
+         }
+         
+         if (keyString == keyBoardCommands.skipForward) {
+         seekToAction(seekButton2c)
+         return
+         }
+         
+         if (keyString == keyBoardCommands.reset ) {
+         huntReset(resetHuntButton)
+         return
+         }
+         */
         // add a mark that is the complement of previous in / out
         if (keyString == keyBoardCommands.lhAddMatching || keyString == keyBoardCommands.rhAddMatching) {
           addMatchingCutMark(toMark: prevCut)
@@ -3327,77 +3466,78 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
       }
     }
+    
     super.keyDown(with: event)
   }
-
+  
   /// Add mark that is complementary to the previous cut mark.
   /// Beep and ignor any mark that is not In or Out
   /// should never happen, however....if in doubt Beep
   func addMatchingCutMark(toMark: MARK_TYPE)
   {
     switch toMark {
-      case .IN:
-        addMark(sender: outButton)
-        huntDone(doneHuntButton)
-        NSBeep();NSBeep();NSBeep()
-      case .OUT:
-        addMark(sender: inButton)
-        huntDone(doneHuntButton)
-        NSBeep();NSBeep();NSBeep()
-      default: NSBeep()
+    case .IN:
+      addMark(sender: outButton)
+      huntDone(doneHuntButton)
+      NSBeep();NSBeep();NSBeep()
+    case .OUT:
+      addMark(sender: inButton)
+      huntDone(doneHuntButton)
+      NSBeep();NSBeep();NSBeep()
+    default: NSBeep()
     }
   }
   /// Delegate function
   /// Respond to user taping the "delete" button on the keyboard to remove mark
   override func deleteBackward(_ sender: Any?) {
-//    print("Backward delete?")
+    //    print("Backward delete?")
     let selectedRow = cutsTable.selectedRow
     if (selectedRow >= 0) {
-//      let cutEntry = movie.cuts.entry(at: selectedRow)
-//      if (cutEntry?.type == MARK_TYPE.OUT || cutEntry?.type == MARK_TYPE.IN)
-//      {
-        movie.cuts.remove(at: selectedRow)
-        cutsTable.reloadData()
-        updateCutsMarksGUI()
-        cuttable = movie.isCuttable
-        cutsUndoRedo?.add(state: movie.cuts)
-//      }
-//      print ("cell is \(cutEntry?.asString())")
+      //      let cutEntry = movie.cuts.entry(at: selectedRow)
+      //      if (cutEntry?.type == MARK_TYPE.OUT || cutEntry?.type == MARK_TYPE.IN)
+      //      {
+      movie.cuts.remove(at: selectedRow)
+      cutsTable.reloadData()
+      updateCutsMarksGUI()
+      cuttable = movie.isCuttable
+      cutsUndoRedo?.add(state: movie.cuts)
+      //      }
+      //      print ("cell is \(cutEntry?.asString())")
     }
   }
   
-//  /// Insert a new element into a path string
-//  func insertPathElement(newElement: String, into path: String, at index: Int) -> String
-//  {
-//    var elements = path.components(separatedBy: "/")
-//    elements.insert(newElement, at: index)
-//    return elements.joined(separator: "/")
-//  }
+  //  /// Insert a new element into a path string
+  //  func insertPathElement(newElement: String, into path: String, at index: Int) -> String
+  //  {
+  //    var elements = path.components(separatedBy: "/")
+  //    elements.insert(newElement, at: index)
+  //    return elements.joined(separator: "/")
+  //  }
   
-//  // MARK: - Recording removal
+  //  // MARK: - Recording removal
   
-//  override func mouseDown(with event: NSEvent) {
-////    print ("saw mouse down")
-////    let currentFileSubmenu = NSMenu()
-////    let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
-////    currentFileSubmenu.addItem(deleteMenuItem)
-////    currentFile.menu?.setSubmenu(currentFileSubmenu, for: currentFile.selectedItem!)
-//    if (event.type == NSEventType.rightMouseDown)
-//    {
-////       print("saw right click")
-//    }
-//    else {
-//      super.mouseDown(with: event)
-//    }
-//  }
+  //  override func mouseDown(with event: NSEvent) {
+  ////    print ("saw mouse down")
+  ////    let currentFileSubmenu = NSMenu()
+  ////    let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
+  ////    currentFileSubmenu.addItem(deleteMenuItem)
+  ////    currentFile.menu?.setSubmenu(currentFileSubmenu, for: currentFile.selectedItem!)
+  //    if (event.type == NSEventType.rightMouseDown)
+  //    {
+  ////       print("saw right click")
+  //    }
+  //    else {
+  //      super.mouseDown(with: event)
+  //    }
+  //  }
   
   override func rightMouseDown(with event: NSEvent) {
     print("saw "+#function)
-//        let currentFileSubmenu = NSMenu()
-//        let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
-//        currentFileSubmenu.addItem(deleteMenuItem)
-//        let item = currentFile.selectedItem
-//        item?.view?.menu = currentFileSubmenu
+    //        let currentFileSubmenu = NSMenu()
+    //        let deleteMenuItem = NSMenuItem(title: "Delete", action: #selector(deleteRecording(_:)), keyEquivalent: "")
+    //        currentFileSubmenu.addItem(deleteMenuItem)
+    //        let item = currentFile.selectedItem
+    //        item?.view?.menu = currentFileSubmenu
   }
   
   
@@ -3432,4 +3572,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       eit.movie = self.movie
     }
   }
+  
+  // MARK: keyStrokeCatch protocol
+  func didPressLeftArrow() {
+    Swift.print("Saw left arrow keystroke")
+  }
+  func didPressRightArrow() {
+    Swift.print("Saw right arrow keystroke")
+  }
+  
 }

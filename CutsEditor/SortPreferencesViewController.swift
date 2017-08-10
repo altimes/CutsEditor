@@ -15,6 +15,7 @@ protocol AppPreferences {
   func generalPreference() -> generalPreferences
   func videoPlayerPreference() -> videoPlayerPreferences
   func saveSortPreference(_ sortOrder: sortingPreferences)
+  func saveAdHunterPreference(_ hunterPref: adHunterPreferences)
   func saveSkipPreference(_ skips: skipPreferences)
   func saveGeneralPreference(_ general: generalPreferences)
   func saveVideoPlayerPreference(_ videoPlayer: videoPlayerPreferences)
@@ -126,6 +127,8 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
   @IBAction func saveSortPreferences(_ sender: NSButton) {
     delegate.saveSortPreference(sortPreference)
     NotificationCenter.default.post(name: Notification.Name(rawValue: sortDidChange), object: nil)
+    delegate.saveAdHunterPreference(adHunterPreference)
+    NotificationCenter.default.post(name: Notification.Name(rawValue: adHunterDidChange), object: nil)
   }
 
   @IBAction func displayClosing(_ sender: NSButton)

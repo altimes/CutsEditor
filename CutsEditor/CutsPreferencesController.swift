@@ -18,6 +18,8 @@ struct playerStringConsts {
   
   static let ffButtonTitle = "Fast"
   static let stepButtonTitle = "Step"
+  
+  static let filmStripSpacingIdentifier = "filmstrip"
 }
 
 class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSControlTextEditingDelegate {
@@ -52,6 +54,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   @IBOutlet weak var steppingLabel: NSButton!
   
   @IBOutlet weak var honourOutIn: NSButton!
+  @IBOutlet weak var filmStripSpacing: NSTextField!
   
   var preferences = NSApplication.shared().delegate as! AppPreferences
   var skips = skipPreferences()
@@ -133,7 +136,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
     }
     setupRadioButtonNames()
     honourOutIn.state = (videoPlayerConfig.skipCutSections ? NSOnState : NSOffState)
-    
+    filmStripSpacing.doubleValue = videoPlayerConfig.filmStripSpacing
   }
   
   func setupRadioButtonNames ()
@@ -189,34 +192,41 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
     let textField = obj.object as! NSTextField
     // print (textField.stringValue)
     let tagValue = textField.tag
-    if (tagValue > 0) {
-      // rh column
-      // display string or value
-      if tagValue > 600 {
-        // display field
-        let index = tagValue - 600 - 1  // get a 0 based index
-        skips.rhs[index].display = textField.stringValue
-      }
-      else {  // 500 series tag
-        // value field
-        let index = tagValue - 500 - 1 // get a zero based index
-        skips.rhs[index].value = textField.doubleValue
-      }
+    if (textField.identifier == playerStringConsts.filmStripSpacingIdentifier) {
+      videoPlayerConfig.filmStripSpacing = textField.doubleValue
+      playerChanged = true
     }
-    else {  // lh column
-      if tagValue < -600
+    else {
+      if (tagValue > 0)
       {
-        // display field
-        let index = abs(tagValue) - 600 - 1
-        skips.lhs[index].display = textField.stringValue
+        // rh column
+        // display string or value
+        if tagValue > 600 {
+          // display field
+          let index = tagValue - 600 - 1  // get a 0 based index
+          skips.rhs[index].display = textField.stringValue
+        }
+        else {  // 500 series tag
+          // value field
+          let index = tagValue - 500 - 1 // get a zero based index
+          skips.rhs[index].value = textField.doubleValue
+        }
       }
-      else { // -500 series tag
-        // value field
-        let index = abs(tagValue) - 500 - 1 // get a zero based index
-        skips.lhs[index].value = textField.doubleValue
+      else {  // lh column
+        if tagValue < -600
+        {
+          // display field
+          let index = abs(tagValue) - 600 - 1
+          skips.lhs[index].display = textField.stringValue
+        }
+        else { // -500 series tag
+          // value field
+          let index = abs(tagValue) - 500 - 1 // get a zero based index
+          skips.lhs[index].value = textField.doubleValue
+        }
       }
+      skipsChanged = true
     }
-    skipsChanged = true
   }
   
   /// Close this model dialog

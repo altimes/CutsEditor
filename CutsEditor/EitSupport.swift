@@ -513,21 +513,23 @@ class EITInfo
   
   /// nominally pick out the eventText field of the second short descriptor
   /// return : episode text
-  func episodeText() -> String
+  var episodeText: String
   {
-    var title = ""
-    if (self.eit.shortDescriptors?.count>=2)
-    {
-      if let text = self.eit.shortDescriptors![1].eventText {
-        title = text.contentText!
-      }
-      else { // try eventName
-        if let text = self.eit.shortDescriptors![1].eventName {
+    get {
+      var title = ""
+      if (self.eit.shortDescriptors?.count>=2)
+      {
+        if let text = self.eit.shortDescriptors![1].eventText {
           title = text.contentText!
         }
+        else { // try eventName
+          if let text = self.eit.shortDescriptors![1].eventName {
+            title = text.contentText!
+          }
+        }
       }
+      return title
     }
-    return title
   }
   
   /// Returns a single string with the concatentated contents
@@ -547,6 +549,8 @@ class EITInfo
     }
     return description
   }
+  
+  
   
   /// Return contents of EIT in ordered printable form
   /// - returns: multiline string

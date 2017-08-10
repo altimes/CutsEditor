@@ -15,6 +15,7 @@ struct MessageStrings {
   static let DID_WRITE_FILE = "Success of replacement"
   static let sequentialInMarks = "Sequential IN cut Marks"
   static let sequentialOutMarks = "Sequential OUT cut Marks"
+  static let noCutsDefined = "No Cuts present"
 }
 
 /// Models the collection of cut/book/lastplay marks associated with a recording
@@ -147,7 +148,7 @@ class CutsFile: NSObject, NSCopying {
     get {
       let validation = self.validateInOut()
       lastValidationMessage = validation.errorMessage
-      return validation.result
+      return (self.inOutOnly.count > 0 && validation.result)
     }
   }
   
@@ -727,6 +728,10 @@ class CutsFile: NSObject, NSCopying {
     var currentState = cutStates.unknown
     var goodList = true
     var message = ""
+    let cutsDefined = self.inOutOnly.count > 0
+    guard cutsDefined else {
+      return (goodList, message)
+    }
     for item in cutsArray
     {
       switch MARK_TYPE(rawValue: item.cutType)! {
@@ -793,12 +798,15 @@ class CutsFile: NSObject, NSCopying {
     // that is, pruning the end of a recording
     // trailing out cut
     // FIXME: UInt64 arithmetic fails on PTS reset during recording.
+    // FIXME: fails when container.ap.runtimepts returns 0 (no ap file)
     if index == inOut.count-1
     {
       // try using the derived value from the ap file
       if let apDurationInPTS = container?.ap.runtimePTS
       {
-        outDurationInPTS += apDurationInPTS - inOut[index].cutPts
+        if (apDurationInPTS > inOut[index].cutPts) {
+          outDurationInPTS += apDurationInPTS - inOut[index].cutPts
+        }
       }
       // else give up and ignor failure
     }
@@ -867,6 +875,16 @@ class CutsFile: NSObject, NSCopying {
         newCutsArray.append(CutEntry(cutPts: pts, cutType: MARK_TYPE.IN.rawValue))
         changed = true
       }
+    }
+    else // is empty, create a dummy 0..end
+    {
+//      if let movie = self.container {
+//        newCutsArray.append(CutEntry(cutPts: movie.ap.firstPTS, cutType: MARK_TYPE.IN.rawValue))
+//        newCutsArray.append(CutEntry(cutPts: movie.ap.lastPTS, cutType: MARK_TYPE.OUT.rawValue))
+        newCutsArray.append(CutEntry(cutPts: PtsType(0), cutType: MARK_TYPE.IN.rawValue))
+        newCutsArray.append(CutEntry(cutPts: UInt64((container?.videoDurationFromPlayer)!), cutType: MARK_TYPE.OUT.rawValue))
+        changed = true
+//      }
     }
     
     // now check for multiple serial INs or OUTs

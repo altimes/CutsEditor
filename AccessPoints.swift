@@ -26,13 +26,26 @@ class AccessPoints {
   
   var debug = false
   var apFileName: String
+  
+  /// flag that indicates a movie that may have had advertisements removed which
+  /// results in there being gaps in sequence
   private(set) var hasGaps : Bool = false
   private var sequenceHasGaps : Bool = false
+  
+  /// flag to be initialized on startup to check if there was a PCR clock reset
+  /// during the movie which results in the PTS going back to zero.  Used to assist
+  /// code that is hunting within the PTS sequence
+  private(set) var hasPCRReset: Bool
+  /// array of indices where the PCR reset occurs and PTS numbering  re-starts
+  private(set) var pcrIndices = [Int]()
+  
+  /// duration in PTS units, calculated.
   private(set) var runtimePTS: PtsType
   var container: Recording?
   
   init() {
     runtimePTS = PtsType(0)
+    hasPCRReset = false
     apFileName = "unassigned"
   }
   
@@ -48,7 +61,7 @@ class AccessPoints {
       return nil
     }
     apFileName = url.path
-    runtimePTS = deriveRunTimePTS()
+    self.postInitSetup()
   }
   
   /// Initialize from raw contents, typically content of file
@@ -78,9 +91,19 @@ class AccessPoints {
     // order the map by offset if it has loaded unordered
     if (!sorted) { m_access_points_array.sort{$0.offset < $1.offset}}
     
-    runtimePTS = deriveRunTimePTS()
+    self.postInitSetup()
   }
-  
+
+  func postInitSetup()
+  {
+    let resetCheck = checkForPCRReset()
+    hasPCRReset = resetCheck.hasReset
+    if hasPCRReset {
+      self.pcrIndices = resetCheck.indexArray
+    }
+    runtimePTS = deriveRunTimePTS()
+   
+  }
   /// Open and decode the file into the internal structures
   /// Contrived to ensure that collection maintained in order
   /// sorted by file offset.
@@ -240,71 +263,11 @@ class AccessPoints {
     let runTimeDurationPTS = deriveRunTimePTSBetweenIndices(startIndex: 0, endIndex: m_access_points_array.count-1)
     self.hasGaps = self.sequenceHasGaps
     return runTimeDurationPTS
-    
-    /*
-    
-    // derive duration with analysis for gaps
-    var deltaSecs: Double
-    var lastDeltas: String
-    var seqStart = 0
-    var ptsDiscontinuity = false
-    let last = m_access_points_array.count-1
-    var cummulativeDurationPTS = PtsType(0)
-    if (debug) {
-      print("checking Ap for \(container?.movieName! ?? apFileName)")
-      print("Simple duration: \(simpleDurationInHMS())")
-    }
-    for index in 0 ..< last-1
-    {
-      let entry  = m_access_points_array[index]
-      let entry2 = m_access_points_array[index+1]
-      if entry2.pts > entry.pts {
-         let delta1 = Double(entry2.pts - entry.pts)*CutsTimeConst.PTS_DURATION
-         let deltaInt = Int(delta1*10)
-         deltaSecs = Double(deltaInt)/10.0
-         lastDeltas =  String("deltas \(delta1): \(deltaInt) : \(deltaSecs)")
-      }
-      else {
-        // pts discontinuity, treat as virtual gap
-        lastDeltas = "--------- undetermined"
-        // ascribe an "typical step"
-        deltaSecs = 3.0
-        ptsDiscontinuity = true
-      }
-      // check for significant break in sequence of ap's
-      // accumulate duration and reset for next sequence
-      if (deltaSecs > 30.0 || ptsDiscontinuity) {
-        if (debug) {
-           print(lastDeltas)
-           print("[\(index)] - \(entry.pts)/\(entry2.pts)  - \(Int(Double(entry.pts) * CutsTimeConst.PTS_DURATION))/\(Int(Double(entry2.pts)*CutsTimeConst.PTS_DURATION)) delta = \(deltaSecs)")
-        }
-        let sequenceDurationPTS = m_access_points_array[index].pts - m_access_points_array[seqStart].pts
-        cummulativeDurationPTS += sequenceDurationPTS
-        if (debug) {
-          let sequenceDurationSecs = Double(sequenceDurationPTS) * CutsTimeConst.PTS_DURATION
-          let sequenceDurationHMS = CutEntry.hhMMssFromSeconds(sequenceDurationSecs)
-          let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
-          let readableCummulativeTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
-          print("\(sequenceDurationPTS) - \(cummulativeDurationPTS): \(sequenceDurationHMS) - \(readableCummulativeTime)")
-        }
-        seqStart = index+1
-        ptsDiscontinuity = false
-      }
-    }
-    let sequenceDurationPTS = m_access_points_array[last].pts - m_access_points_array[seqStart].pts
-    cummulativeDurationPTS += sequenceDurationPTS
-    if (debug) {
-      let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
-      let readableTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
-      print("Run time of \(cummulativeDurationPTS) pts / \(readableTime)")
-    }
-    self.hasGaps = (seqStart != 0)
-    return cummulativeDurationPTS
-    */
-    
   }
   
   /// find the ap index nearest the given PTS
+  /// - parameter ptsValue: zero based pts to look for (expected to come from player being 0 based)
+  /// - returns: index of ap array or -1 if no such entry exists in ap array
   func nearestApIndex(ptsValue: PtsType) -> Int
   {
     guard m_access_points_array.count > 2 else {
@@ -349,6 +312,175 @@ class AccessPoints {
     return index
   }
   
+  /// find the ap index nearest to given PTS.  This function uses a binary search
+  /// and assumes that bounded array of pts values are ordered and increasing in value
+  /// (that is: don't call unprotected by PCRReset check)
+  /// - parameter ptsValue: adjusted for range base,
+  /// - parameter startIndex: lowest index in access points array to limit search
+  /// - paraneter endIndex: highest index in access points array to limit search
+  /// - returns: index of ap array or -1 if no such entry exists in ap array
+  func nearestApIndexInRangeSerial(ptsValue adjustedPtsValue: PtsType, startIndex: Int, endIndex: Int) -> Int
+  {
+    guard (self.hasPCRReset == false) else { return -1}
+    
+    var index = startIndex
+    var found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+    while (!found && index < endIndex-1)
+    {
+      index += 1
+      found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+      if found {
+        // pick the nearest
+        index =  ((adjustedPtsValue - m_access_points_array[index].pts) < (m_access_points_array[index+1].pts - adjustedPtsValue)) ? index : index+1
+      }
+    }
+    return index
+  }
+  
+  /// find the ap index nearest to given PTS.  This function uses a binary search
+  /// and assumes that bounded array of pts values are ordered and increasing in value
+  /// (that is: don't call unprotected by PCRReset check)
+  /// - parameter ptsValue: base adjusted ptsValue
+  /// - parameter startIndex: lowest index in access points array to limit search
+  /// - paraneter endIndex: highest index in access points array to limit search
+  /// - returns: index of ap array or -1 if no such entry exists in ap array
+  func nearestApIndexInRangeBinary(ptsValue adjustedPtsValue: PtsType, startIndex: Int, endIndex: Int) -> Int
+  {
+    guard (self.hasPCRReset == false) else {return -1}
+    
+    var index = startIndex
+    var lowIndex = startIndex
+    var hiIndex = endIndex
+    var found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+    while (!found && (hiIndex - lowIndex) > 1)
+    {
+      index = lowIndex + (hiIndex - lowIndex)/2
+      found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+      if found {
+        // pick the nearest
+        index =  ((adjustedPtsValue - m_access_points_array[index].pts) < (m_access_points_array[index+1].pts - adjustedPtsValue)) ? index : index+1
+      }
+      else { // which way to jump ?
+        if adjustedPtsValue > m_access_points_array[index].pts
+        {
+          lowIndex = index
+        }
+        else {
+          hiIndex = index
+        }
+      }
+    }
+    return index
+  }
+  
+  /*
+   worked example in seconds to aid comprehension of code:
+     we have position from player of 2400 seconds from a duration of 3600 seconds
+     we have a access points array (seconds for comprehension) that of 7200 entries that
+     covers it with values sets of 5000..6000, 100..1000, 200..1900 (1000+900+1700 === 3600)
+    OK.
+      so, take the 2400 add the first offset 5000 -> 7400 
+      which is not in the first bounds of 5000..6000
+      to check the second bounds we need to take the
+      postion, reduce it by the duration of the first bounds
+      so, 2400 - (6000-5000) -> 1400
+      now adjust the 1400 for the next range start offset 1400+100 -> 1500
+      Now, is that in the bounds 100..1000 ? NO, then rinse and repeat
+      2400 - (6000-5000) - (1000-100) -> 500
+      again adjust for rannge start 500+200 -> 700
+      now is that in bounds 200..1900 ? Yes, OK, now search for and return index nearest 700
+ 
+ */
+  
+  /// find the ap index nearest the given PTS
+  /// - parameter ptsValue: zero based pts to look for (expected to come from avplayer being 0 based)
+  /// - returns: index of ap array or -1 if no such entry exists in ap array
+  func nearestApIndex1(ptsValue: PtsType) -> Int
+  {
+    guard m_access_points_array.count > 2 else {
+      return -1
+    }
+    var index = 0
+    if (hasPCRReset)
+    {
+      // determine which sequence to use
+      var found = false
+      var index = 0
+      var PTSdurationOfRange :PtsType = PtsType(0)
+      
+      // loop initializer
+      let startIndex = 0
+      let rangeStartPTS = m_access_points_array[startIndex].pts
+      let endOfRangeIndex = pcrIndices[index+1]-1
+      let rangeEndPTS = m_access_points_array[endOfRangeIndex].pts
+      var adjustedPTSValue = ptsValue+firstPTS
+      found = adjustedPTSValue >= rangeStartPTS && adjustedPTSValue <= rangeEndPTS
+      if found {
+        return nearestApIndexInRangeSerial(ptsValue: adjustedPTSValue, startIndex: startIndex, endIndex: endOfRangeIndex)
+      }
+      else {
+        index += 1
+        //                                      highest pts value in range  - lowest pts value in range
+        PTSdurationOfRange = m_access_points_array[pcrIndices[index]-1].pts - m_access_points_array[0].pts
+      }
+     
+      while (!found && index<=pcrIndices.count-1)
+      {
+        let startIndex = pcrIndices[index]
+        let endIndex = (index+1 < pcrIndices.count) ? pcrIndices[index+1]-1 : m_access_points_array.count-1
+        // check that ptsValue lies in range
+        let rangeStartPTS = m_access_points_array[startIndex].pts
+        let rangeEndPTS = m_access_points_array[endIndex].pts
+        adjustedPTSValue = adjustedPTSValue - PTSdurationOfRange + m_access_points_array[startIndex].pts
+        let found = adjustedPTSValue >= rangeStartPTS && adjustedPTSValue <= rangeEndPTS
+        if found {
+          return nearestApIndexInRangeSerial(ptsValue: adjustedPTSValue, startIndex: startIndex, endIndex: endIndex)
+        }
+        else {
+          index += 1
+          //                                      highest pts value in range  - lowest pts value in range
+          PTSdurationOfRange = m_access_points_array[pcrIndices[index]-1].pts - m_access_points_array[0].pts
+        }
+      }
+    }
+    else // simple case
+    {
+      index = nearestApIndexInRangeSerial(ptsValue: ptsValue, startIndex: 0, endIndex: m_access_points_array.count-1)
+    }
+    return index
+  }
+  
+  /// Scan serially through the ap array looking for a PCR reset (next sequential PTS being less that current)
+  /// very long recordings may result in more that one.
+  /// The result array is the indices of the lowest pts values, that is, the start indices
+  /// - return: flag and array of reset indices.
+  
+  private func checkForPCRReset() -> (hasReset:Bool,  indexArray: [Int])
+  {
+    var resetFound = false
+    var arrayOfResetPoints = [Int]()
+    var startIndex = 0
+    let endIndex = m_access_points_array.count - 1
+    
+    guard(startIndex >= 0 && endIndex >= 0) else { return (resetFound, arrayOfResetPoints) }
+    
+    // check for PTS discontinuity
+    if (m_access_points_array[endIndex].pts < m_access_points_array[startIndex].pts)
+    { // discontinuity exists, find one or more locations
+      resetFound = true
+      var notAtEnd = (startIndex+1) < endIndex
+      while notAtEnd {
+        let (_, ceilingIndex) = highestPTSFrom(startIndex)
+        startIndex = ceilingIndex+1
+        notAtEnd = ceilingIndex < endIndex
+        if notAtEnd {
+          arrayOfResetPoints.append(startIndex)
+        }
+      }
+    }
+    return (resetFound, arrayOfResetPoints)
+  }
+  
   /// Derive the duration between to index values of the access points table.
   /// Allow for detection of one discontinuity.
   /// Expected usage is for get the time duration of a cut out section
@@ -372,14 +504,14 @@ class AccessPoints {
   /// Determine the elapsed duration from a pts in the sequence that may contains gaps
   /// Used to map PTS fed back from the AVPlayer currentTime into a "played video"
   /// duration.  
-  func deriveRunTimeFrom(ptsTime: PtsType) -> PtsType {
+  func deriveRunTimeFrom(ptsTime: PtsType) -> PtsType
+  {
     let endIndex = nearestApIndex(ptsValue: ptsTime)
     return deriveRunTimeDurationToIndex(endIndex: endIndex)
   }
   
   ///
   private func deriveRunTimePTSBetweenIndices(startIndex: Int, endIndex: Int) -> PtsType
-    
   {
     // derive duration with analysis for gaps
     guard m_access_points_array.count > 1 else {

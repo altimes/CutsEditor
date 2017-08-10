@@ -59,7 +59,11 @@ class boundaryHunter {
   
   // TODO: make runtime configurable
   static let seekToleranceValue = 1.0/25.0 // Seconds
-  static let reportGapValue = 3.0 // seconds: nearness to start reporting
+  
+  static var reportGapValue = 3.0 // seconds: nearness to start reporting
+  static var nearEnough = 0.3     // near enough match in seconds to perfect position
+  static var voiceReporting = false
+  static var visualReporting = true
   
   static let seekTolerance = CMTime(seconds: seekToleranceValue, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
   
@@ -82,6 +86,14 @@ class boundaryHunter {
     gap = hiPlayerPos - lowPlayerPos
     if (debug)
     {print(String(format: "Initialized at lo: %6.2f, hi: %6.2f, jump: %6.2f", lowPlayerPos, hiPlayerPos, jumpDistance))}
+  }
+  
+  func setFromPreferences(prefs: adHunterPreferences)
+  {
+    boundaryHunter.reportGapValue = prefs.closingReport
+    boundaryHunter.nearEnough = prefs.nearEnough
+    boundaryHunter.voiceReporting = prefs.isSpeechReporting
+    boundaryHunter.visualReporting = prefs.isOverlayReporting
   }
   
   /// set hunting hi / lo boundaries

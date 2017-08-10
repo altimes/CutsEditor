@@ -13,7 +13,7 @@ let trashDirectoryName = ".Trash"
 // MARK: - file search support class
 
 /// This creates and detaches a remote/local system query to build a list of files
-/// and return it the program without doing all the file traversal work within the
+/// and return it to the program without doing all the file traversal work within the
 /// program.   This is optimization that removes large network delays incurred with
 /// programmatic directory traversal.  It is less generic but much quicker.
 

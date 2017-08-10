@@ -34,6 +34,10 @@ class Recording
     }
   }
   
+  var hasCutsToPerform: Bool {
+    return cuts.inOutOnly.count > 0
+  }
+  
   /// injected from viewController when/if player comes ready with video
   var videoDurationFromPlayer: Double = 0.0
   
@@ -189,8 +193,8 @@ class Recording
     if (foundFile)
     {
       data = fileMgr.contents(atPath: fullFileName)
-      if (debug)  {
-        print("Found file ")
+      if (true)  {
+        print("Found file \(fullFileName)")
         print("Found file of \((data?.count ?? 0))! size")
       }
       // not interested in empty files.... may as well be missing
@@ -345,4 +349,18 @@ class Recording
     return (bestDuration, accessPointsDuration)
   }
   
+  /// Build a string from player and recording that shows all possible recording durations
+  /// for use as a tooltip on GUI
+  
+  var durationStrings: [String]
+  {
+    get {
+      let (eitDuration, metaDuration, ptsDuration) = self.getStoredDurations()
+      let eitString =  "eit: " + CutEntry.hhMMssFromSeconds(eitDuration)
+      let metaString = "meta: " + CutEntry.hhMMssFromSeconds(metaDuration)
+      let apString = "ap: " + CutEntry.hhMMssFromSeconds(ptsDuration)
+      return [eitString, metaString, apString]
+    }
+  }
+
 }
