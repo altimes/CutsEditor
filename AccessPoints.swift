@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import AVFoundation
 
 typealias PtsOff = (pts: PtsType, offset: OffType)
 
@@ -17,7 +18,7 @@ typealias PtsOff = (pts: PtsType, offset: OffType)
 
 class AccessPoints {
   
-//  var m_access_points = Dictionary<OffType,PtsType>()
+  //  var m_access_points = Dictionary<OffType,PtsType>()
   var m_access_points_array = [OffPts]()
   /// Derived PTS value of first GOP found if any
   var firstPTS: PtsType { return (m_access_points_array.count>0) ? m_access_points_array[0].pts : PtsType(0) }
@@ -39,6 +40,11 @@ class AccessPoints {
   /// array of indices where the PCR reset occurs and PTS numbering  re-starts
   private(set) var pcrIndices = [Int]()
   
+  /// flag that gapIndices is populated
+  private(set) var hasGapIndices:Bool
+  /// arrar of indices where a gap starts (end index of video)
+  private(set) var gapIndices = [Int]()
+  
   /// duration in PTS units, calculated.
   private(set) var runtimePTS: PtsType
   var container: Recording?
@@ -46,6 +52,7 @@ class AccessPoints {
   init() {
     runtimePTS = PtsType(0)
     hasPCRReset = false
+    hasGapIndices = false
     apFileName = "unassigned"
   }
   
@@ -93,7 +100,7 @@ class AccessPoints {
     
     self.postInitSetup()
   }
-
+  
   func postInitSetup()
   {
     let resetCheck = checkForPCRReset()
@@ -102,7 +109,11 @@ class AccessPoints {
       self.pcrIndices = resetCheck.indexArray
     }
     runtimePTS = deriveRunTimePTS()
-   
+    let gaps = checkForPTSGaps()
+    if gaps.hasGap {
+      gapIndices = gaps.indexArray
+    }
+    
   }
   /// Open and decode the file into the internal structures
   /// Contrived to ensure that collection maintained in order
@@ -163,7 +174,7 @@ class AccessPoints {
   
   /// Find the highest PTS value within the collection that is greater
   /// than the PTS at the start Index.  This is useful for finding
-  /// the upper limit when there is a discontinuity in the file and 
+  /// the upper limit when there is a discontinuity in the file and
   /// the PTS values restart at 0 mid program. (Rollover of the PCR)
   /// - parameter startIndex: start position in the array
   /// - return: tuple of the ptsValue and the index at which is is found
@@ -230,7 +241,7 @@ class AccessPoints {
   /// - return: duration of recording in Seconds
   func durationInSecs() -> Double
   {
-    return Double(runtimePTS) * CutsTimeConst.PTS_DURATION
+    return runtimePTS.asSeconds
   }
   
   /// wrapper converting secs to HH:MM:SS format
@@ -244,7 +255,7 @@ class AccessPoints {
   /// can be wrong if there are breaks in the PTS sequences
   func simpleDurationInHMS() -> String
   {
-    return CutEntry.hhMMssFromSeconds(Double(simpleDurationInPTS()) * CutsTimeConst.PTS_DURATION)
+    return CutEntry.hhMMssFromSeconds(simpleDurationInPTS().asSeconds)
   }
   
   /// Determine the runtime of a recording bye checking for "gaps" or breaks in the PTS sequencing.
@@ -265,15 +276,57 @@ class AccessPoints {
     return runTimeDurationPTS
   }
   
+  
+  //  func nearestApIndexForPTSFromAp(ptsValue: PtsType) -> Int
+  //  {
+  //    return 0
+  //  }
+  
+  /// given a CMTime from the player convert it into a TS PTS time
+  /// and use the ap values and gap checking to determine an actual elapsed time to
+  /// drive the timelime control
+  
+  func elapsedTimeFromPlayerTime(_ playerTime: CMTime) -> CMTime
+  {
+    // if there are no gaps or a clock reset, then the player time is good
+    guard self.hasGaps || self.hasPCRReset else {
+      return playerTime
+    }
+    let videoSegments = videoSequences
+    let playerPTS = PtsType(playerTime.convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default).value)
+    // short cut if before first gap
+    if videoSegments.count > 0 {
+      if playerPTS.asSeconds < videoSegments[0].videoDurationSeconds
+      {
+        return playerTime
+      }
+    }
+    
+    // PTS from the player will be "related" to the stored PTS values in the TS file
+    // thus, to get a "played video" time we need to discount any gaps that we have passed over
+    //    print ("playerTime \(playerTime)")
+    if (debug) { print ("playerPTS \(playerPTS.hhMMss)") }
+    let apIndex = nearestApIndexForPTSFromPlayer(ptsValue: playerPTS)
+    //    print ("apIndex = \(apIndex)")
+    let endPTS = deriveRunTimeDurationToIndex(endIndex: apIndex)
+    //    print ("endPTS = \(endPTS.asSeconds)")
+    let videoElapsedTime = CMTime(value: CMTimeValue(endPTS), timescale: CutsTimeConst.PTS_TIMESCALE)
+    //    print ("videoElapsed \(videoElapsedTime)")
+    let  playerElapsedtime = videoElapsedTime.convertScale(playerTime.timescale, method: CMTimeRoundingMethod.default)
+    //    print ("playerElapsedtime = \(playerElapsedtime)")
+    return playerElapsedtime
+  }
+  
+  
   /// find the ap index nearest the given PTS
   /// - parameter ptsValue: zero based pts to look for (expected to come from player being 0 based)
   /// - returns: index of ap array or -1 if no such entry exists in ap array
-  func nearestApIndex(ptsValue: PtsType) -> Int
+  func nearestApIndexForPTSFromPlayer(ptsValue: PtsType) -> Int
   {
     guard m_access_points_array.count > 2 else {
       return -1
     }
-    let adjustedPtsValue = ptsValue + self.firstPTS
+    var adjustedPtsValue = ptsValue + self.firstPTS
     // cannot use binary search due to clock resets, the sequence may restart midstream
     // O(n) but how else ?
     var index = 0
@@ -286,8 +339,10 @@ class AccessPoints {
       if hi < low {
         // PCR clock reset has happened
         // simple case, target is greater than next pts number
-        if adjustedPtsValue > hi && index < m_access_points_array.count-1  // reset indices and continue
+        if adjustedPtsValue > hi && index < m_access_points_array.count-2  // reset indices and continue
         {
+          // readjust target into next range by reducing it by the last highest seen
+          adjustedPtsValue -= low
           index += 1
           found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
         }
@@ -302,7 +357,7 @@ class AccessPoints {
         }
       }
       else {
-       found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+        found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
         if found {
           // pick the nearest
           index =  ((adjustedPtsValue - m_access_points_array[index].pts) < (m_access_points_array[index+1].pts - adjustedPtsValue)) ? index : index+1
@@ -336,6 +391,43 @@ class AccessPoints {
     }
     return index
   }
+  
+  /// Determine to duration in seconds of all the gaps
+  /// after the given time
+  func gapsBetweenTimes(start startPTS: PtsType, end endPTS: PtsType) -> Double
+  {
+    var gapTime: Double = 0.0
+    guard hasGaps else { return gapTime }
+    
+    var elapsedTime: Double = 0.0
+    
+    // find sequence that contains start time
+    var segmentIndex = 0
+    var segment = videoSequences[segmentIndex]
+    
+    while (startPTS.asSeconds > elapsedTime && segmentIndex+1 < videoSequences.count)
+    {
+      segmentIndex += 1
+      segment = videoSequences[segmentIndex]
+      elapsedTime += segment.segementSeconds
+    }
+    
+    // count the gaps until we find the segment that contains the end time
+    while endPTS.asSeconds > elapsedTime && segmentIndex < videoSequences.count
+    {
+      if endPTS.asSeconds < elapsedTime + segment.videoDurationSeconds
+      {
+        break
+      }
+      else {
+        elapsedTime += segment.segementSeconds
+        gapTime += segment.gapSeconds != nil ? segment.gapSeconds!: 0
+      }
+    }
+    if (debug) { print("returning gapTime of \(gapTime) for gaps between \(startPTS.hhMMss) and \(endPTS.hhMMss)") }
+    return gapTime
+  }
+  
   
   /// find the ap index nearest to given PTS.  This function uses a binary search
   /// and assumes that bounded array of pts values are ordered and increasing in value
@@ -375,22 +467,22 @@ class AccessPoints {
   
   /*
    worked example in seconds to aid comprehension of code:
-     we have position from player of 2400 seconds from a duration of 3600 seconds
-     we have a access points array (seconds for comprehension) that of 7200 entries that
-     covers it with values sets of 5000..6000, 100..1000, 200..1900 (1000+900+1700 === 3600)
-    OK.
-      so, take the 2400 add the first offset 5000 -> 7400 
-      which is not in the first bounds of 5000..6000
-      to check the second bounds we need to take the
-      postion, reduce it by the duration of the first bounds
-      so, 2400 - (6000-5000) -> 1400
-      now adjust the 1400 for the next range start offset 1400+100 -> 1500
-      Now, is that in the bounds 100..1000 ? NO, then rinse and repeat
-      2400 - (6000-5000) - (1000-100) -> 500
-      again adjust for rannge start 500+200 -> 700
-      now is that in bounds 200..1900 ? Yes, OK, now search for and return index nearest 700
- 
- */
+   we have position from player of 2400 seconds from a duration of 3600 seconds
+   we have a access points array (seconds for comprehension) that of 7200 entries that
+   covers it with values sets of 5000..6000, 100..1000, 200..1900 (1000+900+1700 === 3600)
+   OK.
+   so, take the 2400 add the first offset 5000 -> 7400
+   which is not in the first bounds of 5000..6000
+   to check the second bounds we need to take the
+   postion, reduce it by the duration of the first bounds
+   so, 2400 - (6000-5000) -> 1400
+   now adjust the 1400 for the next range start offset 1400+100 -> 1500
+   Now, is that in the bounds 100..1000 ? NO, then rinse and repeat
+   2400 - (6000-5000) - (1000-100) -> 500
+   again adjust for rannge start 500+200 -> 700
+   now is that in bounds 200..1900 ? Yes, OK, now search for and return index nearest 700
+   
+   */
   
   /// find the ap index nearest the given PTS
   /// - parameter ptsValue: zero based pts to look for (expected to come from avplayer being 0 based)
@@ -423,7 +515,7 @@ class AccessPoints {
         //                                      highest pts value in range  - lowest pts value in range
         PTSdurationOfRange = m_access_points_array[pcrIndices[index]-1].pts - m_access_points_array[0].pts
       }
-     
+      
       while (!found && index<=pcrIndices.count-1)
       {
         let startIndex = pcrIndices[index]
@@ -481,6 +573,174 @@ class AccessPoints {
     return (resetFound, arrayOfResetPoints)
   }
   
+  /// Scan serially through the ap array looking for a discontinuity (next sequential PTS substantially greater)
+  /// The result array is the indices of the lowest pts values, that is, the start indices
+  /// - return: flag and array of reset indices.
+  
+  private func checkForPTSGaps() -> (hasGap:Bool,  indexArray: [Int])
+  {
+    var gapFound = false
+    var arrayOfGapPoints = [Int]()
+    var startIndex = 0
+    let endIndex = m_access_points_array.count - 1
+    
+    guard(startIndex >= 0 && endIndex >= 0) else { return (gapFound, arrayOfGapPoints) }
+    
+    // analyse ap array to determine nomimal GOP step for this movie
+    var allChecked = startIndex+1 >= endIndex
+    var buckets = [Int](repeating:0, count:101)
+    while (!allChecked)
+    {
+      let thisAp = m_access_points_array[startIndex]
+      let nextAp = m_access_points_array[startIndex+1]
+      // ignor reset transitions
+      if thisAp.pts < nextAp.pts {
+        let deltaPTS = nextAp.pts - thisAp.pts
+        // round to nearest 1/10 of a second
+        var step = Int(deltaPTS/(UInt64(CutsTimeConst.PTS_TIMESCALE)/10))
+        step = min(step,buckets.count-1)
+        buckets[step] += 1
+      }
+      startIndex += 1
+      allChecked = startIndex+1 >= endIndex
+    }
+    
+    // find the highest non-zero index, excluding clear gaps
+    var highestPopulatedIndex = 0
+    for  i in 1...99 {
+      if buckets[i] > 0 {
+        highestPopulatedIndex = i
+      }
+    }
+    //    print ("index \(highestPopulatedIndex): count \(buckets[highestPopulatedIndex])")
+    
+    // now find the gaps
+    startIndex = 0
+    allChecked = startIndex+1 >= endIndex
+    while (!allChecked)
+    {
+      let thisAp = m_access_points_array[startIndex]
+      let nextAp = m_access_points_array[startIndex+1]
+      // ignor reset transitions
+      if thisAp.pts < nextAp.pts {
+        let deltaPTS = nextAp.pts - thisAp.pts
+        // round to nearest 1/10 of a second
+        let  step = Int(deltaPTS/(UInt64(CutsTimeConst.PTS_TIMESCALE)/10))
+        if step > highestPopulatedIndex {
+          arrayOfGapPoints.append(startIndex)
+          gapFound = true
+        }
+      }
+      startIndex += 1
+      allChecked = startIndex+1 >= endIndex
+    }
+    return (gapFound, arrayOfGapPoints)
+  }
+  
+  /// Convert the gap start ap array in a normalized array.
+  var normalizedGaps : [Double]
+  {
+    get {
+      var gapsArray = [PtsOff]()
+      gapsArray = gapIndices.map {m_access_points_array[$0]}
+      var gapsPts = [PtsType]()
+      // FIXME: handle gap after PCR Reset
+      if hasPCRReset {
+        for gap in gapsArray {
+          if firstPTS < gap.pts {
+            gapsPts.append(PtsType(gap.pts - self.firstPTS))
+          }
+          else {
+            gapsPts.append(PtsType(gap.pts - m_access_points_array[pcrIndices[0]].pts))
+          }
+        }
+      }
+      else {
+        gapsPts = gapsArray.map {return $0.pts - self.firstPTS}
+      }
+      let gapsNormalized = self.container!.cuts.normalizePTSArray(ptsArray: gapsPts, ignorGaps: false)
+      return gapsNormalized
+    }
+  }
+  
+  /// Convert the pcr ap array in a normalized array.
+  var normalizedPCRs : [Double]
+  {
+    get {
+     var PCRsNormalized = [Double]()
+     guard hasPCRReset else { return PCRsNormalized }
+      let countAsDouble = Double(m_access_points_array.count)
+      // near enough,
+      PCRsNormalized = pcrIndices.map {Double($0)/countAsDouble}
+      return PCRsNormalized
+    }
+  }
+  
+  /// Work out the duration in seconds of the gaps preceeding given time mark
+  /// - parameter timeMark: actual played (able) time
+  /// - returns: original elapsed time including gaps which is suitable as a "seekTo" value
+  ///            for the player which only sees the PTS values
+  func gapDuration(before timeMark: Double) -> Double
+  {
+    guard (hasGaps) else { return timeMark }
+    
+    let discontinuousSegmentsInSeconds = self.videoSequences
+    var remaining = timeMark
+    var offset = 0.0
+    for segment in discontinuousSegmentsInSeconds
+    {
+      let video = segment.videoDurationSeconds
+      let gap = segment.gapSeconds
+      if remaining > video {
+        remaining -= video
+        offset += (video + (gap ?? 0.0))
+      }
+      else {
+        offset += remaining
+        break
+      }
+    }
+    return offset
+  }
+  
+  struct VideoSegment {
+    let videoDurationSeconds:Double
+    let gapSeconds:Double?
+    var segementSeconds: Double {
+      return gapSeconds == nil ? videoDurationSeconds : videoDurationSeconds+gapSeconds!
+    }
+  }
+  
+  //  typealias  videoSegment = (videoDurationSeconds: Double, gapSeconds:Double?)
+  
+  /// model of the video as a array of contiguous timed sequences of video+(optional)gap
+  /// this model ignors all cut marks, thus unedited video is represented (simpleDuration,nil)
+  // TODO: create code to handle PCRReset
+  var videoSequences: [VideoSegment]
+  {
+    var sequence = [VideoSegment]()
+    if (hasGaps) {
+      var start = 0
+      for end in gapIndices
+      {
+        let segmentDurationInSeconds = deriveRunTimePTSBetweenIndices(startIndex: start, endIndex: end).asSeconds
+        let gapDurationInPts = m_access_points_array[end+1].pts - m_access_points_array[end].pts
+        let gapDurationInSeconds:Double? = gapDurationInPts.asSeconds
+        let segment = VideoSegment(videoDurationSeconds:segmentDurationInSeconds, gapSeconds:gapDurationInSeconds)
+        sequence.append(segment)
+        start = end+1
+      }
+      let lastVideoSeconds = deriveRunTimePTSBetweenIndices(startIndex: start, endIndex: m_access_points_array.count-1).asSeconds
+      let segment:VideoSegment = VideoSegment(videoDurationSeconds:lastVideoSeconds,gapSeconds: nil)
+      sequence.append(segment)
+      return sequence
+    }
+    else  {
+      let segment: VideoSegment = VideoSegment(videoDurationSeconds:runtimePTS.asSeconds, gapSeconds:nil)
+      return [segment]
+    }
+  }
+  
   /// Derive the duration between to index values of the access points table.
   /// Allow for detection of one discontinuity.
   /// Expected usage is for get the time duration of a cut out section
@@ -503,10 +763,10 @@ class AccessPoints {
   
   /// Determine the elapsed duration from a pts in the sequence that may contains gaps
   /// Used to map PTS fed back from the AVPlayer currentTime into a "played video"
-  /// duration.  
-  func deriveRunTimeFrom(ptsTime: PtsType) -> PtsType
+  /// duration.
+  func deriveRunTimeFromFromPlayer(ptsTime: PtsType) -> PtsType
   {
-    let endIndex = nearestApIndex(ptsValue: ptsTime)
+    let endIndex = nearestApIndexForPTSFromPlayer(ptsValue: ptsTime)
     return deriveRunTimeDurationToIndex(endIndex: endIndex)
   }
   
@@ -520,7 +780,7 @@ class AccessPoints {
     
     var deltaSecs: Double
     var lastDeltas: String
-    var seqStart = 0
+    var seqStart = startIndex
     var ptsDiscontinuity = false
     var cummulativeDurationPTS = PtsType(0)
     if (debug) {
@@ -540,7 +800,7 @@ class AccessPoints {
       else {
         // pts discontinuity, treat as virtual gap
         lastDeltas = "--------- undetermined"
-        // ascribe an "typical step"
+        // ascribe a "typical step"
         deltaSecs = 3.0
         ptsDiscontinuity = true
       }

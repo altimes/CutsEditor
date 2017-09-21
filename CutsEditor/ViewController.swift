@@ -39,7 +39,7 @@ struct logMessage {
 
 let nilString = "nil"
 
-class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate, keyStrokeCatch
+class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate, KeyStrokeCatch
 {
   @IBOutlet weak var previousButton: NSButton!
   @IBOutlet weak var nextButton: NSButton!
@@ -73,8 +73,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   @IBOutlet weak var progressBar: NSProgressIndicator!
   
-  @IBOutlet weak var Thumbnail1: NSImageView!
-  @IBOutlet weak var filmstrip: NSStackView!
+  @IBOutlet weak var filmStrip: FilmStrip!
   // MARK: model
   
   var movie = Recording()
@@ -124,6 +123,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   var programDurationInSecs: Double = 0.0
   /// Flag for completion handler to resume playing after seek
   var wasPlaying: Bool = false
+  
+  /// SeekCompleted Flag.  Used to try and handle the consequence that "skipping" brings player time into
+  /// video file time scale (accounting to gaps in pts), whilst simply "playing through" gaps does not generate
+  /// a jump in the player reported time.  Thus to convert from player_time to video_time we need to know if
+  /// a skip has occured that will have brought to two time back into sync.  This is such that we can drive
+  /// the current position in the timeline control.
+  var seekCompleted = false
+  var lastSkippedToTime = PtsType(0)
+  
   /// Computed var checks if video was playing
   var isPlaying: Bool {
     get {
@@ -197,7 +205,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// object to perform speech processing
   var mySpeechRecogizer : NSSpeechRecognizer?
   
-  var filestripFrameGap: Double = 0.2         // seconds
+  /// Time line for movie, showing cut marks, bookmarks, current position and PCR resets
+  /// control that allows click and drag to skip within movie and time zoom for more precise
+  /// positioning
   var timelineView : TimelineView?
   
   /// track when frame changes to control suppression of
@@ -224,6 +234,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// observer ID
   let progressBarVisibilityChange = "progressBarVisibilityChange"
   
+  // TODO: create protocol to pass value into instance
+  var filmstripFrameGap: Double = 0.2         // seconds
+  
+  /// number of steps(?) to move marker on right/left arrow for fine adjustment
+  /// TODO: make yet another configuration item
+  var creepSteps = 2
+  
   override func viewDidLoad() {
     super.viewDidLoad()
     
@@ -246,6 +263,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     generalPrefs = preferences.generalPreference()
     systemSetup = generalPrefs.systemConfig
     playerPrefs = preferences.videoPlayerPreference()
+    self.monitorView.postsFrameChangedNotifications = true
     
     NotificationCenter.default.addObserver(self, selector: #selector(skipsChange(_:)), name: NSNotification.Name(rawValue: skipsDidChange), object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sortChange(_:)), name: NSNotification.Name(rawValue: sortDidChange), object: nil )
@@ -260,6 +278,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(sawMonitorViewFrameChange(_:)), name: NSNotification.Name.NSViewFrameDidChange, object: self.monitorView)
+    
+    //    AVPlayerItemTimeJumped
+    NotificationCenter.default.addObserver(self, selector: #selector(sawTimeJumpInPlayer(_:)), name: NSNotification.Name.AVPlayerItemTimeJumped, object: nil)
     
     //    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
     //
@@ -307,7 +328,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         keyBoardCommands.skipForward:(seekToAction,seekButton2c),
         keyBoardCommands.skipBackward:(seekToAction,seekButton1c),
     ]
-    addTimeTextLabelsToFilmStrip()
+    self.filmStrip.addTimeTextLabels()
+    self.monitorView.addObserver(self, forKeyPath: "videoBounds", options: NSKeyValueObservingOptions.new, context: nil)
+    self.monitorView.addObserver(self, forKeyPath: "isReadyForDisplay", options: NSKeyValueObservingOptions.new, context: nil)
   }
   
   override func viewDidAppear() {
@@ -316,12 +339,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let origin = CGPoint(x:50,y:5)
     self.view.window?.setFrameOrigin(origin)
     self.monitorView.window!.delegate = self
-    updateTimeTextLabelsOfFilmStrip()
+    self.filmStrip.updateTimeTextLabels()
   }
   
   func windowShouldClose(_ sender: Any) -> Bool {
     if (debug) { printLog(log:(#file+" "+#function) as AnyObject) }
     return true
+  }
+  
+  /// testing
+  func sawTimeJumpInPlayer(_ notification: Notification)
+  {
+    if let avItem = notification.object as? AVPlayerItem
+    {
+      if (debug) { print ("current time is \(avItem.currentTime().seconds)") }
+    }
+    else {
+      if (debug) { print("que?") }
+    }
   }
   
   func sawMonitorViewFrameChange(_ notification: Notification)
@@ -330,21 +365,39 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       printLog(log: "Saw Monitor View Frame Change \(self.monitorView.frame)" as AnyObject)
       printLog(log: "was playing \(wasPlaying)" as AnyObject)
     }
-    wasPlaying = isPlaying
-    resetTimeLineViewFrame()
+    if let currentRate = self.monitorView.player?.rate
+    {
+      if (debug) {print("current rate is \(currentRate)") }
+    }
+    //    wasPlaying = isPlaying
+    if (timelineView != nil) { resetTimeLineViewFrame() }
     monitorFrameChangeDate = Date()
     if (wasPlaying) {
       if (oldPlayerRate != nil) {
-        self.monitorView.player?.rate = oldPlayerRate!
+        playVideo(true, at: oldPlayerRate!)
       }
       else {
-        self.monitorView.player?.play()
+        playVideo(true)
       }
+    }
+    else {
+      playVideo(false)
+    }
+    if (debug) { printLog(log: "\(String(describing: oldPlayerRate))" as AnyObject) }
+  }
+  
+  func playVideo(_ playCommand: Bool, at rate :Float = Float(1.0))
+  {
+    if let myPlayer = self.monitorView.player as? ObservedAVPlayer {
+      myPlayer.playCommandFromUser = playCommand
+    }
+    if playCommand {
+      self.monitorView.player?.play()
+      self.monitorView.player?.rate = rate
     }
     else {
       self.monitorView.player?.pause()
     }
-    printLog(log: "\(String(describing: oldPlayerRate))" as AnyObject)
   }
   
   // brute force shutdown app on window RED X window closure - I don't want to think about issues
@@ -356,7 +409,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.monitorView.player?.removeTimeObserver(token)
       self.timeObserverToken = nil
     }
-    self.monitorView.player?.pause()
+    playVideo(false)
+    //    self.monitorView.player?.pause()
     NotificationCenter.default.removeObserver(self)
     NSApplication.shared().terminate(self)
   }
@@ -367,7 +421,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if let activePlayer = self.monitorView.player
     {
       wasPlaying = (activePlayer.rate) > Float(0.0)
-      self.monitorView.player!.pause()
+      playVideo(false)
+      //    self.monitorView.player?.pause()
     }
   }
   
@@ -378,6 +433,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func windowDidDeminiaturize(_ notification: Notification) {
     if wasPlaying {
       self.monitorView.player?.play()
+      if let myPlayer = self.monitorView.player as? ObservedAVPlayer {
+        myPlayer.playCommandFromUser = true
+      }
     }
     //    print(#file+" "+#function)
   }
@@ -397,21 +455,25 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     //    NotificationCenter.default.removeObserver(self)
   }
   
+  /// Brute force approach (KISS) to boundary/frame changes in the super view.
+  /// Simply destroy and re-create the time line view
+  /// TODO: develop the code to modify the view to track with the containing view
   func resetTimeLineViewFrame()
   {
-    if timelineView != nil {
-      let timelineWidth = self.monitorView.frame.width - 2.0*timeLineOrigin.x
-      let timelineFrame = NSRect(x: timeLineOrigin.x, y: timeLineOrigin.y, width: timelineWidth, height: timelineHeight)
-      timelineView!.frame = timelineFrame
-      timelineView?.setNeedsDisplay((timelineView?.bounds)!)
-    }
+    timelineView = createTimelineOverlayView()
+    updateCutsMarksGUI()
   }
   
+  /// picks up when movie goes fullscreen.  Downside is that it is called multiple times
   override func viewDidLayout() {
     super.viewDidLayout()
-    resetTimeLineViewFrame()
-    //    print("viewDidLayoutCalled")
-    //    print("monitor frame size \(self.monitorView.frame)")
+    if (timelineView != nil) { resetTimeLineViewFrame() }
+    let rate = "\(self.monitorView.player?.rate ?? -1000.0)"
+    if (debug) {
+      print("viewDidLayoutCalled")
+      print("monitor frame size \(self.monitorView.frame)")
+      print("during layout player rate is \(rate)")
+    }
   }
   
   /// Observer function to handle the "seek" changes that are made
@@ -537,8 +599,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle:playerStringConsts.stepButtonTitle
     stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
     self.honourOutInMarks = playerPrefs.skipCutSections
-    self.filestripFrameGap = playerPrefs.filmStripSpacing
-    updateTimeTextLabelsOfFilmStrip()
+    self.filmstripFrameGap = playerPrefs.filmStripSpacing
+    self.filmStrip.updateTimeTextLabels()
   }
   
   /// Observer function that responds to the selection of
@@ -713,6 +775,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  /// find the timeline view from the view heirarchy
   func getTimeLineView() -> TimelineView?
   {
     if let subViews = self.monitorView?.subviews {
@@ -731,6 +794,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return nil
   }
   
+  /// Remove the timeline from the view heirarchy and stop it responding to actions
   func removeTimelineView()
   {
     if let view = getTimeLineView()
@@ -803,18 +867,26 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   let timelineHeight = CGFloat(25.0)
   let timeLineOrigin = CGPoint(x:50.0, y:50.0)
   
+  /// Change the video to match the "clicked" position from the timeline Control
   func timelineChanged()
   {
     let targetPosition = self.timelineView!.normalizedXPos
-    print("new Position = \(targetPosition)")
+    if (debug) { print("new Position = \(targetPosition)") }
     // calculate absolution seek to postion
-    let newAVPositionInSeconds = targetPosition * timelineView!.timeRangeSeconds
+    var newAVPositionInSeconds = targetPosition * timelineView!.timeRangeSeconds
+    if (movie.ap.hasGaps) {
+      // need to incrementally add in the gaps to get a time that the player can
+      // seek to successfully
+      newAVPositionInSeconds = movie.ap.gapDuration(before: newAVPositionInSeconds)
+    }
     let seekTime = CMTime(seconds: newAVPositionInSeconds, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
-    self.monitorView.player?.currentItem?.seek(to: seekTime)
+    self.monitorView.player?.currentItem?.seek(to: seekTime, completionHandler: seekCompletedOK)
   }
   
+  /// manufacture a timeline control, with actions, allow to be first responder.
   func createTimelineOverlayView() -> TimelineView
   {
+    if (debug) { print("Creating timeline") }
     removeTimelineView()
     let timelineWidth = (self.monitorView.frame.width - 2.0*timeLineOrigin.x)
     let timeLineViewSize = CGSize(width: timelineWidth, height: timelineHeight)
@@ -823,12 +895,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // trap missing ap file gives an ap duration of 0
     let useableRange = timeRange.ap != 0 ? timeRange.ap : timeRange.best
     let thisTimeline = TimelineView(frame: timelineFrame, seconds: useableRange)
+    // hook up to gui
     thisTimeline.identifier = timelineViewId
     thisTimeline.action = #selector(timelineChanged)
     thisTimeline.target = self
+    
     let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.4)
     thisTimeline.backgroundColor = timelineBackground
     thisTimeline.keyCatchDelegate = self
+    
     
     self.monitorView.addSubview(thisTimeline)
     thisTimeline.becomeFirstResponder()
@@ -951,7 +1026,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       let playerState = self.monitorView.player?.status
       if (playerState != AVPlayerStatus.failed)
       {
-        self.monitorView.player?.pause()
+        playVideo(false)
+        //    self.monitorView.player?.pause()
       }
     }
     // should not be possible to invoke when index is > count-1 or == 0
@@ -1809,7 +1885,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         print (label, value)
       }
     }
-    if (debug) { print ("keypath <\(keyPath ?? "missing keypath")> for  \((object as AnyObject).className)") }
+    if (debug) { print ("keypath <\(keyPath ?? "missing keypath")> for  \((object as AnyObject).className!)") }
     if (keyPath == "tracks") {
       if let tracks = change?[NSKeyValueChangeKey.newKey] as? [AVPlayerItemTrack] {
         for track in tracks
@@ -1856,7 +1932,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
             self.programDuration.toolTip = movie.durationStrings.joined(separator: "\n").appending(videoDurationString)
-//            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
+            //            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
             let startTime = CMTimeMake(Int64(0), CutsTimeConst.PTS_TIMESCALE)
             
             if (self.monitorView.player?.status == .readyToPlay)
@@ -1864,13 +1940,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               self.monitorView.player?.seek(to: startTime, completionHandler: seekCompletedOK)
               updateCutsMarksGUI()
               // report seekable ranges
-              if let availableRanges = self.monitorView.player?.currentItem?.seekableTimeRanges
-              {
-                for range in availableRanges
+              if (debug) {
+                if let availableRanges = self.monitorView.player?.currentItem?.seekableTimeRanges
                 {
-                  if let timeRange = range as? CMTimeRange
+                  for range in availableRanges
                   {
-                    print("range of \(timeRange.start.seconds)  duration: \(timeRange.duration.seconds)")
+                    if let timeRange = range as? CMTimeRange
+                    {
+                      print("range of \(timeRange.start.seconds)  duration: \(timeRange.duration.seconds)")
+                    }
                   }
                 }
               }
@@ -1922,11 +2000,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else if (keyPath == "rate" && object is AVPlayer)
     {
-      print("change dict \(keyPath!) = \(String(describing: change))")
+      if (debug)  { print("change dict \(keyPath!) = \(String(describing: change))") }
       if let newRate = change?[NSKeyValueChangeKey.newKey] as? Double
       {
         //        wasPlaying = newRate != 0.0
         let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
+        if (timeControlString == "waiting") {
+          print ("argeh??")
+        }
         if (debug) { print("time control = \(timeControlString)") }
         if let errorState = self.monitorView.player?.error
         {
@@ -1934,22 +2015,61 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         
         if let timeDelta = monitorFrameChangeDate?.timeIntervalSinceNow {
-          //          print("diff to frame change = \(timeDelta)")
-          //          if timeDelta < -0.1
-          //          {
-          //
-          //            oldPlayerRate = self.monitorView.player?.rate
-          //          }
-          //          else {
-          //            oldPlayerRate = nil
-          //          }
+          if (debug) { print("diff to frame change = \(timeDelta)") }
+          if timeDelta < -0.1
+          {
+            
+            oldPlayerRate = self.monitorView.player?.rate
+          }
+          else {
+            oldPlayerRate = nil
+          }
         }
         if (debug) { printLog(log: "new value of player rate = \(newRate)" as AnyObject) }
         if (newRate == 0.0  && imageGenerator != nil)
         {
-          print("Saw rate Change")
+          if (debug) { print("Saw rate Change") }
           //          updateFilmStripSynchronous(time: (monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
-          updateFilmStripFor(time: (monitorView.player?.currentTime())!, secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
+          self.filmStrip.updateFor(time: (monitorView.player?.currentTime())!, secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
+        }
+      }
+    }
+      // catch zoom in/out of screen (fullscreen mode)
+    else if (keyPath == "videoBounds" && object is AVPlayerView)
+    {
+      if (timelineView != nil) { resetTimeLineViewFrame() }
+      if (true) {
+        if let rect = change?[.newKey] as? CGRect
+        {
+          if let newrect = rect as CGRect?
+          {
+            if !newrect.equalTo(CGRect.zero) {
+              print("newrect \(newrect)")
+              if let myPlayer = self.monitorView.player as? ObservedAVPlayer
+              {
+                let oldRate = self.monitorView.player?.rate
+                // dispatch a delayed reset to false but only do it once
+                if (!myPlayer.fullScreenTransition) {
+                  DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak weakSelf = self] in
+                    myPlayer.fullScreenTransition = false
+                    self.monitorView.player?.rate = oldRate!
+                    print("transition done - set rate at \(oldRate!)")
+                  }
+                }
+                print("transition of videoBounds saving rate of \(oldRate!)")
+                myPlayer.fullScreenTransition = true
+              }
+              print("newRect is \(newrect.size)")
+              if newrect.size.width < 1280.0
+              {
+                print("normal screen")
+              }
+              else
+              {
+                print("full screen")
+              }
+            }
+          }
         }
       }
     }
@@ -2028,13 +2148,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         imageGenerator!.requestedTimeToleranceAfter = CMTime(seconds: frameTolerance, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
         //        imageGenerator?.requestedTimeToleranceAfter = kCMTimeZero
         //        imageGenerator?.requestedTimeToleranceBefore = kCMTimeZero
-        let imageSize = CGSize(width:self.filmstrip.frame.height*(16.0/9.0), height:self.filmstrip.frame.height)
-        
+        let imageSize = CGSize(width:self.filmStrip.frame.height*(16.0/9.0), height:self.filmStrip.frame.height)
+        if (debug) { print(#function+" target Image Size\(imageSize)") }
         imageGenerator?.maximumSize = imageSize
         imageGenerator?.appliesPreferredTrackTransform = true
         imageGenerator?.apertureMode = AVAssetImageGeneratorApertureModeProductionAperture
         //        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
-        updateFilmStripFor(time: CMTime(seconds:10.0+3.0*filestripFrameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
+        self.filmStrip.updateFor(time: CMTime(seconds:10.0+3.0*filmstripFrameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
       }
       let track = trackAsset.asset!
       let duration = track.duration
@@ -2054,16 +2174,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       avItem.addObserver(self, forKeyPath: "tracks", options: NSKeyValueObservingOptions.new, context: nil)
       avItem.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
-      let samplePlayer = AVPlayer(playerItem: avItem)
+      let samplePlayer = ObservedAVPlayer(playerItem: avItem)
       samplePlayer.addObserver(self, forKeyPath: "rate", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.addObserver(self, forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil)
       samplePlayer.isClosedCaptionDisplayEnabled = true
+      
       self.monitorView.controlsStyle = playerPrefs.playbackControlStyle == videoControlStyle.floating ? .floating : .inline
       self.monitorView.player = samplePlayer
       self.monitorView.showsFullScreenToggleButton = true
       self.monitorView.showsFrameSteppingButtons = !playerPrefs.playbackShowFastForwardControls
       stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle : playerStringConsts.stepButtonTitle
-      self.monitorView.player?.seek(to: startTime)
+      // guard against apple avplayer wanting to read entire file across network due to
+      // detection that last pts is earlier than first (generates a block on the main thread!!)
+      if (!movie.ap.hasPCRReset) { self.monitorView.player?.seek(to: startTime) }
       self.addPeriodicTimeObserver()
     }
     else {
@@ -2085,29 +2208,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     guard let thisResponder = responder else {
       return
     }
+    
     printLog(log: thisResponder)
     printResponderChain(responder: thisResponder.nextResponder)
-  }
-  
-  func singleImageAtTime( seconds: Double, generator: AVAssetImageGenerator, imageSize:CGSize?) -> NSImage?
-  {
-    let fiveMinutes = CMTimeMakeWithSeconds(seconds, 600)
-    var actualTime = CMTime()
-    var scaledImage : NSImage?
-    do {
-      let image = try generator.copyCGImage(at:fiveMinutes, actualTime: &actualTime)
-      let actualTimeString = String(describing: CMTimeCopyDescription(nil, actualTime))
-      let requestedTimeString = String(describing: CMTimeCopyDescription(nil, fiveMinutes))
-      print("Got image at times: Asked for  \(requestedTimeString), got \(actualTimeString)");
-      
-      // Do something interesting with the image.
-      //      print("image size is \(image.width)/\(image.height)")
-      scaledImage = (imageSize != nil) ? NSImage(cgImage: image, size: imageSize!):NSImage(cgImage: image, size:NSSize(width:image.width, height: image.height))
-    }
-    catch let error as NSError {
-      print(error.localizedDescription)
-    }
-    return scaledImage
   }
   
   
@@ -2133,284 +2236,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return label
   }
   
-  func timeDeltaCATextLayer(deltaValue : String, in frame:NSRect) -> CATextLayer
-  {
-    // 10 % inset from image
-    let fontHeight = CGFloat(20.0)
-    let insetWidth = 0.15 * frame.width
-    let insetHeight = 0.25 * frame.height
-    let textframe = frame.insetBy(dx: insetWidth, dy: insetHeight)
-    let deltaTextLayer = CATextLayer()
-    deltaTextLayer.frame = textframe
-    deltaTextLayer.cornerRadius = 0.15 * deltaTextLayer.bounds.width
-    deltaTextLayer.string = deltaValue
-    let textBackgroundColour = NSColor.white.withAlphaComponent(0.3)
-    deltaTextLayer.backgroundColor = textBackgroundColour.cgColor
-    let textFont = NSFont(name: textFontName, size: fontHeight)
-    deltaTextLayer.font = textFont
-    deltaTextLayer.fontSize = fontHeight
-    deltaTextLayer.contentsScale = (NSScreen.main()?.backingScaleFactor)!
-    let transWhite = NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.7)
-    deltaTextLayer.alignmentMode = kCAAlignmentCenter
-    deltaTextLayer.foregroundColor = transWhite.cgColor
-    //    deltaTextLayer.alignment = NSTextAlignment.justified
-    return deltaTextLayer
-  }
   
-  let defaultFilmstripImage = NSImage(imageLiteralResourceName: "scissors_icon-icons.com_50046-128.png")
-  
-  func getDefaultFilmStripImageForView(_ bounds:NSRect) -> NSImage
-  {
-    let frameImage = defaultFilmstripImage
-    var imageRect = CGRect(x: 0, y: 0, width: defaultFilmstripImage.size.width, height: defaultFilmstripImage.size.height)
-    let cgFrameImageRef = frameImage.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
-    let viewWidth = bounds.height * (16.0/9.0)
-    let viewSize = CGSize(width: viewWidth, height: bounds.height)
-    let resizedImage = NSImage(cgImage: cgFrameImageRef!, size: viewSize)
-    return resizedImage
-  }
-  
-  func scaleImageForFilmStripSize(filmStripSize: CGSize, image: CGImage) -> NSImage
-  {
-    let imageSize = CGSize(width:filmStripSize.height*(16.0/9.0), height:filmStripSize.height)
-    //    var imageRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-    //    let cgFrameImageRef = image.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
-    //    let viewWidth = bounds.height * (16.0/9.0)
-    //    let viewSize = CGSize(width: viewWidth, height: bounds.height)
-    let resizedImage = NSImage(cgImage: image, size: imageSize)
-    return resizedImage
-    
-  }
-  
-  // add a transparent overlay label to show the time delta of the frame
-  // in relationship to the centre frame
-  // only called at view setup time (ie once only)
-  
-  func addTimeTextLabelsToFilmStrip()
-  {
-    // TODO: Add to user configuration
-    let secondsApart = filestripFrameGap    // nominal initial value
-    let frames = self.filmstrip.arrangedSubviews.count
-    let nominalCentreFrametime = Double(frames/2) * secondsApart
-    let startDelta = Double(frames / 2) * secondsApart
-    var frameDelta = startDelta * -1.0
-    var startTimeInSeconds = nominalCentreFrametime - startDelta
-    // static starter image
-    let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
-    let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
-    //    print("image frame is \(imageFrame)")
-    
-    for view in self.filmstrip.arrangedSubviews
-    {
-      // round the corners of the "frame"
-      view.wantsLayer = true
-      if let layer = view.layer {
-        layer.backgroundColor = NSColor.blue.cgColor
-        layer.cornerRadius = 0.1 * layer.bounds.width
-        layer.masksToBounds = true
-        let imageLayer = CALayer()
-        imageLayer.contents = resizedImage
-        imageLayer.frame = imageFrame
-        layer.addSublayer(imageLayer)
-        
-        let deltaString = filmStripTextFromDeltaSecs(frameDelta)
-        let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame)
-        
-        imageLayer.addSublayer(textLayer)
-      }
-      frameDelta += secondsApart
-      startTimeInSeconds += secondsApart
-    }
-  }
-  
-  func filmStripTextFromDeltaSecs(_ frameDelta: Double) -> String
-  {
-    var deltaString = String.init(format: "%.2f", frameDelta)
-    // suppress "-0.0" output from formatting
-    if abs(frameDelta) <= 0.0001 {
-      deltaString = " 0.00"
-    }
-    if frameDelta >= 0.0001 {
-      deltaString = "+"+deltaString
-    }
-    return deltaString
-  }
-  
-  /// replaces the transparent overlay label that shows the time delta of the thumbnail
-  /// called when user changes filmstrip gap in preferences
-  
-  func updateTimeTextLabelsOfFilmStrip()
-  {
-    let secondsApart = filestripFrameGap  // from user prefs
-    let frames = self.filmstrip.arrangedSubviews.count
-    let nominalCentreFrametime = Double(frames/2) * secondsApart
-    let startDelta = Double(frames / 2) * secondsApart
-    var frameDelta = startDelta * -1.0
-    var startTimeInSeconds = nominalCentreFrametime - startDelta
-    
-    for view in self.filmstrip.arrangedSubviews
-    {
-      let deltaString = filmStripTextFromDeltaSecs(frameDelta)
-      if view.wantsLayer {
-        if let imageLayer = view.layer!.sublayers?[0] {
-          let textLayer = timeDeltaCATextLayer(deltaValue: deltaString, in: imageLayer.frame)
-          let oldTextLayer = imageLayer.sublayers?[0]
-          oldTextLayer?.removeFromSuperlayer()
-          imageLayer.addSublayer(textLayer)
-        }
-      }
-      frameDelta += secondsApart
-      startTimeInSeconds += secondsApart
-    }
-  }
-  
-  /* original function before trying layers instead of views
-   
-   func addTimeTextLabelsToFilmStrip()
-   {
-   // TODO: Add to user configuration
-   let secondsApart = 0.1    // nominal initial value
-   let nominalCentreFrametime = 0.3
-   let frames = self.filmstrip.arrangedSubviews.count
-   let startDelta = Double(frames / 2) * secondsApart
-   var frameDelta = startDelta * -1.0
-   var startTimeInSeconds = nominalCentreFrametime - startDelta
-   // static starter image
-   let resizedImage = getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[0].bounds)
-   let imageFrame = NSRect(x: 0, y: 0, width: resizedImage.size.width, height: resizedImage.size.height)
-   //    print("image frame is \(imageFrame)")
-   
-   var identifierIndex = 0
-   for view in self.filmstrip.arrangedSubviews
-   {
-   // round the corners of the "frame"
-   view.wantsLayer = true
-   if let layer = view.layer {
-   layer.backgroundColor = NSColor.blue.cgColor
-   layer.cornerRadius = 0.1 * layer.bounds.width
-   layer.masksToBounds = true
-   }
-   //      print("intrinsic view size is \(view.intrinsicContentSize)")
-   //      print("initial view frame is \(view.frame)")
-   let imageView = view as! NSImageView
-   //      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
-   imageView.image = resizedImage
-   imageView.frame = imageFrame
-   var deltaString = String.init(format: "%.2f", frameDelta)
-   // suppress "-0.0" output from formatting
-   if abs(frameDelta) <= 0.0001 {
-   deltaString = " 0.00"
-   }
-   if frameDelta >= 0.0001 {
-   deltaString = "+"+deltaString
-   }
-   let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame, withId: identifierIndex)
-   //      print ("label position =\(label.frame), label size = \(label.bounds)")
-   frameDelta += secondsApart
-   imageView.addSubview(label)
-   imageView.setFrameSize(imageFrame.size)
-   //      print("post view frame is \(view.frame)")
-   //      print("post processing view size \(view.fittingSize)")
-   startTimeInSeconds += secondsApart
-   identifierIndex += 1
-   }
-   }
-   
-   */
-  
-  // slow and synchronous for developement testing only
-  func updateFilmStripSynchronous(time: CMTime, secondsApart: Double, imageGenerator: AVAssetImageGenerator)
-  {
-    let frames = self.filmstrip.arrangedSubviews.count
-    let startDelta = Double(frames / 2) * secondsApart
-    //    var frameDelta = startDelta * -1.0
-    var startTimeInSeconds = time.seconds - startDelta
-    for view in self.filmstrip.arrangedSubviews
-    {
-      //      var textLabel : NSTextField?
-      let imageView = view as! NSImageView
-      //      for v in imageView.subviews {
-      //        if (v.identifier?.contains("timetextLabel"))! {
-      //          textLabel = (v as! NSTextField)
-      //        }
-      //      }
-      let viewWidth = view.bounds.width == 0 ? view.bounds.height * (16.0/9.0): view.bounds.width
-      let viewSize = CGSize(width: viewWidth, height: view.bounds.height)
-      if let frameImage = singleImageAtTime(seconds: startTimeInSeconds, generator: imageGenerator, imageSize: viewSize)
-      {
-        imageView.image = frameImage
-        imageView.frame = NSRect(x: 0, y: 0, width: frameImage.size.width, height: frameImage.size.height)
-        //        let deltaString = String.init(format: "%.2f", frameDelta)
-        //        let label = timeDeltaTextLabel(deltaValue: deltaString, in: imageView.frame)
-        //        textLabel?.stringValue = deltaString
-        //        frameDelta += secondsApart
-        //        imageView.addSubview(label)
-      }
-      startTimeInSeconds += secondsApart
-    }
-  }
-  
-  /// Main queue callback from handler to update user interface with
-  /// image generated for filmstrip display
-  
-  func updateFilmstripWithImage(_ image: CGImage, atStripIndex index: Int)
-  {
-    //    let pixelData = image.pixelData()
-    //    for i in 0 ... 10 {
-    //      let startByte = i*4
-    //
-    //      print("InitialBytes[\(index)] \(i): \(pixelData![startByte+0]):\(pixelData![startByte+1]):\(pixelData![startByte+2]):\(pixelData![startByte+3])")
-    //    }
-    if let layer = self.filmstrip.arrangedSubviews[index].layer {
-      layer.sublayers?[0].contents = image
-    }
-  }
-  
-  /// Handler to deal with each image as it becomes available.
-  /// Needs to determine which array element it belongs to.
-  /// To do this, we need the base start time to calculate an array index
-  /// from the "requested" time.
-  /// Also need to access the "spacing" of the frames
-  func assetImageCompletionHandler (time:CMTime, image: CGImage?, actualTime:CMTime, result:AVAssetImageGeneratorResult, error: Error?)
-  {
-    //    let resultAsString = result == AVAssetImageGeneratorResult.succeeded ? "Succeeded" : (result == AVAssetImageGeneratorResult.failed) ? "Failed": "Cancelled"
-    //    print("result: \(resultAsString) requested at time \(time.seconds)")
-    if (result == AVAssetImageGeneratorResult.failed) {
-      print("error: \(String(describing: error))")
-      print("requestedTime \(time.seconds)")
-      print("actualTime \(actualTime.seconds)")
-    }
-    if let _image = image, let viewIndex = requestedTimes.index(of: time as NSValue)
-    {
-      DispatchQueue.main.async  {
-        self.updateFilmstripWithImage(_image, atStripIndex: viewIndex)
-      }
-    }
-  }
-  
-  var requestedTimes = [NSValue]()
-  
-  /// Generate and display thumbnails either size of the current position
-  /// Only do this if the player is paused
-  func updateFilmStripFor(time: CMTime, secondsApart: Double, imageGenerator: AVAssetImageGenerator)
-  {
-    let  handler = assetImageCompletionHandler
-    if (self.monitorView.player?.rate == 0.0) {
-      imageGenerator.cancelAllCGImageGeneration()
-      // Create array of 7 times for filmstrip (never negative)
-      let startSeconds = (time.seconds - 3.0*secondsApart) > 0.0 ? (time.seconds - 3.0*secondsApart) : 0.0
-      
-      requestedTimes.removeAll()
-      for position in 0 ... 6
-      {
-        requestedTimes.append(CMTime(seconds: startSeconds + Double(position)*secondsApart, preferredTimescale: CutsTimeConst.PTS_TIMESCALE) as NSValue)
-        //        (filmstrip.arrangedSubviews[position] as! NSImageView).image = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
-        // sublayers[0] is the image layer
-        filmstrip.arrangedSubviews[position].layer?.sublayers?[0].contents = self.getDefaultFilmStripImageForView(filmstrip.arrangedSubviews[position].frame)
-      }
-      imageGenerator.generateCGImagesAsynchronously(forTimes: requestedTimes, completionHandler: handler)
-    }
-  }
   
   /// Update the timeline view
   func updateCutsMarksGUI()
@@ -2422,6 +2248,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
       let cutBoxPositions = movie.cuts.wellOrdered().normalizedInOutMarks
       timelineView?.setCutBoxPositions(normalizedPositions: cutBoxPositions)
+      timelineView?.setGapPositions(normalizedPositions: movie.ap.normalizedGaps)
+      timelineView?.setPCRPositions(normalizedPositions: movie.ap.normalizedPCRs)
       timelineView?.setNeedsDisplay((timelineView?.bounds)!)
     }
   }
@@ -2431,9 +2259,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func setStatusFieldToCurrentSelection()
   {
     let arrayIndex = currentFile.indexOfSelectedItem
-    let message = String(format:logMessage.indexOfSelectedFileMsg, arrayIndex+1, filelist.count)
-    setStatusFieldStringValue(isLoggable: true, message: message)
-    //    self.statusField.stringValue = "file \(arrayIndex+1) of \(filelist.count)"
+    //    let message = String(format:logMessage.indexOfSelectedFileMsg, arrayIndex+1, filelist.count)
+    setStatusFieldFormat(isLoggable: true, format:logMessage.indexOfSelectedFileMsg, arrayIndex+1, filelist.count)
   }
   
   /// Conceptual start for a logging mechanism.  Use a function
@@ -2445,10 +2272,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// Wrapper function to save needing discrete message formatting
-  func setStatusFieldFormat(isLoggable loggable: Bool, format withFormat:String, args:CVarArg)
+  //  func setStatusFieldFormat(isLoggable loggable: Bool, format withFormat:String, args:CVarArg)
+  func setStatusFieldFormat(isLoggable loggable: Bool, format withFormat:String, _ valist:Any...)
   {
-    let message = String(format:withFormat, args)
-    setStatusFieldStringValue(isLoggable: loggable, message: message)
+    if let args = valist as? [CVarArg] {
+      let message = String(format:withFormat, arguments: args)
+      setStatusFieldStringValue(isLoggable: loggable, message: message)
+    }
+    else {
+      NSBeep()
+    }
   }
   
   
@@ -2457,19 +2290,29 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func seekCompletedOK(_ isFinished:Bool)
   {
     if (!isFinished ) {
-      if (true) { print("Seek Cancelled") }
+      if (debug) { print("Seek Cancelled") }
     }
     else {
-      if (true) { print("Seek completed") }
+      if (debug) { print("Seek completed") }
       //            updateFilmStripSynchronous(time: (self.monitorView.player?.currentTime())!, secondsApart: frameGap, imageGenerator: imageGenerator!)
       if let centreTime = monitorView.player?.currentTime()
       {
-        updateFilmStripFor(time: centreTime, secondsApart: filestripFrameGap, imageGenerator: imageGenerator!)
+        if (self.monitorView.player?.rate == 0.0)
+        {
+          self.filmStrip.updateFor(time: centreTime, secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
+        }
       }
       if (wasPlaying) {
         monitorView.player?.play()
+        if let myPlayer = self.monitorView.player as? ObservedAVPlayer {
+          myPlayer.playCommandFromUser = true
+        }
       }
       suppressTimedUpdates = false
+      let lastSkippedToCMTime = monitorView.player!.currentTime().convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default)
+      seekCompleted = true
+      lastSkippedToTime = PtsType(lastSkippedToCMTime.value)
+      if (debug) { print("lastSkippedToTime \(lastSkippedToTime.asSeconds)") }
     }
   }
   
@@ -2499,7 +2342,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     wasPlaying = isPlaying
     if (wasPlaying) {
-      self.monitorView.player?.pause()
+      playVideo(false)
+      //    self.monitorView.player?.pause()
     }
     let seekTolerance = boundaryHunter.seekTolerance
     self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: seekTolerance, completionHandler: seekCompletedOK)
@@ -2513,7 +2357,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func playerPositionInPTS() -> UInt64
   {
     let itemStatus = self.monitorView.player?.currentItem?.status
-    print("status at call to current time\(itemStatus.debugDescription)")
+    if (debug) { print("status at call to current time\(itemStatus.debugDescription)") }
     var playPosition:Int64
     //    if self.monitorView.player?.currentItem?.duration.timescale != CutsTimeConst.PTS_TIMESCALE
     //    {
@@ -2609,7 +2453,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           returnRate = Int((calculatedRate < midpoint) ? rates[i] : rates[i+1])
         }
       }
-      if (returnRate != nil && true) {
+      if (returnRate != nil && debug) {
         print("returning \(returnRate!) from \(calculatedRate) at index \(i)")
       }
       i += 1
@@ -2619,7 +2463,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // from apple code sample
   func addPeriodicTimeObserver() {
-    let debug = false
     // Invoke callback every second
     let interval = CMTime(seconds: callbackTimePeriodSecs,
                           preferredTimescale: CMTimeScale(NSEC_PER_SEC))
@@ -2629,66 +2472,96 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     timeObserverToken =
       self.monitorView.player?.addPeriodicTimeObserver(forInterval: interval, queue: mainQueue) {
         [weak self] time in
+        var closureDebug = false
         //        print("Called back at \(self?.clockSeconds() ?? "??")")
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
-        let currentCMTime =  self?.monitorView.player?.currentTime()
-        let currentClock = DispatchTime.now()
-        //        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
-        print("CT -> \(currentCMTime!.seconds)")
-        
-        let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
-        if (debug)  { print("Saw callback start at \(currentTime)") }
-        guard (self?.lastPeriodicCallBackTime != currentTime && self?.suppressTimedUpdates == false ) else {
-          // do nothing
-          if (debug) { print("skipping callback at \(currentTime)") }
-          if (self?.lastPeriodicCallBackTime == currentTime && debug ) {print("duplicate time")}
-          if (self?.suppressTimedUpdates == true && debug ) {print("timed updates suppressed")}
-          return
-        }
-        let deltaRealWorld = currentClock.uptimeNanoseconds - (self?.lastPeriodicClocktime.uptimeNanoseconds)!
-        let deltaVideoTime = currentTime - (self?.lastPeriodicCallBackTime)!
-        if (debug) { print("callback at video time/elapsed \(currentTime)") }
-        if (deltaRealWorld > 1000000000) // once per second in the real world
-        {
-          let deltaRate = Double(deltaVideoTime)/(Double(deltaRealWorld) * 1.0e-9)
-          let derivedRate = self?.getPlaybackRate(calculatedRate: deltaRate)
-          print("calculated rate =            ---------------------------->>>>>>    \(derivedRate!)")
-          print("calculated deltaTime= \(deltaVideoTime)")
-          print("calculated elapse time = \(deltaRealWorld)")
-          self?.lastPeriodicClocktime = currentClock
-          self?.lastPeriodicCallBackTime = currentTime
-        }
-        let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
-        self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
-        if (self?.honourOutInMarks)! {
-          if let afterAdTime = self?.movie.cuts.programTimeAfter(currentCMTime!)
+        if let currentCMTime =  self?.monitorView.player?.currentTime() {
+          let currentClock = DispatchTime.now()
+          //        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
+          if (closureDebug) { print("CT -> \(currentCMTime.seconds)") }
+          
+          let currentTime = Float(CMTimeGetSeconds((self?.monitorView.player?.currentTime())!))
+          if (closureDebug)  { print("Saw callback start at \(currentTime)") }
+          guard (self?.lastPeriodicCallBackTime != currentTime && self?.suppressTimedUpdates == false ) else {
+            // do nothing
+            if (closureDebug) { print("skipping callback at \(currentTime)") }
+            if (self?.lastPeriodicCallBackTime == currentTime && closureDebug ) {print("duplicate time")}
+            if (self?.suppressTimedUpdates == true && closureDebug ) {print("timed updates suppressed")}
+            return
+          }
+          let deltaRealWorld = currentClock.uptimeNanoseconds - (self?.lastPeriodicClocktime.uptimeNanoseconds)!
+          let deltaVideoTime = currentTime - (self?.lastPeriodicCallBackTime)!
+          if (closureDebug) { print("callback at video time/elapsed \(currentTime)") }
+          if (deltaRealWorld > 1000000000) // once per second in the real world
           {
-            // ensure we seek AFTER the current time, ie don't seek backwards!!
-            if (afterAdTime.seconds > (currentCMTime?.seconds)!)
-            {
-              self?.monitorView.player?.seek(to: afterAdTime, toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity)
+            let deltaRate = Double(deltaVideoTime)/(Double(deltaRealWorld) * 1.0e-9)
+            let derivedRate = self?.getPlaybackRate(calculatedRate: deltaRate)
+            if (closureDebug) {
+              print("calculated rate =            ---------------------------->>>>>>    \(derivedRate!)")
+              print("calculated deltaTime= \(deltaVideoTime)")
+              print("calculated elapse time = \(deltaRealWorld)")
             }
-            if (debug) { print("Will Skip to time \(afterAdTime.seconds)") }
-            self?.highlightCutTableEntryBefore(currentTime: Double(afterAdTime.seconds))
+            self?.lastPeriodicClocktime = currentClock
+            self?.lastPeriodicCallBackTime = currentTime
+          }
+          let hmsString = CutEntry.hhMMssFromSeconds(Double(currentTime))
+          self?.programDuration.stringValue = hmsString + "/" + CutEntry.hhMMssFromSeconds((self?.programDurationInSecs)!)
+          if (self?.honourOutInMarks)! {
+            if let afterAdTime = self?.movie.cuts.programTimeAfter(currentCMTime)
+            {
+              // ensure we seek AFTER the current time, ie don't seek backwards!!
+              if (afterAdTime.seconds > currentCMTime.seconds)
+              {
+                self?.monitorView.player?.seek(to: afterAdTime, toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity)
+              }
+              if (closureDebug) { print("Will Skip to time \(afterAdTime.seconds)") }
+              self?.highlightCutTableEntryBefore(currentTime: Double(afterAdTime.seconds))
+            }
+            else {
+              self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
+            }
           }
           else {
             self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
           }
+          // update timeline gui
+          if (currentCMTime.seconds) >= 0.0
+          {
+            if let secondsDuration = self?.timelineView?.timeRangeSeconds
+            {
+              var secondsElapsed = Double(currentCMTime.convertScale(1, method: CMTimeRoundingMethod.default).value)
+              let currentVideoScale = currentCMTime.convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default)
+              let currentVideoPTS = PtsType(currentVideoScale.value)
+              if let seekDone = self?.seekCompleted {
+                if seekDone
+                {
+                  // allow for any gaps "played" through
+                  let gapAdjustment = (self?.movie.ap.gapsBetweenTimes(start: (self?.lastSkippedToTime)!, end: currentVideoPTS))!
+                  secondsElapsed -= gapAdjustment
+                }
+              }
+              //              let secondsDuration = Double(secondsDurationCMTimeValue)
+              let normalizedCurrentPosition = secondsElapsed/secondsDuration
+              self?.timelineView?.updateBoundary(newCurrentPosition: normalizedCurrentPosition)
+              //            print ("\(normalizedCurrentPosition) from \(currentPositionArray[0]):\(currentPositionArray[0].asSeconds)")
+              self?.timelineView?.currentPosition =  [normalizedCurrentPosition]
+            }
+            //              print(" time: \(currentPositionArray[0]) - normed to: \(normalizedCurrentPosition[0])")
+            self?.updateCutsMarksGUI()
+            let playerTimeInVideoTime = currentCMTime.convertScale(CutsTimeConst.PTS_TIMESCALE, method: CMTimeRoundingMethod.default)
+            let position = PtsType(playerTimeInVideoTime.value)
+            let playerPTSInVideoUnits = PtsType(playerTimeInVideoTime.value)
+            if (self?.debug)! {
+              print("position \(position.hhMMss)")
+              print("playerPTSInVideoUnits \(playerPTSInVideoUnits.hhMMss)")
+            }
+          }
+          else {
+            print("Argh! negative currentTime \(currentCMTime)")
+          }
+          if (closureDebug) { print("Saw callback end for \(currentTime)") }
         }
-        else {
-          self?.highlightCutTableEntryBefore(currentTime: Double(currentTime))
-        }
-        // update timeline gui
-        if (currentCMTime?.seconds)! >= 0.0 {
-          let currentPositionArray = [UInt64((currentCMTime?.seconds)! * Double(CutsTimeConst.PTS_TIMESCALE))]
-          self?.timelineView?.currentPosition = (self?.movie.cuts.normalizePTSArray(ptsArray: currentPositionArray, ignorGaps: true))!
-          self?.updateCutsMarksGUI()
-        }
-        else {
-          print("Argh! negative currentTime \(currentCMTime!)")
-        }
-        if (debug) { print("Saw callback end for \(currentTime)") }
     }
     // end closure addition
   }
@@ -2955,6 +2828,72 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       updateCutsMarksGUI()
       cuttable = movie.isCuttable
     }
+  }
+  
+  /// Utility to function to assist moving OUT cut mark a fraction backwards
+  /// when the "binary hunt" decide we a close enough when at the start of
+  /// an advertisement
+  func moveMarkBySteps(_ step:Int)
+  {
+    var statusMessageChanged = false
+    guard step != 0 else { return }
+    let leftMove = step < 0
+    let originalNumberOfRows = self.cutsTable.numberOfRows
+    let currentRow = self.cutsTable.selectedRow
+    let waitTime:UInt32 = 125 // micro secs
+    if let currentMark = self.movie.cuts.entry(at: currentRow) {
+      if (currentMark.type == MARK_TYPE.OUT || currentMark.type == MARK_TYPE.IN)
+      {
+        var failed = true
+        var loopCount = 0
+        
+        self.monitorView.player?.currentItem?.step(byCount: step)
+        usleep(waitTime)  // time to let the detached seek happen or we are trying to add a coincident bookmark
+        addMark(sender: (currentMark.type == MARK_TYPE.OUT ? outButton : inButton))
+        while failed && loopCount < 3 {
+          failed = cutsTable.numberOfRows == originalNumberOfRows
+          if failed
+          {
+            // addMark failed due to seek failure
+            setStatusFieldStringValue(isLoggable: false, message: "Failed Moving mark,... trying again in \(Double(waitTime)/1000.0) secs")
+            statusMessageChanged = true
+            NSBeep()
+            usleep(waitTime)
+            loopCount += 1
+          }
+          else {
+            let previousMarkRow = currentRow + (leftMove ? +1 : 0)
+            self.cutsTable.selectRowIndexes(IndexSet(integer: previousMarkRow), byExtendingSelection: false)
+            deleteRowByKeyPress()
+            self.cutsTable.selectRowIndexes(IndexSet(integer: currentRow), byExtendingSelection: false)
+            if (self.monitorView.player?.rate == 0.0)
+            {
+              filmStrip.updateFor(time: (monitorView.player?.currentTime())!, secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
+            }
+          }
+        }
+        if (failed) {
+          setStatusFieldStringValue(isLoggable: false, message: "Failed Moving mark,... Gave up after \(loopCount-1) attempts")
+          NSBeep()
+        }
+        else {
+          if (statusMessageChanged)  // clear warning messages when eventual success was achieved
+          {
+            setStatusFieldStringValue(isLoggable: false, message: "")
+          }
+        }
+      }
+    }
+  }
+  
+  func moveMarkLeftBySteps(_ steps: Int)
+  {
+    moveMarkBySteps(-steps)
+  }
+  
+  func moveMarkRightBySteps(_ steps: Int)
+  {
+    moveMarkBySteps(steps)
   }
   
   /// Delete a row from the cuts table when user presses "Delete" key on
@@ -3403,7 +3342,33 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (event.window == self.view.window)
         {
           deleteRowByKeyPress()
-          print("Saw delete keypress")
+          //          print("Saw delete keypress")
+          return
+        }
+      }
+    }
+    if let uniCodeLeftArrow = UnicodeScalar(NSLeftArrowFunctionKey)
+    {
+      if event.charactersIgnoringModifiers == String(Character(uniCodeLeftArrow))
+      {
+        // check that the viewController window has focus
+        if (event.window == self.view.window)
+        {
+          moveMarkLeftBySteps(creepSteps)
+          if (debug) { print("Saw leftArrow keypress") }
+          return
+        }
+      }
+    }
+    if let uniCodeRightArrow = UnicodeScalar(NSRightArrowFunctionKey)
+    {
+      if event.charactersIgnoringModifiers == String(Character(uniCodeRightArrow))
+      {
+        // check that the viewController window has focus
+        if (event.window == self.view.window)
+        {
+          moveMarkRightBySteps(creepSteps)
+          if (debug)  { print("Saw rightArrow keypress") }
           return
         }
       }
@@ -3411,7 +3376,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown) && NSEvent.modifierFlags().isEmpty
     {
       if let keyString = event.characters {
-        //        print(">>\(keyString)<<")
+        if (debug) { print(">>\(keyString)<<") }
         
         if let keyStrokeCommand = controlKeyDictionary[keyString]
         {
@@ -3573,7 +3538,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  // MARK: keyStrokeCatch protocol
+  // MARK: KeyStrokeCatch protocol
   func didPressLeftArrow() {
     Swift.print("Saw left arrow keystroke")
   }

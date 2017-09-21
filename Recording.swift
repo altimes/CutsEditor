@@ -193,7 +193,7 @@ class Recording
     if (foundFile)
     {
       data = fileMgr.contents(atPath: fullFileName)
-      if (true)  {
+      if (debug)  {
         print("Found file \(fullFileName)")
         print("Found file of \((data?.count ?? 0))! size")
       }

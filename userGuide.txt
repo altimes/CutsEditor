@@ -5,7 +5,7 @@ bookmarks on Beyonwiz Tx PVRs.
 
 Caveat Emptor
 
-Developed on Mac OS Sierra, with Xcode 8.2 and Swift 3 with no thought to
+Developed on Mac OS Sierra, with Xcode 8.3 and Swift 3 with no thought to
 compatibility to earlier versions.  The program uses the Apple provided
 AVPlayer for its video interface.  This player does choke on slightly corrupt
 recordings.  When it encounters something imperfect, it appears to read the
@@ -23,8 +23,8 @@ directory.  When a directory is selected, all the files in and below the
 directory are collected into a list.  Directories called ".Trash" are excluded
 from the search.
 
-2. The first recording is opened and the video is positioned at first bookmark
-or the beginning of the recording.  Some of the details of the recording from
+2. The first recording is opened and the video is positioned at (first bookmark
+or) the beginning of the recording.  Some of the details of the recording from
 "eit" and "meta" file are displayed along with the current contents of the
 cuts file.
 
@@ -35,7 +35,7 @@ can be changed in the user preferences if the defaults do not suit.
 4. Changing to another recording triggers the saving of the changes to the cuts
 file.  By default the changes to the cuts file are "autowrite".  This
 characteristic can be changed in the Preferences/General panel if the user prefers
-prompting when changes are made permanent.  A recording can be selected using the
+prompting before changes are made permanent.  A recording can be selected using the
 Prev/Next buttons or by scrolling through the list.
 
 5. The list of recordings is colour coded.   The coding is Green for a recording
@@ -77,6 +77,11 @@ Hovering over a recording name gives a tooltip that show that path to the record
 to discriminate between two recordings with the same name stored in different directories
 with the same tree).
 
+Delete recording: Selected recording is deleted.  No not really, like the PVR, the recording
+is moved to the "Trash" folder.  (Provided the movie directory is selected and a .Trash exists)
+(currently the program looks for a .Trash file BELOW the starting directory - yeah, a poor design
+non decision).
+
 Verbal Control.
 
 Verbal control has been added using the Apple speech recognizer.
@@ -111,12 +116,17 @@ seeing and "advert" or "program".  This identification can be verbal (if miropho
 been enabled),  clicking the P(rogram) or A(dvert) buttons on the GUI or using the "/" or "z" keys
 on the keyboard.  Each step halves the distance between the advert and program until
 the boundary is seen.  The GUI buttons are given a green background when the gap
-is less than 1/25 th of a second.  The IN or OUT mark can then be set using the GUI
+is less than threshold (initially 1/25 th of a second).  The IN or OUT mark can then be set using the GUI
 Mark Buttons or using the "x" or "." keys from the keyboard.  If at least one IN or OUT
 is already present, then the "c" or "," keys will add the complement to the last
 Cut Mark.  When the remaining "gap" falls below a threshold value and there is a preceeding
 cut mark, then a complementary mark is inserted followed by a beep to indicate that
 the hunt is done - this is done to minimize the amount of tediious user input required.
+
+If the cutmark is placed slightly wrong, that is, just in the advert instead of before
+it, or still in the advert rather that at the re-start of the program, then the right and
+left arrow keys can be used to "creep" the selected cutMark left of right as desired.
+Currently, the creep is 2 frames, this may be eventually a user configuration.
 
 If the user indavertently indicates the wrong type (ie program when in an
 advertisement), then the ";" key or the GUI button label "!" can be used to "reset"
@@ -219,5 +229,5 @@ to the top.
 The name, channel, date fields are derived from the file name pattern.  If
 the pattern changes the program will break.
 
-20170116-001
+20170905-001
 

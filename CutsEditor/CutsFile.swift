@@ -234,6 +234,7 @@ class CutsFile: NSObject, NSCopying {
     modified = true
     cutsArray.append(entry)
     cutsArray.sort(by: <)
+    if (debug) { printCutsData() }
   }
   
   /// Derives and returns first and last position in a video file
@@ -813,6 +814,11 @@ class CutsFile: NSObject, NSCopying {
     outDuration = Double(outDurationInPTS) * CutsTimeConst.PTS_DURATION
     return outDuration
   }
+  
+  /// Given array of zero based pts values, normalize them into a 0..1.0 range
+  /// based on the best derived duration.  The value can be either based on actual
+  /// playable duration (removing gaps) or "nominal" end_time - start_time duration
+  /// ignoring gaps
   public func normalizePTSArray(ptsArray: [PtsType], ignorGaps:Bool) -> [ Double ]
   {
     // need duration >= last bookmark
@@ -827,7 +833,7 @@ class CutsFile: NSObject, NSCopying {
     {
       var position = 0.0
       if (ap.hasGaps && !ignorGaps) {
-        position = (Double(ap.deriveRunTimeFrom(ptsTime: pts))) / Double(range)
+        position = (Double(ap.deriveRunTimeFromFromPlayer(ptsTime: pts))) / Double(range)
       }
       else {
         position = (Double(pts))/Double(range)
