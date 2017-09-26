@@ -62,7 +62,7 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
   @IBOutlet weak var nearEnoughForCutmark: NSTextField!
   @IBOutlet weak var gapForClosingReport: NSTextField!
   
-  var delegate = NSApplication.shared().delegate as! AppPreferences
+  var delegate = NSApplication.shared.delegate as! AppPreferences
   var sortPreference = sortingPreferences()
   var adHunterPreference = adHunterPreferences()
   var adHunterChanged: Bool = false
@@ -105,8 +105,8 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     }
    
     adHunterPreference = delegate.adHunterPreference()
-    visualClosingDisplay.state = adHunterPreference.isOverlayReporting ? NSOnState : NSOffState
-    speechClosingDisplay.state = adHunterPreference.isSpeechReporting ? NSOnState : NSOffState
+    visualClosingDisplay.state = adHunterPreference.isOverlayReporting ? .on : .off
+    speechClosingDisplay.state = adHunterPreference.isSpeechReporting ? .on : .off
     nearEnoughForCutmark.doubleValue = adHunterPreference.nearEnough
     gapForClosingReport.doubleValue = adHunterPreference.closingReport
   }
@@ -133,13 +133,13 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
 
   @IBAction func displayClosing(_ sender: NSButton)
   {
-    adHunterPreference.isOverlayReporting = sender.state == NSOnState
+    adHunterPreference.isOverlayReporting = sender.state == .on
     adHunterChanged = true
   }
   
   @IBAction func speakClosing(_ sender: NSButton)
   {
-    adHunterPreference.isSpeechReporting = sender.state == NSOnState
+    adHunterPreference.isSpeechReporting = sender.state == .on
     adHunterChanged = true
  }
   
@@ -177,19 +177,18 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     else {
       numberFieldEntryIsValid = false
       textField.backgroundColor = NSColor.red
-      NSBeep()
+      NSSound.beep()
     }
-    if numberFieldEntryIsValid && fieldIdentifier == adHunterStringConsts.nearEngoughThreshold
+    if numberFieldEntryIsValid && fieldIdentifier!.rawValue == adHunterStringConsts.nearEngoughThreshold
       {
         adHunterPreference.nearEnough = textField.doubleValue
         adHunterChanged = true
       }
-      if numberFieldEntryIsValid && fieldIdentifier == adHunterStringConsts.closingBoundary
+    if numberFieldEntryIsValid && fieldIdentifier!.rawValue == adHunterStringConsts.closingBoundary
       {
         adHunterPreference.closingReport = textField.doubleValue
         adHunterChanged = true
       }
   }
-  
   
 }

@@ -103,8 +103,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
         
         if let pvrArray = defaults?.array(forKey:  generalStringConsts.pvrConfigKey)
         {
-          let pvrSettings = (pvrArray as! [NSData]).map { pvrPreferences(data: $0)! }
-          defaultGeneral.systemConfig.pvrSettings = pvrSettings
+//          let pvrSettings = (pvrArray as! [Data]).map { pvrPreferences(data: $0)! }
+         let pvrSettings = (pvrArray as! [Data]).map({try? PropertyListDecoder().decode(pvrPreferences.self, from: $0)})
+          let pvrs = pvrSettings.filter{ $0 != nil }.map{ $0!}
+          defaultGeneral.systemConfig.pvrSettings = pvrs
         }
         // create the array of queues for cutting jobs
         makeQueues()
@@ -152,7 +154,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   /// setup entries in bookmarks menu
   func setInsertBookmarksMenuItemText()
   {
-    let appMenu = NSApplication.shared().mainMenu
+    let appMenu = NSApplication.shared.mainMenu
     let marksMenu = appMenu?.item(withTitle: "Marks")?.submenu
     let insertItem = marksMenu?.item(withTag: 100)
     let insertText = defaultGeneral.markMode == MARK_MODE.FIXED_COUNT_OF_MARKS ? "\(defaultGeneral.countModeNumberOfMarks) Bookmarks" : "\(defaultGeneral.spacingModeDurationOfMarks) sec Bookmarks"
@@ -335,7 +337,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
     defaults?.set(defaultGeneral.markMode.rawValue, forKey: generalStringConsts.bookmarkMode)
    
     // pvr setttings
-    let encoded = defaultGeneral.systemConfig.pvrSettings.map { $0.encode() }
+//    let encoded = defaultGeneral.systemConfig.pvrSettings.map { $0.encode() }
+    let encoded = defaultGeneral.systemConfig.pvrSettings.map {try? PropertyListEncoder().encode($0)}
     defaults?.set(encoded, forKey: generalStringConsts.pvrConfigKey)
     
     // sync menu bar to match

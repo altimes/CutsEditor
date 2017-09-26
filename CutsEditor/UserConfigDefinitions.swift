@@ -24,7 +24,7 @@ enum skipButtons:Int {
   case MINUS_E = -505
 }
 
-enum CheckMarkState: Int {
+enum CheckMarkState: Int, Codable {
   case checked = 99
   case unchecked = 100
   

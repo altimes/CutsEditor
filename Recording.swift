@@ -16,7 +16,7 @@ import Foundation
 /// Also acts a communication delegate between recording components
 /// with the objective a interrogation about commonly used elements
 /// such a pts ranges, discontinuity in pts and other
-
+@objcMembers
 class Recording 
 {
 //  var movie: TransportStream?

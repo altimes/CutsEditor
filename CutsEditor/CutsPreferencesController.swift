@@ -56,7 +56,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   @IBOutlet weak var honourOutIn: NSButton!
   @IBOutlet weak var filmStripSpacing: NSTextField!
   
-  var preferences = NSApplication.shared().delegate as! AppPreferences
+  var preferences = NSApplication.shared.delegate as! AppPreferences
   var skips = skipPreferences()
   var videoPlayerConfig = videoPlayerPreferences()
   var skipsChanged = false
@@ -115,8 +115,8 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   
   func secondaryPlayerButtons(showsSteppingControls: Bool) {
     // set Radio button state to match prefs
-    fastforwardLabel.state = showsSteppingControls ? NSOffState : NSOnState
-    steppingLabel.state = showsSteppingControls ? NSOnState : NSOffState
+    fastforwardLabel.state = showsSteppingControls ? .off : .on
+    steppingLabel.state = showsSteppingControls ? .on : .off
   }
   
   func loadCurrentVideoPlayerConfig()
@@ -125,8 +125,8 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
     if (videoPlayerConfig.playbackControlStyle == videoControlStyle.floating) {
       fastforwardLabel.isEnabled = true
       steppingLabel.isEnabled = true
-      inLineLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.inLine) ? NSOnState : NSOffState
-      floatingLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.floating) ? NSOnState : NSOffState
+      inLineLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.inLine) ? .on : .off
+      floatingLabel.state = (videoPlayerConfig.playbackControlStyle == videoControlStyle.floating) ? .on : .off
       // set Radio button state to match prefs
       secondaryPlayerButtons(showsSteppingControls: !videoPlayerConfig.playbackShowFastForwardControls)
     }
@@ -135,7 +135,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
       steppingLabel.isBordered = false
     }
     setupRadioButtonNames()
-    honourOutIn.state = (videoPlayerConfig.skipCutSections ? NSOnState : NSOffState)
+    honourOutIn.state = (videoPlayerConfig.skipCutSections ? .on : .off)
     filmStripSpacing.doubleValue = videoPlayerConfig.filmStripSpacing
   }
   
@@ -159,7 +159,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   /// Update from checkbox change of to player control to skip the Cut Out sections
   @IBAction func changeHonourOutIn(_ sender: NSButton)
   {
-    videoPlayerConfig.skipCutSections = (sender.state == NSOnState)
+    videoPlayerConfig.skipCutSections = (sender.state == .on)
     playerChanged = true
   }
   
@@ -192,7 +192,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
     let textField = obj.object as! NSTextField
     // print (textField.stringValue)
     let tagValue = textField.tag
-    if (textField.identifier == playerStringConsts.filmStripSpacingIdentifier) {
+    if ((textField.identifier)!.rawValue == playerStringConsts.filmStripSpacingIdentifier) {
       videoPlayerConfig.filmStripSpacing = textField.doubleValue
       playerChanged = true
     }

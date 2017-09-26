@@ -27,7 +27,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
   
   var debug = true
   var queues = [CuttingQueue]()
-  var preferences = NSApplication.shared().delegate as! AppPreferences
+  var preferences = NSApplication.shared.delegate as! AppPreferences
   var jobsListing = [compositeLog]()
   
   var tablelength: Int {
@@ -60,7 +60,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     setup()
   }
   
-  override init?(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+  override init(nibName nibNameOrNil: NSNib.Name?, bundle nibBundleOrNil: Bundle?) {
     super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
     setup()
   }
@@ -72,7 +72,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
   {
     var cellContent : String = "???"
     let logEntry = cutEntryFor(tableRow: row)
-    if let columnId = tableColumn?.identifier
+    if let columnId = tableColumn?.identifier.rawValue
     {
       switch columnId {
       case queueTableStringConsts.queueColumnIdentifier:
@@ -96,7 +96,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
         cellContent = "???"
       }
     }
-    let result : NSTableCellView  = tableView.make(withIdentifier: tableColumn!.identifier, owner: self)
+    let result : NSTableCellView  = tableView.makeView(withIdentifier: tableColumn!.identifier, owner: self)
       as! NSTableCellView
     result.textField?.stringValue = cellContent
     return result
@@ -130,7 +130,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
   {
     let rowEntry = cutEntryFor(tableRow: row)
     let message = rowEntry.entry.resultMessage
-    let messageColumn = tableView.column(withIdentifier: queueTableStringConsts.messageColumnIdnetifier)
+    let messageColumn = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(rawValue: queueTableStringConsts.messageColumnIdnetifier))
     let cell = tableView.tableColumns[messageColumn].dataCell(forRow: row) as! NSTextFieldCell
     cell.stringValue = message
     let size = cell.cellSize
@@ -159,9 +159,9 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
   
   /// register swipe actions
   
-  func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
-    if edge == NSTableRowActionEdge.trailing {
-      let cancelAction = NSTableViewRowAction(style: NSTableViewRowActionStyle.destructive, title: "Cancel", handler: jobCancel)
+  func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
+    if edge == NSTableView.RowActionEdge.trailing {
+      let cancelAction = NSTableViewRowAction(style: NSTableViewRowAction.Style.destructive, title: "Cancel", handler: jobCancel)
       return [cancelAction]
     }
     return [NSTableViewRowAction]()
@@ -179,7 +179,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     if (resultForRow == 0)     { colour = NSColor.green }
     else if (resultForRow > 0) { colour = NSColor.red }
     else                       { colour = NSColor.blue }
-    let resultColumnIndex = tableView.column(withIdentifier: queueTableStringConsts.resultColumnIdnetifier)
+    let resultColumnIndex = tableView.column(withIdentifier: NSUserInterfaceItemIdentifier(rawValue: queueTableStringConsts.resultColumnIdnetifier))
     let resultCell = rowView.view(atColumn: resultColumnIndex) as! NSTableCellView
     resultCell.textField?.drawsBackground = true
     resultCell.textField?.backgroundColor = colour.withAlphaComponent(0.45)
@@ -231,7 +231,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
         queuesTable.deselectRow(row)
       }
       else {
-        NSBeep()
+        NSSound.beep()
       }
     }
   }
@@ -255,12 +255,12 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
     queuesTable.scrollRowToVisible(lastRow)
   }
   
-  func queuesContentChanged(_ notification: Notification)
+  @objc func queuesContentChanged(_ notification: Notification)
   {
     refreshTable()
   }
   
-  func queuesConfigChanged(_ notification: Notification)
+  @objc func queuesConfigChanged(_ notification: Notification)
   {
     // check to see if the configuration of the queues has changed
     let newQueues = preferences.cuttingQueueTable()
@@ -298,7 +298,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
       doCancel()
     }
     else {
-      NSBeep()
+      NSSound.beep()
     }
   }
 }

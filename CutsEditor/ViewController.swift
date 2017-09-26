@@ -39,6 +39,7 @@ struct logMessage {
 
 let nilString = "nil"
 
+@objcMembers
 class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSource, NSWindowDelegate, NSSpeechRecognizerDelegate, KeyStrokeCatch
 {
   @IBOutlet weak var previousButton: NSButton!
@@ -162,7 +163,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// opaque var used by video player timed callback
   private var timeObserverToken: Any?
   
-  var preferences = NSApplication.shared().delegate as! AppPreferences
+  var preferences = NSApplication.shared.delegate as! AppPreferences
   
   var finderOperationsQueue : OperationQueue?
   var localCutterOperationsQueue = CuttingQueue.localQueue()
@@ -208,7 +209,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Time line for movie, showing cut marks, bookmarks, current position and PCR resets
   /// control that allows click and drag to skip within movie and time zoom for more precise
   /// positioning
-  var timelineView : TimelineView?
+  var timelineView : TimeLineView?
   
   /// track when frame changes to control suppression of
   /// player rate changes
@@ -272,12 +273,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     NotificationCenter.default.addObserver(self, selector: #selector(playerChange(_:)), name: NSNotification.Name(rawValue: playerDidChange), object: nil )
     
     NotificationCenter.default.addObserver(self, selector: #selector(fileToOpenChange(_:)), name: NSNotification.Name(rawValue: fileOpenDidChange), object: nil )
-    NotificationCenter.default.addObserver(self, selector: #selector(fileSelectPopUpChange(_:)), name: NSNotification.Name.NSPopUpButtonWillPopUp, object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(fileSelectPopUpChange(_:)), name: NSPopUpButton.willPopUpNotification, object: nil )
     
     NotificationCenter.default.addObserver(self, selector: #selector(progressBarVisibilityChange(_:)), name: NSNotification.Name(rawValue: progressBarVisibilityChange), object: nil)
     
-    NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSNotification.Name.NSWindowDidDeminiaturize, object: nil )
-    NotificationCenter.default.addObserver(self, selector: #selector(sawMonitorViewFrameChange(_:)), name: NSNotification.Name.NSViewFrameDidChange, object: self.monitorView)
+    NotificationCenter.default.addObserver(self, selector: #selector(sawDidDeminiaturize(_:)), name: NSWindow.didDeminiaturizeNotification, object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(sawMonitorViewFrameChange(_:)), name: NSView.frameDidChangeNotification, object: self.monitorView)
     
     //    AVPlayerItemTimeJumped
     NotificationCenter.default.addObserver(self, selector: #selector(sawTimeJumpInPlayer(_:)), name: NSNotification.Name.AVPlayerItemTimeJumped, object: nil)
@@ -342,13 +343,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.filmStrip.updateTimeTextLabels()
   }
   
-  func windowShouldClose(_ sender: Any) -> Bool {
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
     if (debug) { printLog(log:(#file+" "+#function) as AnyObject) }
     return true
   }
   
   /// testing
-  func sawTimeJumpInPlayer(_ notification: Notification)
+  @objc func sawTimeJumpInPlayer(_ notification: Notification)
   {
     if let avItem = notification.object as? AVPlayerItem
     {
@@ -359,7 +360,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  func sawMonitorViewFrameChange(_ notification: Notification)
+  @objc func sawMonitorViewFrameChange(_ notification: Notification)
   {
     if (debug) {
       printLog(log: "Saw Monitor View Frame Change \(self.monitorView.frame)" as AnyObject)
@@ -412,7 +413,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     playVideo(false)
     //    self.monitorView.player?.pause()
     NotificationCenter.default.removeObserver(self)
-    NSApplication.shared().terminate(self)
+    NSApplication.shared.terminate(self)
   }
   
   func windowWillMiniaturize(_ notification: Notification)
@@ -478,7 +479,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// Observer function to handle the "seek" changes that are made
   /// during changes in the preferences dialog
-  func skipsChange(_ notification: Notification)
+  @objc func skipsChange(_ notification: Notification)
   {
     // get the changed skip setting and update the gui to match
     self.skips = preferences.skipPreference()
@@ -540,7 +541,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function to handle the "sort order" changes that are made
   /// during changes in the preferences dialog
   
-  func sortChange(_ notification: Notification)
+  @objc func sortChange(_ notification: Notification)
   {
     // get the changed skip setting and update the gui to match
     self.sortPrefs = preferences.sortPreference()
@@ -569,7 +570,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function to handle the "ad Hunter" changes that are made
   /// during changes in the preferences dialog
   
-  func adHunterChange(_ notification: Notification)
+  @objc func adHunterChange(_ notification: Notification)
   {
     //    print("Saw call "+#function)
     // get the changed ad hunter parameters and update the system responses to match
@@ -580,7 +581,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function to handle the "General Preferences" changes that are made
   /// and saved during changes in the preferences dialog
   
-  func generalChange(_ notification: Notification)
+  @objc func generalChange(_ notification: Notification)
   {
     // get the changed general settings and update the gui to match
     self.generalPrefs = preferences.generalPreference()
@@ -590,7 +591,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function to handle the "Player Config Preferences" changes that are made
   /// and saved during changes in the preferences dialog
   
-  func playerChange(_ notification: Notification)
+  @objc func playerChange(_ notification: Notification)
   {
     // get the changed general settings and update the gui to match
     self.playerPrefs = preferences.videoPlayerPreference()
@@ -606,7 +607,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function that responds to the selection of
   /// a single file (rather than a directory) to be used.
   /// Notitication has filename is the notification "object"
-  func fileToOpenChange(_ notification: Notification)
+  @objc func fileToOpenChange(_ notification: Notification)
   {
     let filename = notification.object as! String
     if (!appendSingleFileToListAndSelect(filename))
@@ -619,7 +620,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Observer function that responds to a mouseDown event on the
   /// file select popupbutton - purpose is to pick up and retain
   /// the current selection index BEFORE it is changed
-  func fileSelectPopUpChange(_ notification: Notification) {
+  @objc func fileSelectPopUpChange(_ notification: Notification) {
     mouseDownPopUpIndex = self.currentFile.indexOfSelectedItem
   }
   
@@ -628,7 +629,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// colour coding is being worked out
   /// It is a hack to prevent crashes if a file is deleted whilst
   /// scanning for colour coding is going on (array content changes)
-  func progressBarVisibilityChange(_ notification: Notification)
+  @objc func progressBarVisibilityChange(_ notification: Notification)
   {
     deleteRecordingButton.isEnabled = progressBar.isHidden
   }
@@ -667,9 +668,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (!validCutsEntries)
     {
       setStatusFieldStringValue(isLoggable: true, message: movie.cuts.lastValidationMessage)
-      NSBeep()
+      NSSound.beep()
       let badCuts = NSAlert()
-      badCuts.alertStyle = NSAlertStyle.warning
+      badCuts.alertStyle = NSAlert.Style.warning
       let informativeText = movie.cuts.lastValidationMessage
       badCuts.informativeText = informativeText
       badCuts.window.title = "Cut Marks Problem"
@@ -678,20 +679,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       badCuts.addButton(withTitle: "Save anyway")
       badCuts.addButton(withTitle: "Abandon Save")
       let result = badCuts.runModal()
-      if (result == NSAlertFirstButtonReturn)
+      if (result == NSApplication.ModalResponse.alertFirstButtonReturn)
       {
         return false
       }
       // do nothing, let the write process
-      proceedWithWrite = result == NSAlertSecondButtonReturn
+      proceedWithWrite = result == NSApplication.ModalResponse.alertSecondButtonReturn
       // abandon write and proceed
-      abandonWrite = result == NSAlertThirdButtonReturn
+      abandonWrite = result == NSApplication.ModalResponse.alertThirdButtonReturn
     }
     
     if (generalPrefs.autoWrite == CheckMarkState.unchecked) {
       // pop up a modal dialog to confirm overwrite of cuts file
       let overWriteDialog = NSAlert()
-      overWriteDialog.alertStyle = NSAlertStyle.critical
+      overWriteDialog.alertStyle = NSAlert.Style.critical
       overWriteDialog.informativeText = "Will overwrite the \(ConstsCuts.CUTS_SUFFIX) file"
       overWriteDialog.window.title = "Save File"
       let programname = self.currentFile.item(at: index)!.title.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
@@ -701,8 +702,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       overWriteDialog.addButton(withTitle: "Don't Save")
       
       let result = overWriteDialog.runModal()
-      proceedWithWrite = result == NSAlertFirstButtonReturn
-      abandonWrite = result == NSAlertThirdButtonReturn
+      proceedWithWrite = result == NSApplication.ModalResponse.alertFirstButtonReturn
+      abandonWrite = result == NSApplication.ModalResponse.alertThirdButtonReturn
     }
     
     // autowrite is enabled, so just get on with it
@@ -737,7 +738,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let labelXpos = (monitorFrame.width - overlayWidth) / 2.0
     overlayFrame = NSRect(x: labelXpos, y: labelYpos, width: overlayWidth, height: overlayHeight)
     let label = NSTextView(frame: overlayFrame)
-    label.identifier = overlayViewId
+    label.identifier = NSUserInterfaceItemIdentifier(rawValue: overlayViewId)
     label.isHorizontallyResizable = true
     label.isVerticallyResizable = false
     //        print("inset is \(label.textContainerInset)")
@@ -760,7 +761,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     get {
       if let subViews = self.monitorView.contentOverlayView?.subviews {
         for view in subViews {
-          if view.identifier == overlayViewId {
+          if view.identifier!.rawValue == overlayViewId {
             if let textView = view as? NSTextView
             {
               return textView
@@ -776,12 +777,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// find the timeline view from the view heirarchy
-  func getTimeLineView() -> TimelineView?
+  func getTimeLineView() -> TimeLineView?
   {
     if let subViews = self.monitorView?.subviews {
       for view in subViews {
-        if view.identifier == timelineViewId {
-          if let timelineView = view as? TimelineView
+        if view.identifier?.rawValue == timelineViewId {
+          if let timelineView = view as? TimeLineView
           {
             return timelineView
           }
@@ -829,7 +830,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       var fontSize:CGFloat = 64
       let fudgeFactor:CGFloat = 1.0   // size is NOT returning a sizeThatFits (due to Kerning?), so fudge it
       // the frame size is being automagically increased and text is folding
-      let labelText = NSMutableAttributedString(string: newText, attributes: [NSFontAttributeName:NSFont(name: "Helvetica-Bold",size: fontSize)!])
+      let labelText = NSMutableAttributedString(string: newText, attributes: [NSAttributedStringKey.font:NSFont(name: "Helvetica-Bold",size: fontSize)!])
       labelText.setAlignment(NSTextAlignment.center, range: NSMakeRange(0, labelText.length))
       var boundingRect = labelText.boundingRect(with: label.bounds.size, options: [])
       var stringWidth = boundingRect.width
@@ -837,8 +838,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       //      print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
       while (stringWidth >= overlayWidth*fudgeFactor || stringHeight > overlayHeight*fudgeFactor && fontSize > CGFloat(12.0)) {
         fontSize -= 1.0
-        labelText.setAttributes([NSFontAttributeName: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
-        boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSStringDrawingOptions.truncatesLastVisibleLine)
+        labelText.setAttributes([NSAttributedStringKey.font: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
+        boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSString.DrawingOptions.truncatesLastVisibleLine)
         stringWidth = boundingRect.width
         stringHeight = boundingRect.height
         //        print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
@@ -868,7 +869,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   let timeLineOrigin = CGPoint(x:50.0, y:50.0)
   
   /// Change the video to match the "clicked" position from the timeline Control
-  func timelineChanged()
+  @objc func timelineChanged()
   {
     let targetPosition = self.timelineView!.normalizedXPos
     if (debug) { print("new Position = \(targetPosition)") }
@@ -884,7 +885,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// manufacture a timeline control, with actions, allow to be first responder.
-  func createTimelineOverlayView() -> TimelineView
+  func createTimelineOverlayView() -> TimeLineView
   {
     if (debug) { print("Creating timeline") }
     removeTimelineView()
@@ -894,9 +895,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let timeRange = movie.getBestDurationAndApDurationInSeconds()
     // trap missing ap file gives an ap duration of 0
     let useableRange = timeRange.ap != 0 ? timeRange.ap : timeRange.best
-    let thisTimeline = TimelineView(frame: timelineFrame, seconds: useableRange)
+    let thisTimeline = TimeLineView(frame: timelineFrame, seconds: useableRange)
     // hook up to gui
-    thisTimeline.identifier = timelineViewId
+    thisTimeline.identifier = NSUserInterfaceItemIdentifier(rawValue: timelineViewId)
     thisTimeline.action = #selector(timelineChanged)
     thisTimeline.target = self
     
@@ -981,7 +982,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // some eit entries fail to give a title and put the description
     // in the notional episode title descriptor
     // Alternative would be to blank title field and populate description
-    if programDescription.string!.isEmpty
+    if programDescription.string.isEmpty
     {
       let epTitle = epsiodeTitle.stringValue
       if epTitle.characters.count > ConstsCuts.maxTitleLength {
@@ -999,7 +1000,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let fileURL = URL(string: cutsNameURL)!
     if  let doc = try? TxDocument(contentsOf: fileURL, ofType: ConstsCuts.CUTS_SUFFIX)
     {
-      NSDocumentController.shared().noteNewRecentDocument(doc)
+      NSDocumentController.shared.noteNewRecentDocument(doc)
     }
     if (voiceWasOn) { toggleVoiceRecognition(microphoneButton)}
     //    print(mySpeechRecogizer?.commands)
@@ -1077,9 +1078,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     textField.sizeToFit()
     
     msg.accessoryView = textField
-    let response: NSModalResponse = msg.runModal()
+    let response: NSApplication.ModalResponse = msg.runModal()
     
-    if (response == NSAlertFirstButtonReturn) {
+    if (response == NSApplication.ModalResponse.alertFirstButtonReturn) {
       return textField.stringValue
     } else {
       return ""
@@ -1490,6 +1491,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   //    return durations
   //  }
   
+  typealias popUpAttributes = (font :NSFont, colour: NSColor, apDuration:Double)
+
   /// Routine to work out the colour coding for the list of programs.
   /// This can be a lengthy task and is done as a detached process with
   /// the GUI being updated on completion.  The process may be cancelled
@@ -1507,9 +1510,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.progressBar.doubleValue = 0.0
     blockOperation.addExecutionBlock (
       { [weak weakself = self] in
-        var attributedStrings = [NSAttributedString]()
+        var attributes = [popUpAttributes]()
         //        let trailingDurationRegexString = " ([0-9][0-9]:[0-9][0-9]:[0-9][0-9]\)$" // eg " (01:23:35)"
-        // progressively construct a duplicate of NSPopUpButton to query & update without interfering with UI
+        // progressively construct a set of attributes for the UI
         var index = 0
         var moreToDo = (weakself != nil) ? index < weakself!.namelist.count : false
         while moreToDo
@@ -1520,16 +1523,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             break
           }
           if let (fontAttribute, colourAttribute, apDuration) = weakself?.getFontAttributesDurationForIndex(index) {
-            if let menuItem = weakself?.currentFile.item(at: index)
-            {
-              attributedStrings.append(NSAttributedString(string: menuItem.title, attributes:[NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName:fontAttribute]))
-              if let pathURL = weakself?.filelist[index],
-                let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
-              {
-                menuItem.toolTip = tooltip
-              }
-              // else: no path == no tooltip (duh)
-            }
+            attributes.append((fontAttribute, colourAttribute, apDuration))
+
             // update the application each time we have completed one program except the last
             if (index < (weakself?.namelist.count)!-1) {
               OperationQueue.main.addOperation (
@@ -1560,7 +1555,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               {
                 for index in 0 ..< listCount
                 {
-                  weakself?.currentFile.item(at: index)?.attributedTitle = attributedStrings[index]
+                  let colourAttribute = attributes[index].colour
+                  let fontAttribute = attributes[index].font
+                  let apDuration = attributes[index].apDuration
+                  let title = (weakself?.currentFile.item(at: index)?.title)!
+                  weakself?.currentFile.item(at: index)?.attributedTitle = NSAttributedString(string: title, attributes:[NSAttributedStringKey.foregroundColor: colourAttribute, NSAttributedStringKey.font:fontAttribute])
+                  if let pathURL = weakself?.filelist[index],
+                    let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration)
+                  {
+                    weakself?.currentFile.item(at: index)?.toolTip = tooltip
+                  }
+                  // else: no path == no tooltip (duh)
                 }
                 // now as we have been scribbling in the status field, we ensure that is brought
                 // back into sync with the current user selection
@@ -1588,7 +1593,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     // set defaults
     var attributeColour = NSColor.black
-    let fontSize = NSFont.systemFontSize()
+    let fontSize = NSFont.systemFontSize
     var font = NSFont.systemFont(ofSize: fontSize)
     var thisProgramDuration = 0.0
     var thisMovie: Recording
@@ -1649,7 +1654,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       //      let tooltip = (path.removingPercentEncoding!) + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
       let tooltip = tooltipFrom(url: filelist[index], duration: apDuration)
       
-      menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSForegroundColorAttributeName: colourAttribute, NSFontAttributeName: fontAttribute])
+      menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSAttributedStringKey.foregroundColor: colourAttribute, NSAttributedStringKey.font: fontAttribute])
       menuItem.toolTip = tooltip
     }
   }
@@ -1662,7 +1667,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func tooltipFrom(url: String, duration: Double ) -> String
   {
-    let durationString = " ("+CutEntry.hhMMssFromSeconds(duration) + ")"
+    let durationString = " (\(Seconds(duration).hhMMss))"
     let path = url.replacingOccurrences(of: "file://", with: "")
     let plainPath = path.removingPercentEncoding ?? path
     let tooltip = plainPath + durationString
@@ -1861,7 +1866,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // Display the dialog. If the OK button was pressed,
     // process the files.
     var directory :URL?
-    if ( openDlg.runModal() == NSModalResponseOK )
+    if ( openDlg.runModal() == NSApplication.ModalResponse.OK )
     {
       // Get an array containing the full filenames of all
       // files and directories selected.
@@ -2140,7 +2145,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
       let frameRate = Double(trackAsset.nominalFrameRate)
       if (debug) { print ("Found frame rate of \(frameRate)") }
-      if (trackAsset.mediaType == AVMediaTypeVideo)
+      if (trackAsset.mediaType == AVMediaType.video)
       {
         imageGenerator = AVAssetImageGenerator(asset: avAsset)
         let frameTolerance = 1.0/(frameRate/2.0) // twice the frame rate to give some slack and allow picking I frame
@@ -2152,7 +2157,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (debug) { print(#function+" target Image Size\(imageSize)") }
         imageGenerator?.maximumSize = imageSize
         imageGenerator?.appliesPreferredTrackTransform = true
-        imageGenerator?.apertureMode = AVAssetImageGeneratorApertureModeProductionAperture
+        imageGenerator?.apertureMode = AVAssetImageGeneratorApertureMode.productionAperture
         //        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
         self.filmStrip.updateFor(time: CMTime(seconds:10.0+3.0*filmstripFrameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
       }
@@ -2229,7 +2234,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     //    label.sizeToFit()
     let textBackgroundColour = NSColor.yellow.withAlphaComponent(0.01)
     label.backgroundColor = textBackgroundColour
-    label.identifier = "timetextLabel" + "\(withId)"
+    label.identifier = NSUserInterfaceItemIdentifier(rawValue: "timetextLabel" + "\(withId)")
     label.alphaValue = 0.4
     label.font = NSFont(name: textFontName, size: 20.0)
     label.alignment = NSTextAlignment.justified
@@ -2280,7 +2285,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       setStatusFieldStringValue(isLoggable: loggable, message: message)
     }
     else {
-      NSBeep()
+      NSSound.beep()
     }
   }
   
@@ -2472,7 +2477,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     timeObserverToken =
       self.monitorView.player?.addPeriodicTimeObserver(forInterval: interval, queue: mainQueue) {
         [weak self] time in
-        var closureDebug = false
+        let closureDebug = false
         //        print("Called back at \(self?.clockSeconds() ?? "??")")
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
@@ -2566,7 +2571,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // end closure addition
   }
   
-  func sawDidDeminiaturize(_ notification: Notification) {
+  @objc func sawDidDeminiaturize(_ notification: Notification) {
     // reset periodic observer
     //    print(#file+#function)
     addPeriodicTimeObserver()
@@ -2762,7 +2767,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     var cellContent : String
     let cutEntry = movie.cuts.entry(at: row)
-    if tableColumn?.identifier == StringsCuts.TABLE_TIME_COLUMN
+    if (tableColumn?.identifier)!.rawValue == StringsCuts.TABLE_TIME_COLUMN
     {
       if (self.movie.cuts.count>0)
       {
@@ -2772,7 +2777,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         cellContent = "?"
       }
     }
-    else if tableColumn?.identifier == StringsCuts.TABLE_TYPE_COLUMN
+    else if (tableColumn?.identifier)!.rawValue == StringsCuts.TABLE_TYPE_COLUMN
     {
       cellContent = "??"
       if (self.movie.cuts.count>0)
@@ -2786,7 +2791,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else {
       cellContent = "???"
     }
-    let result : NSTableCellView  = tableView.make(withIdentifier: tableColumn!.identifier, owner: self)
+    let result : NSTableCellView  = tableView.makeView(withIdentifier: tableColumn!.identifier, owner: self)
       as! NSTableCellView
     result.textField?.stringValue = cellContent
     return result
@@ -2857,7 +2862,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             // addMark failed due to seek failure
             setStatusFieldStringValue(isLoggable: false, message: "Failed Moving mark,... trying again in \(Double(waitTime)/1000.0) secs")
             statusMessageChanged = true
-            NSBeep()
+            NSSound.beep()
             usleep(waitTime)
             loopCount += 1
           }
@@ -2874,7 +2879,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
         if (failed) {
           setStatusFieldStringValue(isLoggable: false, message: "Failed Moving mark,... Gave up after \(loopCount-1) attempts")
-          NSBeep()
+          NSSound.beep()
         }
         else {
           if (statusMessageChanged)  // clear warning messages when eventual success was achieved
@@ -2921,9 +2926,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
   }
   /// register swipe actions for table
-  func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableRowActionEdge) -> [NSTableViewRowAction] {
-    if edge == NSTableRowActionEdge.trailing {
-      let delete = NSTableViewRowAction(style: NSTableViewRowActionStyle.destructive, title: "Delete", handler: rowDelete)
+  @objc func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
+    if edge == NSTableView.RowActionEdge.trailing {
+      let delete = NSTableViewRowAction(style: NSTableViewRowAction.Style.destructive, title: "Delete", handler: rowDelete)
       return [delete]
     }
     return [NSTableViewRowAction]()
@@ -2931,7 +2936,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // Delegate function on row addition.
   // This delegate changes the background colour based on the mark type
-  func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
+ @objc func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
     // try to change the color of the rowView
     var colour = NSColor.white
     // bounds checking
@@ -2950,18 +2955,21 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         colour = NSColor.yellow
       }
     }
-    rowView.backgroundColor = colour.withAlphaComponent(0.75)
+//    rowView.backgroundColor = colour.withAlphaComponent(0.75)
+    print (" def row color \(rowView.backgroundColor)")
+    rowView.backgroundColor = colour
+    print (" set row color \(rowView.backgroundColor!)")
   }
   
   // beware only called on mouse clicks not keyboard
-  func tableViewSelectionIsChanging(_ notification: Notification) {
+  @objc func tableViewSelectionIsChanging(_ notification: Notification) {
     self.suppressTimedUpdates = true
     if (debug) { print("Saw tableViewSelectionIsChanging change") }
   }
   
   
   /// Called when user clicks in column
-  func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
+  @objc func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
     // user clicked in table, suppress timed updates
     self.suppressTimedUpdates = true
     if (debug) { print("Saw column did Click") }
@@ -3133,7 +3141,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// TODO: current unused whilst CUT button is in the same GUI location
   /// TODO: shuffle buttons and re-enable
   @IBAction func addMark(sender: NSButton) {
-    let markType = marksDictionary[sender.identifier!]
+    let markType = marksDictionary[(sender.identifier!).rawValue]
     let now = self.playerPositionInPTS()
     let mark = CutEntry(cutPts: now, cutType: markType!.rawValue)
     movie.cuts.addEntry(mark)
@@ -3158,7 +3166,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cuttable = movie.isCuttable
     }
     else  {
-      NSBeep()
+      NSSound.beep()
     }
   }
   
@@ -3173,7 +3181,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       cuttable = movie.isCuttable
     }
     else {
-      NSBeep()
+      NSSound.beep()
     }
   }
   
@@ -3373,7 +3381,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
       }
     }
-    if (event.type == NSEventType.keyUp || event.type == NSEventType.keyDown) && NSEvent.modifierFlags().isEmpty
+    if (event.type == NSEvent.EventType.keyUp || event.type == NSEvent.EventType.keyDown) && NSEvent.modifierFlags.isEmpty
     {
       if let keyString = event.characters {
         if (debug) { print(">>\(keyString)<<") }
@@ -3444,12 +3452,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     case .IN:
       addMark(sender: outButton)
       huntDone(doneHuntButton)
-      NSBeep();NSBeep();NSBeep()
+      NSSound.beep();NSSound.beep();NSSound.beep()
     case .OUT:
       addMark(sender: inButton)
       huntDone(doneHuntButton)
-      NSBeep();NSBeep();NSBeep()
-    default: NSBeep()
+      NSSound.beep();NSSound.beep();NSSound.beep()
+    default: NSSound.beep()
     }
   }
   /// Delegate function
@@ -3513,10 +3521,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Really move to .Trash subdirectory
   @IBAction func deleteRecording(_ sender: NSButton)
   {
-    let result = deleteRecording(recording: self.movie, with: NSDocumentController.shared())
+    let result = deleteRecording(recording: self.movie, with: NSDocumentController.shared)
     if result.status != true {
       setStatusFieldStringValue(isLoggable: true, message: result.message)
-      NSBeep()
+      NSSound.beep()
     }
   }
   
@@ -3531,7 +3539,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   override func prepare(for segue: NSStoryboardSegue, sender: Any?) {
-    if (segue.identifier == "EITEdit") {
+    if ((segue.identifier)?.rawValue == "EITEdit") {
       print("Saw menu EITEdit segue")
       let eit = sender as! ShortEventDescriptorViewController
       eit.movie = self.movie

@@ -52,8 +52,8 @@ public struct mcutConsts {
   static let nameSwitch = "-n"
   static let descriptionSwitch = "-d"
   static let cutsSwitch = "-c"
-  static let localMount = "/Volumes/Harddisk"
-  static let remoteExportPath = "/media/hdd"
+  static let localMount = "/Volumes/Movie"
+  static let remoteExportPath = "/media/hdd/movie"
   static let mcutProgramRemote = "/usr/lib/enigma2/python/Plugins/Extensions/MovieCut/bin/mcut"
   static let mcutProgramLocal = "/usr/local/bin/mcut2"
   
@@ -99,6 +99,39 @@ public struct keyBoardCommands {
 typealias PtsType = UInt64
 typealias OffType = UInt64
 typealias OffPts = (offset: OffType, pts: PtsType)
+typealias Seconds = Double
+
+extension Seconds
+{
+  var hhMMss: String {
+    var inputSeconds = self
+    var remainderSeconds = inputSeconds.truncatingRemainder(dividingBy: 60.0)
+    if (60.0 - remainderSeconds) < 0.5 {
+      remainderSeconds = 0.0
+      inputSeconds += 0.5
+    }
+    let minutes = inputSeconds / 60.0
+    
+    let hours = minutes / 60.0
+    let days = hours / 24.0
+    let intMinutes = Int(minutes) % 60
+    let intHours = Int(hours) % 24
+    let intDays = Int(days)
+    // compose significant elements only
+    var result = String.init(format: "%02.0f", remainderSeconds)
+    if (intMinutes > 0  || intHours>0 || intDays > 0) {
+      result = String.init(format: "%2.2d:\(result)", intMinutes)
+    }
+    if (intHours > 0 || intDays > 0)
+    {
+      result = String.init(format: "%2.2d:%@", intHours, result)
+    }
+    if (intDays>0) {
+      result = String.init(format: "%d:%@", intDays, result)
+    }
+    return result
+  }
+}
 
 extension PtsType
 {

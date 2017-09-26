@@ -19,7 +19,7 @@ struct MessageStrings {
 }
 
 /// Models the collection of cut/book/lastplay marks associated with a recording
-
+@objcMembers
 class CutsFile: NSObject, NSCopying {
   
   /// Known cut mark cases

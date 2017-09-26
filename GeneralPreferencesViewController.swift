@@ -82,7 +82,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   @IBOutlet weak var deletePVRLabel: NSButton!
   @IBOutlet weak var pvrPicker: NSPopUpButton!
   
-  var preferences = NSApplication.shared().delegate as! AppPreferences
+  var preferences = NSApplication.shared.delegate as! AppPreferences
   var general = generalPreferences()
   var numberFieldEntryIsValid = false
   var numberFieldValue = 0
@@ -120,13 +120,19 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   func loadCurrentGeneralPrefs()
   {
     general = preferences.generalPreference()
-    autoWriteCheckBox.state = (general.autoWrite == CheckMarkState.checked) ? NSOnState : NSOffState
+    autoWriteCheckBox.state = (general.autoWrite == CheckMarkState.checked) ? .on : .off
     updateBookmarkGUI(general)
     
     // cuts program configuration
     pvrSettings = general.systemConfig.pvrSettings
     pvrIndex = 0
     pvrPicker.removeAllItems()
+    
+    // ensure program start up
+    if (pvrSettings.count == 0)  {
+      pvrSettings = systemConfiguration().pvrSettings
+    }
+    
     for i in 0 ..< pvrSettings.count {
       var pvr = pvrSettings[i]
       if (pvrPicker.itemTitles.contains(pvr.title)) {
@@ -145,10 +151,10 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
     remoteExportPath.stringValue = pvr.cutRemoteExport
     localMountPath.stringValue = pvr.cutLocalMountRoot
     
-    fileReplaceFlagField.state = (pvr.cutReplace == CheckMarkState.checked) ? NSOnState : NSOffState
-    changeDesciptionFlagField.state = (pvr.cutDescription == CheckMarkState.checked) ? NSOnState : NSOffState
-    changeTitleFlagField.state = (pvr.cutRenamePrograme == CheckMarkState.checked) ? NSOnState : NSOffState
-    newFileNameFlagField.state = (pvr.cutOutputFile == CheckMarkState.checked) ? NSOnState : NSOffState
+    fileReplaceFlagField.state = (pvr.cutReplace == CheckMarkState.checked) ? .on : .off
+    changeDesciptionFlagField.state = (pvr.cutDescription == CheckMarkState.checked) ? .on : .off
+    changeTitleFlagField.state = (pvr.cutRenamePrograme == CheckMarkState.checked) ? .on : .off
+    newFileNameFlagField.state = (pvr.cutOutputFile == CheckMarkState.checked) ? .on : .off
     
     pathToShCommand.stringValue = pvr.shPath
     pathToSshCommand.stringValue = pvr.sshPath
@@ -177,16 +183,16 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   
   func updateBookmarkGUI(_ genPrefs: generalPreferences)
   {
-    autoWriteCheckBox.state = (genPrefs.autoWrite == CheckMarkState.checked) ? NSOnState : NSOffState
+    autoWriteCheckBox.state = (genPrefs.autoWrite == CheckMarkState.checked) ? .on : .off
     if (genPrefs.markMode == MARK_MODE.FIXED_COUNT_OF_MARKS)
     {
-      fixedSteps.state = NSOnState
+      fixedSteps.state = .on
       markValueLabel.stringValue = generalStringConsts.fixedCountTitle
       markValueUnitsLabel.stringValue = generalStringConsts.fixedCountUnits
       numberEntryField.stringValue = "\(genPrefs.countModeNumberOfMarks)"
     }
     else {
-      fixedSpacing.state = NSOnState
+      fixedSpacing.state = .on
       markValueLabel.stringValue = generalStringConsts.fixedTimeTitle
       markValueUnitsLabel.stringValue = generalStringConsts.fixedTimeUnits
       numberEntryField.stringValue = "\(genPrefs.spacingModeDurationOfMarks)"
@@ -220,7 +226,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   {
     let textField = obj.object as! NSTextField
 //    print (#function+":"+textField.stringValue)
-    if textField.identifier == generalStringConsts.inputValueFieldIdentifier
+    if textField.identifier!.rawValue == generalStringConsts.inputValueFieldIdentifier
     {
       if let newValue = Int(textField.stringValue)
       {
@@ -231,7 +237,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
       else {
         numberFieldEntryIsValid = false
         textField.backgroundColor = NSColor.red
-        NSBeep()
+        NSSound.beep()
       }
     }
     // else not interested
@@ -239,7 +245,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   
   @IBAction func autoWriteChanged(_ sender: NSButton)
   {
-    general.autoWrite = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
+    general.autoWrite = (sender.state == .on) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   
   @IBAction func done(_ sender: NSButton) {
@@ -256,30 +262,30 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
     }
     if let fieldIdentifier = sender.identifier {
 //      print("got field identifier of \(fieldIdentifier)")
-      switch (fieldIdentifier) {
+      switch (fieldIdentifier.rawValue) {
         case generalStringConsts.remoteProgramPath: pvr.cutProgramRemotePath = sender.stringValue
         case generalStringConsts.localProgramPath: pvr.cutProgramLocalPath = sender.stringValue
         case generalStringConsts.localMountPoint: pvr.cutLocalMountRoot = sender.stringValue
         case generalStringConsts.remoteExport: pvr.cutRemoteExport = sender.stringValue
-      default: print("Argh unknown \(sender.identifier ?? "missing id") "+#function)
+      default: print("Argh unknown \(sender.identifier ?? NSUserInterfaceItemIdentifier(rawValue: "missing id")) "+#function)
       }
     }
   }
   @IBAction func changeCutReplaceSetting(_ sender: NSButton) {
     pvrChanged = true
-    pvr.cutReplace = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
+    pvr.cutReplace = (sender.state == .on) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutDescriptionSetting(_ sender: NSButton) {
     pvrChanged = true
-    pvr.cutDescription = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
+    pvr.cutDescription = (sender.state == .on) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutTitleSetting(_ sender: NSButton) {
     pvrChanged = true
-    pvr.cutRenamePrograme = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
+    pvr.cutRenamePrograme = (sender.state == .on) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   @IBAction func changeCutFilenameSetting(_ sender: NSButton) {
     pvrChanged = true
-    pvr.cutOutputFile = (sender.state == NSOnState) ? CheckMarkState.checked : CheckMarkState.unchecked
+    pvr.cutOutputFile = (sender.state == .on) ? CheckMarkState.checked : CheckMarkState.unchecked
   }
   
   @IBAction func changePVRSetting(_ sender: NSTextField) {
@@ -291,11 +297,11 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
       sender.window?.makeFirstResponder(nextView)
     }
     if let fieldIdentifier = sender.identifier {
-      switch (fieldIdentifier) {
+      switch (fieldIdentifier.rawValue) {
       case generalStringConsts.shPath: general.systemConfig.pvrSettings[pvrIndex].shPath = sender.stringValue
       case generalStringConsts.sshPath: general.systemConfig.pvrSettings[pvrIndex].sshPath = sender.stringValue
       case generalStringConsts.remoteLogin: general.systemConfig.pvrSettings[pvrIndex].remoteMachineAndLogin = sender.stringValue
-      default: print("Argh unknown \(sender.identifier ?? "missing id") "+#function)
+      default: print("Argh unknown \(sender.identifier ?? NSUserInterfaceItemIdentifier(rawValue: "missing id")) "+#function)
       }
     }
   }
@@ -330,7 +336,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
       newTitleOK = !titleArray.contains(newTitle!) && !(newTitle?.isEmpty)!
       if (!newTitleOK) {
         let nameNoGoodAlert = NSAlert()
-        nameNoGoodAlert.alertStyle = NSAlertStyle.critical
+        nameNoGoodAlert.alertStyle = NSAlert.Style.critical
         let informativeText = (newTitle?.characters.count == 0) ? "Blank Name" : "Name \"\(newTitle!)\" in use"
         nameNoGoodAlert.informativeText = informativeText
         nameNoGoodAlert.window.title = "Please Try Again"
@@ -338,7 +344,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
         nameNoGoodAlert.addButton(withTitle: "OK")
         nameNoGoodAlert.addButton(withTitle: "Quit creating")
         let result = nameNoGoodAlert.runModal()
-        if (result == NSAlertSecondButtonReturn)
+        if (result == NSApplication.ModalResponse.alertSecondButtonReturn)
         {
           return nil
         }
