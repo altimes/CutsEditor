@@ -17,6 +17,7 @@ let trashDirectoryName = ".Trash"
 /// program.   This is optimization that removes large network delays incurred with
 /// programmatic directory traversal.  It is less generic but much quicker.
 
+
 class FindFilesOperation: Operation
 {
   var foundfiles = [String]()

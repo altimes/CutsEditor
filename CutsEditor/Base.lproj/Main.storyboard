@@ -2554,10 +2554,10 @@ Gw
             </objects>
             <point key="canvasLocation" x="1175" y="1030"/>
         </scene>
-        <!--CutsEditor-->
+        <!--EnigmaEdit-->
         <scene sceneID="hIz-AP-VOD">
             <objects>
-                <viewController title="CutsEditor" id="XfG-lQ-9wD" customClass="ViewController" customModule="EnigmaEdit" customModuleProvider="target" sceneMemberID="viewController">
+                <viewController title="CutsEditor" id="XfG-lQ-9wD" userLabel="EnigmaEdit" customClass="ViewController" customModule="EnigmaEdit" customModuleProvider="target" sceneMemberID="viewController">
                     <view key="view" id="m2S-Jp-Qdl">
                         <rect key="frame" x="0.0" y="0.0" width="879" height="1096"/>
                         <autoresizingMask key="autoresizingMask"/>
@@ -2724,7 +2724,7 @@ Gw
                                                                 <constraint firstItem="4aa-Od-PEd" firstAttribute="centerY" secondItem="Ocf-vD-D0C" secondAttribute="centerY" id="YaR-hD-K8F"/>
                                                             </constraints>
                                                             <connections>
-                                                                <outlet property="textField" destination="4aa-Od-PEd" id="zRl-ag-iXo"/>
+                                                                <outlet property="textField" destination="4aa-Od-PEd" id="ur7-FN-ozB"/>
                                                             </connections>
                                                         </tableCellView>
                                                     </prototypeCellViews>
@@ -2764,7 +2764,7 @@ Gw
                                                                 <constraint firstItem="unB-EB-GFn" firstAttribute="leading" secondItem="MQ5-rP-Qjc" secondAttribute="leading" constant="2" id="s7i-Wd-GX3"/>
                                                             </constraints>
                                                             <connections>
-                                                                <outlet property="textField" destination="unB-EB-GFn" id="0Dw-d3-gzl"/>
+                                                                <outlet property="textField" destination="unB-EB-GFn" id="V2U-KX-NNo"/>
                                                             </connections>
                                                         </tableCellView>
                                                     </prototypeCellViews>
@@ -3140,7 +3140,7 @@ Gw
                         <outlet property="backwardHuntButton" destination="fl0-VN-WSV" id="JJv-RT-djj"/>
                         <outlet property="currentFile" destination="uA6-BC-EHL" id="bfY-8c-a5w"/>
                         <outlet property="cutButton" destination="hHg-iT-een" id="ycl-T4-IeK"/>
-                        <outlet property="cutsTable" destination="Uog-kx-Bdg" id="riJ-MA-6oW"/>
+                        <outlet property="cutsTable" destination="Uog-kx-Bdg" id="6Nu-Rf-99K"/>
                         <outlet property="deleteRecordingButton" destination="w8L-n2-seh" id="TPQ-yN-cQ7"/>
                         <outlet property="doneHuntButton" destination="LEy-ii-des" id="pHU-iC-dpH"/>
                         <outlet property="epsiodeTitle" destination="q62-z1-WB1" id="Fkd-il-9uP"/>

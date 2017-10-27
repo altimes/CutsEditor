@@ -287,6 +287,23 @@ class Recording
     return (eitFileDuration, metaFileDuration, accessPointsFileDuration)
   }
   
+  /// Check validity of meta data duration
+  /// - parameter metaTime: Duration in Seconds
+  /// - parameter eitTime: Duration in Seconds
+  /// - parameter playerTime: Duration in Seconds
+  /// - parameter apTime: Duration in Seconds
+  /// - returns: valid to use metaTime
+  func isMetaDurationOK(metaTime: Double, eitTime: Double, playerTime: Double, apTime: Double) -> Bool
+  {
+    // meta data duration can be wildly wrong only use it, if it is within
+    // 50% of the others
+    let meta2EIT = metaTime/eitTime
+    let meta2player = metaTime/playerTime
+    let meta2ap = metaTime/apTime
+    let ok2UseMeta = meta2EIT > 0.5 && meta2player > 0.5 && meta2ap > 0.5
+    return ok2UseMeta
+  }
+  
   /// Inspect metadata, eit and player to get a best guess of the program duration
   /// in seconds.  metaData can have 0 entry, eit can refer to a later program
   /// subject to EPG and broadcaster variances
@@ -329,9 +346,13 @@ class Recording
     }
     if (metaDuration != 0.0 && bestDuration != 0.0)
     {
-      bestDuration = min(bestDuration, metaDuration)
+      if (isMetaDurationOK(metaTime: metaDuration, eitTime: eitDuration, playerTime: playerDuration, apTime: accessPointsDuration))
+      {
+       bestDuration = min(bestDuration, metaDuration)
+      }
     }
-    else if (metaDuration != 0.0) {
+    else if (metaDuration != 0.0 && isMetaDurationOK(metaTime: metaDuration, eitTime: eitDuration, playerTime: playerDuration, apTime: accessPointsDuration))
+    {
       bestDuration = metaDuration
     }
     if (eitDuration != 0.0 && bestDuration != 0.0)

@@ -219,7 +219,19 @@ public struct  CutEntry {
     else {
       return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
     }
-  }  
+  }
+  
+  /// Return entry with fine numeric detail
+  func asStringDecimal() -> String {
+    if let markType = MARK_TYPE(rawValue: cutType) {
+      let timeStamp = String(format:"%ld", self.cutPts)
+      return "\(markType) " + timeStamp
+    }
+    else {
+      return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
+    }
+
+  }
 }
 
 // this seems a nonsense if struct are "Value Type" they ought to be

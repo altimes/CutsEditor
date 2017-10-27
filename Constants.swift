@@ -94,6 +94,7 @@ public struct keyBoardCommands {
   static let lhAddMatching = "c"
   static let program = "z"
   static let advert = "/"
+  static let undo = "k"
 }
 
 typealias PtsType = UInt64

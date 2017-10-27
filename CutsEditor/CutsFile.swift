@@ -217,11 +217,14 @@ class CutsFile: NSObject, NSCopying {
   /// Add cut entry to array if it is not already present.
   /// If it is present, then simply ignor the request
   /// - parameter cutEntry: entry to add to the collection
-  public func addEntry(_ cutEntry: CutEntry) {
+  public func addEntry(_ cutEntry: CutEntry) -> Bool
+  {
     // check if already present
     if (!cutsArray.contains(cutEntry)) {
       insert(cutEntry)
+      return true
     }
+    return false
   }
   
   /// Append cutEntry to the cuts collection and
@@ -354,7 +357,7 @@ class CutsFile: NSObject, NSCopying {
     bookmarkPosition = fromPos + spacing
     while bookmarkPosition < upToPos {
       if (debug) { print("Creating entry at \(Double(bookmarkPosition)*CutsTimeConst.PTS_DURATION) for spacing of \(Double(spacing)*CutsTimeConst.PTS_DURATION)") }
-      addEntry(CutEntry(cutPts: bookmarkPosition, mark: .BOOKMARK))
+      _ = addEntry(CutEntry(cutPts: bookmarkPosition, mark: .BOOKMARK))
       bookmarkPosition += spacing
     }
     let used = spacing - (bookmarkPosition - upToPos)
@@ -643,7 +646,7 @@ class CutsFile: NSObject, NSCopying {
   {
     var lineNumber = 0
     for entry in cutsArray {
-      print("\(lineNumber) = " + entry.asString())
+      print("\(lineNumber) = " + entry.asStringDecimal())
       lineNumber += 1
     }
   }
