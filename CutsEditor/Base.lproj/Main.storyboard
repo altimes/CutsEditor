@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="13196" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="13771" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.AVKitIBPlugin" version="13196"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="13196"/>
+        <plugIn identifier="com.apple.AVKitIBPlugin" version="13771"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="13771"/>
         <capability name="Alignment constraints to the first baseline" minToolsVersion="6.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
         <capability name="stacking Non-gravity area distributions on NSStackView" minToolsVersion="7.0" minSystemVersion="10.11"/>
@@ -935,7 +935,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField toolTip="Prompt for new Description" horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="IVW-t8-VV2">
-                                <rect key="frame" x="18" y="227" width="105" height="17"/>
+                                <rect key="frame" x="18" y="227" width="104" height="17"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="New Description" id="Ibj-OK-wAC">
                                     <font key="font" metaFont="system"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -2645,11 +2645,11 @@ Gw
                             </textField>
                             <scrollView verticalCompressionResistancePriority="1000" horizontalLineScroll="10" horizontalPageScroll="10" verticalLineScroll="10" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="kB8-IR-HoH">
                                 <rect key="frame" x="20" y="883" width="501" height="46"/>
-                                <clipView key="contentView" id="fhn-PE-uZ1">
+                                <clipView key="contentView" copiesOnScroll="NO" id="fhn-PE-uZ1">
                                     <rect key="frame" x="1" y="1" width="484" height="44"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <textView editable="NO" importsGraphics="NO" verticallyResizable="NO" usesFontPanel="YES" findStyle="panel" continuousSpellChecking="YES" allowsDocumentBackgroundColorChange="YES" allowsUndo="YES" usesRuler="YES" allowsNonContiguousLayout="YES" quoteSubstitution="YES" dashSubstitution="YES" spellingCorrection="YES" smartInsertDelete="YES" id="Y5x-0x-Moi">
+                                        <textView editable="NO" importsGraphics="NO" richText="NO" horizontallyResizable="YES" verticallyResizable="YES" usesFontPanel="YES" findStyle="panel" allowsDocumentBackgroundColorChange="YES" usesRuler="YES" allowsNonContiguousLayout="YES" smartInsertDelete="YES" id="Y5x-0x-Moi">
                                             <rect key="frame" x="0.0" y="0.0" width="484" height="44"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
@@ -3142,6 +3142,7 @@ Gw
                         <outlet property="cutButton" destination="hHg-iT-een" id="ycl-T4-IeK"/>
                         <outlet property="cutsTable" destination="Uog-kx-Bdg" id="6Nu-Rf-99K"/>
                         <outlet property="deleteRecordingButton" destination="w8L-n2-seh" id="TPQ-yN-cQ7"/>
+                        <outlet property="descriptionScrollView" destination="kB8-IR-HoH" id="vzw-la-oX6"/>
                         <outlet property="doneHuntButton" destination="LEy-ii-des" id="pHU-iC-dpH"/>
                         <outlet property="epsiodeTitle" destination="q62-z1-WB1" id="Fkd-il-9uP"/>
                         <outlet property="filmStrip" destination="eL7-Qx-yvJ" id="5An-a2-Emh"/>
@@ -3469,7 +3470,7 @@ Gw
                 <customObject id="y0F-po-jtg" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
                 <userDefaultsController representsSharedInstance="YES" id="i9B-Qb-FrK"/>
             </objects>
-            <point key="canvasLocation" x="-2234" y="431"/>
+            <point key="canvasLocation" x="-2237" y="110"/>
         </scene>
         <!--Event Information Table-->
         <scene sceneID="FW1-5N-nUH">
@@ -3704,7 +3705,7 @@ Gw
                 </viewController>
                 <customObject id="hum-52-v4a" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="-1791.5" y="977.5"/>
+            <point key="canvasLocation" x="-1745" y="973"/>
         </scene>
         <!--eServiceReference-->
         <scene sceneID="exn-kc-vLy">
@@ -3831,7 +3832,7 @@ Gw
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ILd-vU-HD8">
-                                <rect key="frame" x="18" y="227" width="84" height="17"/>
+                                <rect key="frame" x="18" y="227" width="83" height="17"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Transport ID:" id="fqY-Qc-yW3">
                                     <font key="font" metaFont="system"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -4048,7 +4049,7 @@ Gw
                         <outlet property="ParentServiceID" destination="G5j-TY-JOi" id="SJ8-lZ-mG9"/>
                         <outlet property="ParentTranSportID" destination="VtF-Hu-Nv6" id="kUe-dL-MJR"/>
                         <outlet property="ServiceID" destination="S1P-fQ-CQq" id="xJd-rb-znp"/>
-                        <outlet property="TranSportID" destination="OC4-yi-G53" id="lMk-DN-SDL"/>
+                        <outlet property="TransportID" destination="OC4-yi-G53" id="lMk-DN-SDL"/>
                         <outlet property="flag_CannotBePlayed" destination="pR5-oc-nPh" id="D59-ff-IUO"/>
                         <outlet property="flag_IsADirectory" destination="q2r-9h-lH0" id="BBX-GO-V0a"/>
                         <outlet property="flag_IsAMarker" destination="hUu-tZ-yIr" id="InX-Rp-HWO"/>
@@ -4068,7 +4069,7 @@ Gw
                 </viewController>
                 <customObject id="01K-aU-1aE" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="-2741.5" y="113.5"/>
+            <point key="canvasLocation" x="-2267" y="746"/>
         </scene>
         <!--Short Event Descriptor-->
         <scene sceneID="Old-7O-HcB">
@@ -4594,7 +4595,7 @@ Gw
                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                             <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
                                             <tableColumns>
-                                                <tableColumn width="177" minWidth="40" maxWidth="300" id="vfN-FI-XJM">
+                                                <tableColumn identifier="" width="177" minWidth="40" maxWidth="300" id="vfN-FI-XJM">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="Item">
                                                         <font key="font" metaFont="smallSystem"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
@@ -4631,7 +4632,7 @@ Gw
                                                         </tableCellView>
                                                     </prototypeCellViews>
                                                 </tableColumn>
-                                                <tableColumn width="20" minWidth="20" maxWidth="20" id="SLX-tv-Wej">
+                                                <tableColumn identifier="" width="20" minWidth="20" maxWidth="20" id="SLX-tv-Wej">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="FX">
                                                         <font key="font" metaFont="smallSystem"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
@@ -4885,7 +4886,7 @@ Gw
         </scene>
     </scenes>
     <inferredMetricsTieBreakers>
-        <segue reference="RCV-iL-b8f"/>
-        <segue reference="fjN-dc-8lX"/>
+        <segue reference="vGd-zv-ZHl"/>
+        <segue reference="GJJ-N7-aJ4"/>
     </inferredMetricsTieBreakers>
 </document>

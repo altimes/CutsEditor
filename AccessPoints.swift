@@ -392,6 +392,13 @@ class AccessPoints {
     return index
   }
   
+  /// Calculate and return cumulative "removed" gaps before the give PTS value
+  /// time is zero based
+  func gapsBeforeInSeconds(_ ptsTime: PtsType) -> Double
+  {
+    return gapsBetweenTimes(start:PtsType(0), end: ptsTime)
+  }
+  
   /// Determine to duration in seconds of all the gaps
   /// after the given time
   func gapsBetweenTimes(start startPTS: PtsType, end endPTS: PtsType) -> Double
@@ -402,6 +409,10 @@ class AccessPoints {
     var elapsedTime: Double = 0.0
     
     // find sequence that contains start time
+    if (debug) {
+      print (#function + "start \(startPTS.asSeconds), end = \(endPTS.asSeconds)")
+      print ("\(videoSequences)")
+    }
     var segmentIndex = 0
     var segment = videoSequences[segmentIndex]
     
@@ -415,7 +426,7 @@ class AccessPoints {
     // count the gaps until we find the segment that contains the end time
     while endPTS.asSeconds > elapsedTime && segmentIndex < videoSequences.count
     {
-      if endPTS.asSeconds < elapsedTime + segment.videoDurationSeconds
+      if endPTS.asSeconds < (elapsedTime + segment.videoDurationSeconds)
       {
         break
       }
@@ -667,8 +678,8 @@ class AccessPoints {
   var normalizedPCRs : [Double]
   {
     get {
-     var PCRsNormalized = [Double]()
-     guard hasPCRReset else { return PCRsNormalized }
+      var PCRsNormalized = [Double]()
+      guard hasPCRReset else { return PCRsNormalized }
       let countAsDouble = Double(m_access_points_array.count)
       // near enough,
       PCRsNormalized = pcrIndices.map {Double($0)/countAsDouble}
@@ -700,18 +711,18 @@ class AccessPoints {
         break
       }
     }
+    print("returing file postion \(offset) for input time of \(timeMark)")
     return offset
   }
   
   struct VideoSegment {
+    let startSeconds:Double
     let videoDurationSeconds:Double
     let gapSeconds:Double?
     var segementSeconds: Double {
       return gapSeconds == nil ? videoDurationSeconds : videoDurationSeconds+gapSeconds!
     }
   }
-  
-  //  typealias  videoSegment = (videoDurationSeconds: Double, gapSeconds:Double?)
   
   /// model of the video as a array of contiguous timed sequences of video+(optional)gap
   /// this model ignors all cut marks, thus unedited video is represented (simpleDuration,nil)
@@ -721,22 +732,24 @@ class AccessPoints {
     var sequence = [VideoSegment]()
     if (hasGaps) {
       var start = 0
+      var startTime = Double(0.0)
       for end in gapIndices
       {
         let segmentDurationInSeconds = deriveRunTimePTSBetweenIndices(startIndex: start, endIndex: end).asSeconds
         let gapDurationInPts = m_access_points_array[end+1].pts - m_access_points_array[end].pts
         let gapDurationInSeconds:Double? = gapDurationInPts.asSeconds
-        let segment = VideoSegment(videoDurationSeconds:segmentDurationInSeconds, gapSeconds:gapDurationInSeconds)
+        let segment = VideoSegment(startSeconds: startTime, videoDurationSeconds:segmentDurationInSeconds, gapSeconds:gapDurationInSeconds)
         sequence.append(segment)
+        startTime += segmentDurationInSeconds + (gapDurationInSeconds ?? 0.0)
         start = end+1
       }
       let lastVideoSeconds = deriveRunTimePTSBetweenIndices(startIndex: start, endIndex: m_access_points_array.count-1).asSeconds
-      let segment:VideoSegment = VideoSegment(videoDurationSeconds:lastVideoSeconds,gapSeconds: nil)
+      let segment:VideoSegment = VideoSegment(startSeconds: startTime, videoDurationSeconds:lastVideoSeconds,gapSeconds: nil)
       sequence.append(segment)
       return sequence
     }
     else  {
-      let segment: VideoSegment = VideoSegment(videoDurationSeconds:runtimePTS.asSeconds, gapSeconds:nil)
+      let segment: VideoSegment = VideoSegment(startSeconds: 0.0, videoDurationSeconds:runtimePTS.asSeconds, gapSeconds:nil)
       return [segment]
     }
   }
@@ -847,5 +860,29 @@ class AccessPoints {
     }
     let last = m_access_points_array.count-1
     return deriveRunTimePTSBetweenIndices(startIndex: first, endIndex: last)
+  }
+  
+  /// Convert PTS into elapsed duration time using value acquired from avplayer.
+  /// Typically from timed observer callback and used to reposition time marker
+  /// Player generates a increasing sequence of time and does not report the
+  /// PTS value from the recording
+  /// Scenario is compounded when the player "Seeks" to a specific file PTS value
+  /// Player PTS is then set to that value
+  func elapsedForPlayer(from ptsValue: PtsType) -> PtsType
+  {
+    guard self.hasGaps else { return ptsValue }
+    return ptsValue
+  }
+  
+  /// Convert PTS into elapsed duration time using value acquired from time line
+  /// Typically from use "clicking" in the time time to manually seek
+  /// Clicking generates a proportional value which needs to be adjusted for
+  /// any gaps in pts sequences to calculate an absolute PTS value present
+  /// in the file for the player to seekTo
+  
+  func elapsedForTimeline(from ptsValue: PtsType) -> PtsType
+  {
+    guard self.hasGaps else { return ptsValue }
+    return ptsValue
   }
 }

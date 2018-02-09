@@ -337,7 +337,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
       if (!newTitleOK) {
         let nameNoGoodAlert = NSAlert()
         nameNoGoodAlert.alertStyle = NSAlert.Style.critical
-        let informativeText = (newTitle?.characters.count == 0) ? "Blank Name" : "Name \"\(newTitle!)\" in use"
+        let informativeText = (newTitle?.count == 0) ? "Blank Name" : "Name \"\(newTitle!)\" in use"
         nameNoGoodAlert.informativeText = informativeText
         nameNoGoodAlert.window.title = "Please Try Again"
         nameNoGoodAlert.messageText = "Existing or Empty Name"

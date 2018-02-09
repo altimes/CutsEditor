@@ -148,6 +148,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   func applicationWillTerminate(aNotification: NSNotification) {
     // Insert code here to tear down your application
     // TODO: send cancel to any jobs pending in Queues
+    NotificationCenter.default.post(name: Notification.Name(rawValue: adHunterDidChange), object: nil)
+
   }
   
   /// setup entries in bookmarks menu

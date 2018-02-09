@@ -102,7 +102,7 @@ class Recording
   
   init(rootURLName: String)
   {
-    if (rootURLName.characters.count == 0)
+    if (rootURLName.count == 0)
     {
       cuts = CutsFile()
       meta = MetaData()

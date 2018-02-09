@@ -106,6 +106,81 @@ class CutsFile: NSObject, NSCopying {
     }
   }
   
+  /// Fully Bounded array of IN and OUT cutmarks in time order
+  /// Ensure that complete duration is covered by fabricating any implied starter IN mark and terminal OUT mark
+  public var fullInOutOnly: [CutEntry] {
+    return createFullInOutTable(partialInOut: inOutOnly)
+  }
+  
+  // create a table that is guaranteed marks at terminal postions
+  func createFullInOutTable(partialInOut: [CutEntry]) -> [CutEntry]
+  {
+    let firstPos = container?.ap.firstPTS
+    let lastPos = container?.ap.lastPTS
+    let firstCut = CutEntry(cutPts: firstPos!, mark: .IN)
+    let lastCut = CutEntry(cutPts: lastPos!, mark: .OUT)
+    guard (partialInOut.count > 0) else { return [firstCut,lastCut] }
+    
+    var inOutTable = [CutEntry]()
+    // edge cases
+    // single IN mark
+    // single OUT mark
+    if (partialInOut.count == 1)
+    {
+      // Single Mark, use fabricated boundary mark
+      if (partialInOut[0].cutType == MARK_TYPE.IN.rawValue) {
+        inOutTable = [partialInOut[0],lastCut]
+      }
+      else {
+        inOutTable = [firstCut, partialInOut[0]]
+      }
+      return inOutTable
+    }
+    else {
+      // now determine if we start with IN or OUT
+      if (partialInOut[0].cutType == MARK_TYPE.IN.rawValue)
+      {
+        inOutTable.append(CutEntry(cutPts: (container?.ap.firstPTS)!, mark: .OUT))
+      }
+      else { // lowest is OUT, so fabricate and IN at 0.0
+        inOutTable.append(CutEntry(cutPts: (container?.ap.firstPTS)!, mark: .IN))
+      }
+      // now interleave IN/OUT pairs watching for inconsistent marks
+      // if sequential OUTs with intervening IN, take earliest,
+      // if duplicate INs without intervening OUT take latest
+      var last = 0
+      for index in 0 ..< partialInOut.count
+      {
+        if partialInOut[index].cutType != inOutTable[last].cutType
+        {
+          inOutTable.append(partialInOut[index])
+          last += 1
+        }
+        else // duplication of mark type
+        {
+          if (partialInOut[index].cutType == MARK_TYPE.IN.rawValue)
+          {
+            // use later IN
+            inOutTable[last] = partialInOut[index]
+          }
+          else
+          {
+            // use earlier OUT value, ie ignor later OUT mark
+            inOutTable[last] = inOutTable[last]
+          }
+        }
+      }
+    }
+    // now ensure that we have a final Mark
+    // TODO: this will choke if PCR Reset !!
+    if (inOutTable.last!.cutPts < container!.ap.lastPTS) {
+      let finalInOutMark = CutEntry(cutPts: container!.ap.lastPTS, mark: (inOutTable.last?.cutType == MARK_TYPE.OUT.rawValue) ? .IN: .OUT)
+      inOutTable.append(finalInOutMark)
+    }
+    return inOutTable
+  }
+  
+
   /// Array of only the bookmarks
   public var bookMarks: [CutEntry] {
     get {

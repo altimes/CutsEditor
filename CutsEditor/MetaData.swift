@@ -101,7 +101,8 @@ public struct MetaData {
     returnString += newLine + "Description:" + programDescription
     returnString += newLine + "RecordingTime:"+recordingTime
     returnString += newLine + "Tags:"+tags
-    returnString += newLine + "Duration:"+CutEntry.timeTextFromPTS(UInt64(duration)!)
+//    returnString += newLine + "Duration:"+CutEntry.timeTextFromPTS(UInt64(duration)!)
+    returnString += newLine + "Duration:" + (PtsType(duration)?.hhMMss ?? "??:??:??")
     returnString += newLine + "FileSize:"+programFileSize
     returnString += newLine + "ServiceData:"+decodeServiceDataAsString(serviceData)
     returnString += newLine + "PacketSize:"+packetSize
@@ -119,9 +120,9 @@ public struct MetaData {
     let items = serviceRef.components(separatedBy: ":")
     var referenceDecoded = EServiceReference()
     if let refTypeRawValue = Int(items[0]), let refType = ENIGMA2_SERVICEREFERENCE_REFTYPE(rawValue: refTypeRawValue)
-      {
-        referenceDecoded.referenceType = refType
-      }
+    {
+      referenceDecoded.referenceType = refType
+    }
     else {
       referenceDecoded.referenceType = ENIGMA2_SERVICEREFERENCE_REFTYPE.INVALID
     }
@@ -138,12 +139,13 @@ public struct MetaData {
     if ((flags & ENIGMA2_SERVICEREFERENCE_FLAGS.SERVICE_IS_NOT_PLAYABLE.rawValue)>0) { flagSet.insert(ENIGMA2_SERVICEREFERENCE_FLAGS.SERVICE_IS_NOT_PLAYABLE) }
     referenceDecoded.flags = flagSet
     
-    if let serviceTypeRawValue = Int(items[2]), let serviceType = ENIGMA2_SERVICEREFERENCE_TYPE(rawValue: serviceTypeRawValue)
-      {
-        referenceDecoded.serviceType = serviceType
-      }
+    
+    if let serviceTypeRawValue = Int(items[2], radix:16), let serviceType = ENIGMA2_SERVICEREFERENCE_TYPE(rawValue: serviceTypeRawValue)
+    {
+      referenceDecoded.serviceType = serviceType
+    }
     else {
-      referenceDecoded.serviceType = ENIGMA2_SERVICEREFERENCE_TYPE.INVALID
+      referenceDecoded.serviceType = ENIGMA2_SERVICEREFERENCE_TYPE.unknown
     }
     
     referenceDecoded.service_id = UInt16(items[3], radix:16)
@@ -174,18 +176,18 @@ public struct MetaData {
     else {
       returnString += "NAME->UNDEFINED<"
     }
-//    Flags bitfield (in parenthesis the decimal value of the flag is stated):
-//    1.Bit(01): It's about a Directory. // SHOULD enter (implies mustDescent)
-//    2.Bit(02): The user must change to the directory // cannot be played directly - often used with "isDirectory" (implies canDescent)
-//    3.Bit(04): The user may change to the directory  // supports enterDirectory/leaveDirectory
-//    The Bits 1-3 have sense if set together
-//    4.Bit(08): The content of the folder needs to be automatically sorted.
-//               should be ASCII-sorted according to service_name. great for directories.
-//    5.Bit(16): The Service has (enigma-internally) a sort-key. // has a sort key in data[3]. not having a sort key implies 0.
-//    6.Bit(32): Sort key is 1 instead of 0
-//    7.Bit(64): It's a marker
-//    8.Bit(128): The service is not playable
-
+    //    Flags bitfield (in parenthesis the decimal value of the flag is stated):
+    //    1.Bit(01): It's about a Directory. // SHOULD enter (implies mustDescent)
+    //    2.Bit(02): The user must change to the directory // cannot be played directly - often used with "isDirectory" (implies canDescent)
+    //    3.Bit(04): The user may change to the directory  // supports enterDirectory/leaveDirectory
+    //    The Bits 1-3 have sense if set together
+    //    4.Bit(08): The content of the folder needs to be automatically sorted.
+    //               should be ASCII-sorted according to service_name. great for directories.
+    //    5.Bit(16): The Service has (enigma-internally) a sort-key. // has a sort key in data[3]. not having a sort key implies 0.
+    //    6.Bit(32): Sort key is 1 instead of 0
+    //    7.Bit(64): It's a marker
+    //    8.Bit(128): The service is not playable
+    
     return (returnString)
   }
   
@@ -204,7 +206,7 @@ public struct MetaData {
           }
           else {
             let itemDescription = String(format:"\n%@:0x%04.4X",item.key.description,item.value)
-              s.append(itemDescription)
+            s.append(itemDescription)
           }
         }
         if !provider.isEmpty { s.append("\nprovider:"+self.provider)}
@@ -220,15 +222,15 @@ public struct MetaData {
     func subtitleDescription(value: Int, teletextPID: Int?) -> String
     {
       var resultStr: String = ENIGMA2_SERVICE_DATA_CACHE_TYPE.cSUBTITLE.description
-       // if teletext (track type 1) pid<<16 |page<<8,| sub <<3
-       // if DVB (track type 2) pid<<16| composition page <<8
+      // if teletext (track type 1) pid<<16 |page<<8,| sub <<3
+      // if DVB (track type 2) pid<<16| composition page <<8
       
       let pid =  (value & 0xFFFF0000) >> 16
       let page = (value & 0x0000FF00) >> 8
       resultStr += String(format:":0x%4.4X", value)
       if (teletextPID != nil && pid == teletextPID)
       {       // teletext
-       let sub =   (value & 0x000000F8) >> 3
+        let sub =   (value & 0x000000F8) >> 3
         resultStr += String(format:"[0x%02.2X|%d:%d]", pid, page, sub)
       }
       else {  // DVB text
@@ -258,7 +260,7 @@ public struct MetaData {
     // TODO: think about and throw exception on bad flags field
     
     // process remaider of broken down string
-//    var teletextPID:Int?
+    //    var teletextPID:Int?
     for index in 1..<entries.count
     {
       let cacheEntry = entries[index]
@@ -266,11 +268,11 @@ public struct MetaData {
       if (cacheField[0] == "c")
       {
         // field is 2 decimal digits followed by 4 hex digits for all except subtitle, see below
-        let decimalAsString = String(cacheField[1].characters.dropLast(cacheField[1].characters.count-2))
-        let hexAsString = String(cacheField[1].characters.dropFirst(2))
+        let decimalAsString = String(cacheField[1].dropLast(cacheField[1].count-2))
+        let hexAsString = String(cacheField[1].dropFirst(2))
         if let decimal = Int(decimalAsString), let entry = Int(hexAsString, radix:16) {
           if let fieldId = ENIGMA2_SERVICE_DATA_CACHE_TYPE(rawValue: decimal) {
-              decoded.pidCache.updateValue(entry, forKey: fieldId)
+            decoded.pidCache.updateValue(entry, forKey: fieldId)
           }
         }
         // TODO: throw expection on decoding failure
@@ -283,53 +285,53 @@ public struct MetaData {
   }
   
   func decodeServiceDataAsString(_ serviceData: String) -> String {
-//    let kColon = ":"
-//    let kComma = ","
-//    var cacheString = ""
-//    
-//    let entries = serviceData.components(separatedBy: kComma)
-//    // split on ":"
-//    // first "must" be "f" field
-//    let serviceEntry = entries[0].components(separatedBy: kColon)
-//    let serviceFlags = serviceEntry[1]
-//    for index in 1..<entries.count
-//    {
-//      var teletextPID:Int?
-//      
-//      let cacheEntry = entries[index]
-//      let cacheField = cacheEntry.components(separatedBy: kColon)
-//      // field is 2 decimal digits followed by 4 hex digits for all except subtitle, see below
-//      let decimalAsString = String(cacheField[1].characters.dropLast(cacheField[1].characters.count-2))
-//      let hexAsString = String(cacheField[1].characters.dropFirst(2))
-//      let decimal = Int(decimalAsString)
-//      let entry = Int(hexAsString, radix:16)
-//      let fieldId = ENIGMA2_SERVICE_DATA_CACHE_TYPE(rawValue: decimal!)
-//      if (fieldId == ENIGMA2_SERVICE_DATA_CACHE_TYPE.cTPID) {
-//        // teltext PID, hang on to it for later cSubtitle Decoding
-//        teletextPID = entry
-//      }
-//      var field: String
-//      if (fieldId == ENIGMA2_SERVICE_DATA_CACHE_TYPE.cSUBTITLE) {
-//         // if teletext (track type 1) pid<<16 |page<<8,| sub <<3
-//         // if DVB (track type 2) pid<<16| composition page <<8
-//         let pid =  (entry! & 0xFFFF0000) >> 16
-//         let page = (entry! & 0x0000FF00) >> 8
-//        if (pid == teletextPID && teletextPID != nil) {
-//          // teletext
-//         let sub =   (entry! & 0x000000F8) >> 3
-//         field = "\(fieldId!.description):0x\(hexAsString)/[\(pid)|:(page):\(sub)]"
-//        }
-//        else {
-//          field = "\(fieldId!.description):0x\(hexAsString)/[\(pid):\(page)]"
-//        }
-//      }
-//      else {
-//          field = "\(fieldId!.description):0x\(hexAsString)/\(entry!)"
-//      }
-//      cacheString += "\n"+field
-//    }
-//    let retStr = "\nService Flags:\(serviceFlags)" + cacheString
-//    return retStr
+    //    let kColon = ":"
+    //    let kComma = ","
+    //    var cacheString = ""
+    //
+    //    let entries = serviceData.components(separatedBy: kComma)
+    //    // split on ":"
+    //    // first "must" be "f" field
+    //    let serviceEntry = entries[0].components(separatedBy: kColon)
+    //    let serviceFlags = serviceEntry[1]
+    //    for index in 1..<entries.count
+    //    {
+    //      var teletextPID:Int?
+    //
+    //      let cacheEntry = entries[index]
+    //      let cacheField = cacheEntry.components(separatedBy: kColon)
+    //      // field is 2 decimal digits followed by 4 hex digits for all except subtitle, see below
+    //      let decimalAsString = String(cacheField[1].characters.dropLast(cacheField[1].characters.count-2))
+    //      let hexAsString = String(cacheField[1].characters.dropFirst(2))
+    //      let decimal = Int(decimalAsString)
+    //      let entry = Int(hexAsString, radix:16)
+    //      let fieldId = ENIGMA2_SERVICE_DATA_CACHE_TYPE(rawValue: decimal!)
+    //      if (fieldId == ENIGMA2_SERVICE_DATA_CACHE_TYPE.cTPID) {
+    //        // teltext PID, hang on to it for later cSubtitle Decoding
+    //        teletextPID = entry
+    //      }
+    //      var field: String
+    //      if (fieldId == ENIGMA2_SERVICE_DATA_CACHE_TYPE.cSUBTITLE) {
+    //         // if teletext (track type 1) pid<<16 |page<<8,| sub <<3
+    //         // if DVB (track type 2) pid<<16| composition page <<8
+    //         let pid =  (entry! & 0xFFFF0000) >> 16
+    //         let page = (entry! & 0x0000FF00) >> 8
+    //        if (pid == teletextPID && teletextPID != nil) {
+    //          // teletext
+    //         let sub =   (entry! & 0x000000F8) >> 3
+    //         field = "\(fieldId!.description):0x\(hexAsString)/[\(pid)|:(page):\(sub)]"
+    //        }
+    //        else {
+    //          field = "\(fieldId!.description):0x\(hexAsString)/[\(pid):\(page)]"
+    //        }
+    //      }
+    //      else {
+    //          field = "\(fieldId!.description):0x\(hexAsString)/\(entry!)"
+    //      }
+    //      cacheString += "\n"+field
+    //    }
+    //    let retStr = "\nService Flags:\(serviceFlags)" + cacheString
+    //    return retStr
     return decodeServiceData(serviceData).description
   }
 }
@@ -384,7 +386,7 @@ public struct EServiceReference
       }
       resultString += isAMember
     }
-    resultString.remove(at: resultString.characters.index(before: resultString.endIndex))
+    resultString.remove(at: resultString.index(before: resultString.endIndex))
     resultString += "]"
     return resultString
   }
@@ -477,48 +479,82 @@ enum ENIGMA2_SERVICE_DATA_CACHE_TYPE : Int, CustomStringConvertible {
   cacheMax  // sentinel
   
   var description: String {
-  get {
-    switch self {
-    case .cVPID: return "Video Packet ID"
-    case .cAPID: return "Audio Packet ID"
-    case .cTPID: return "Teletext Packet ID"
-    case .cPCRPID: return "Program Clock Reference Packet ID"
-    case .cAC3PID: return "AC3 Packet ID"
-    case .cVTYPE: return "Video Type"
-    case .cACHANNEL: return "Audio Channel(Left/Right/Stereo)"
-    case .cAC3DELAY: return "AC3 Delay"
-    case .cPCMDELAY: return "PCM Delay"
-    case .cSUBTITLE: return "Subtitle[PID:Page[:SubPage]]"
-    case .cacheMax: return "Sentinel"
-    }
-  }
-  }
-}
-
-enum ENIGMA2_SERVICEREFERENCE_TYPE : Int, CustomStringConvertible
-{
-  case INVALID = -1
-  case TV = 1
-  case RADIO = 2
-  case DATA = 3
-  
-  var description: String
-  {
     get {
-      switch  self {
-        case .INVALID: return "Invalid"
-        case .TV: return "TV"
-        case .RADIO: return "Radio"
-        case .DATA: return "Data"
+      switch self {
+      case .cVPID: return "Video Packet ID"
+      case .cAPID: return "Audio Packet ID"
+      case .cTPID: return "Teletext Packet ID"
+      case .cPCRPID: return "Program Clock Reference Packet ID"
+      case .cAC3PID: return "AC3 Packet ID"
+      case .cVTYPE: return "Video Type"
+      case .cACHANNEL: return "Audio Channel(Left/Right/Stereo)"
+      case .cAC3DELAY: return "AC3 Delay"
+      case .cPCMDELAY: return "PCM Delay"
+      case .cSUBTITLE: return "Subtitle[PID:Page[:SubPage]]"
+      case .cacheMax: return "Sentinel"
       }
     }
   }
-  
-  /// Utility to provide strings from UI display - should be language settable....
-  static func allValues() -> [String]
-  {
-    return [String(describing:self.TV),String(describing:self.RADIO),String(describing:self.DATA),String(describing:self.INVALID)]
-  }
 }
+/*
+ 0x00 reserved for future use
+ 0x0 digital television service (see note 1)
+ 0x02 digital radio sound service (see note 2)
+ 0x03 Teletext service
+ 0x04 NVOD reference service (see note 1)
+ 0x05 NVOD time-shifted service (see note 1)
+ 0x06 mosaic service
+ 0x07 FM radio service
+ 0x08 DVB SRM service [48]
+ 0x09 reserved for future use
+ 0x0A advanced codec digital radio sound service
+ 0x0B advanced codec mosaic service
+ 0x0C data broadcast service
+ 0x0D reserved for Common Interface Usage (EN 50221 [37])
+ 0x0E RCS Map (see EN 301 790 [7])
+ 0x0F RCS FLS (see EN 301 790 [7])
+ 0x10 DVB MHP service
+ 0x11 MPEG-2 HD digital television service
+ 0x12 to 0x15 reserved for future use
+ 0x16 advanced codec SD digital television service
+ 0x17 advanced codec SD NVOD time-shifted service
+ 0x18 advanced codec SD NVOD reference service
+ 0x19 advanced codec HD digital television service
+ 0x1A advanced codec HD NVOD time-shifted service
+ 0x1B advanced codec HD NVOD reference service
+ 0x1C to 0x7F reserved for future use
+ 0x80 to 0xFE user defined
+ 0xFF reserved for future use
+ */
 
+enum ENIGMA2_SERVICEREFERENCE_TYPE : Int, EnumCollection
+{
+  case unknown = -1
+  case tv = 0x01
+  case radio = 0x02
+  case teletext = 0x03
+  case nvodRefernce = 0x04
+  case nvodTimeshifted = 0x05
+  case mosiac = 0x06
+  case fmRadio = 0x07
+  case dvbSrmService = 0x08
+  case advancedCodecDigitalRadioSoundService = 0x0A
+  case advancedCodecMosaicService = 0x0B
+  case dataBroadcastService = 0x0C
+  case reservedForCommonInterfaceUsage_EN50221_37 = 0x0D
+  case rcsMap_EN_301_790_7 = 0x0E
+  case rcsFLS_EN_301_790_7 = 0x0F
+  case dvbMHPservice = 0x10
+  case mpeg2hdDigitalTelevisionService = 0x11
+  case advancedCodecSD_DigitalTelevisionService = 0x16
+  case advancedCodecSD_NVOCTimehiftedService = 0x17
+  case advancedCodecSD_NVOCReferenceService = 0x18
+  case advancedCodecHD_DigitalTelevisionService = 0x19
+  case advancedCodecHD_NVOCTimehiftedService = 0x1A
+  case advancedCodecHD_NVOCReferenceService = 0x1B
 
+/// Utility to provide strings for UI display - should be language settable....
+//  static var allDescriptions: [String] {
+//    return Array(self.allValues.map {String(describing:$0)})
+//  }
+}

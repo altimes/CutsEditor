@@ -206,18 +206,20 @@ public struct  CutEntry {
     return result
   }
   
-  /// Convert PTS value to HH:MM:SS string
-  static public func timeTextFromPTS(_ ptsCount : UInt64) -> String {
-    return hhMMssFromSeconds(Double(ptsCount) * CutsTimeConst.PTS_DURATION)
-  }
+//  /// Convert PTS value to HH:MM:SS string
+//  static public func timeTextFromPTS(_ ptsCount : UInt64) -> String {
+//    return hhMMssFromSeconds(Double(ptsCount) * CutsTimeConst.PTS_DURATION)
+//  }
   
   /// Return entry as printable string
   func asString() -> String {
     if let markType = MARK_TYPE(rawValue: cutType) {
-     return "\(markType) " + CutEntry.timeTextFromPTS(self.cutPts)
+//      return "\(markType) " + CutEntry.timeTextFromPTS(self.cutPts)
+      return "\(markType) " + self.cutPts.hhMMss
     }
     else {
-      return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
+//      return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
+      return "Unknown Mark Type code \(cutType) " + self.cutPts.hhMMss
     }
   }
   
@@ -228,7 +230,8 @@ public struct  CutEntry {
       return "\(markType) " + timeStamp
     }
     else {
-      return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
+//      return "Unknown Mark Type code \(cutType) " + CutEntry.timeTextFromPTS(self.cutPts)
+      return "Unknown Mark Type code \(cutType) " + self.cutPts.hhMMss
     }
 
   }

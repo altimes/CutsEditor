@@ -87,7 +87,8 @@ public struct voiceCommands {
 public struct keyBoardCommands {
   static let inCut = "x"
   static let outCut = "."
-  static let skipForward = " "
+  static let skipForward1 = "'"
+  static let skipForward2 = " "
   static let skipBackward = "s"
   static let reset = ";"
   static let rhAddMatching = ","
@@ -174,4 +175,5 @@ extension PtsType
       return result
     }
   }
+  
 }
