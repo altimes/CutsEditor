@@ -568,18 +568,15 @@ class AccessPoints {
     guard(startIndex >= 0 && endIndex >= 0) else { return (resetFound, arrayOfResetPoints) }
     
     // check for PTS discontinuity
-    if (m_access_points_array[endIndex].pts < m_access_points_array[startIndex].pts)
-    { // discontinuity exists, find one or more locations
-      resetFound = true
-      var notAtEnd = (startIndex+1) < endIndex
-      while notAtEnd {
-        let (_, ceilingIndex) = highestPTSFrom(startIndex)
-        startIndex = ceilingIndex+1
-        notAtEnd = ceilingIndex < endIndex
-        if notAtEnd {
-          arrayOfResetPoints.append(startIndex)
-        }
-      }
+    var notAtEnd = (startIndex+1) < endIndex
+    while notAtEnd {
+      let (_, ceilingIndex) = highestPTSFrom(startIndex)
+      startIndex = ceilingIndex+1
+      notAtEnd = ceilingIndex < endIndex
+      if notAtEnd {
+        arrayOfResetPoints.append(startIndex)
+        resetFound = true
+     }
     }
     return (resetFound, arrayOfResetPoints)
   }
