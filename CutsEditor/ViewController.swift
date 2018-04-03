@@ -1805,7 +1805,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     setPrevNextButtonState(filelistIndex)
     changeFile(filelistIndex)
   }
-  
+  // Determine if menu item should be enabled or not
   override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if (menuItem.action == #selector(clearBookMarks(_:))
       || menuItem.action == #selector(clearCutMarks(_:))
@@ -1825,6 +1825,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else if ( menuItem.action == #selector(redo(_:))) {
 //      print("redo is \(cutsUndoRedo?.isRedoPossible ?? false)")
       return cutsUndoRedo?.isRedoPossible ?? false
+    }
+    else if menuItem.action == #selector(cleanMarkAndCut(_:)) {
+      return movie.isCuttable
     }
     else {
       return true
@@ -3396,7 +3399,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   // currently fails to create bookmarks before first in and after last out
   // when recording is cut but with ads marked out
-  @IBAction func clearBookMarks(_ send: AnyObject)
+  @IBAction func clearBookMarks(_ sender: AnyObject)
   {
     clearAllOfType(.BOOKMARK)
     cutsUndoRedo?.add(state: self.movie.cuts)
@@ -3567,6 +3570,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
+  @IBAction func cleanMarkAndCut(_ sender: AnyObject)
+  {
+    if (debug) { print(#function) }
+    guard (movie.isCuttable) else { return }
+    
+    clearBookMarks(sender)
+    add10Bookmarks(sender)
+    cutButton(cutButton)
+
+  }
   // MARK: - Advertisment boundary pickers
   var boundaryAdHunter : BoundaryHunter?
   let initialStep = 90.0      // TODO: add to user config panel

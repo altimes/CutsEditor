@@ -700,6 +700,12 @@
                                                 <action selector="add10Bookmarks:" target="Ady-hI-5gd" id="72d-wc-JXZ"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Mark And Cut" id="CxM-Z6-UDd">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="cleanMarkAndCut:" target="Ady-hI-5gd" id="0do-0d-1J2"/>
+                                            </connections>
+                                        </menuItem>
                                     </items>
                                 </menu>
                             </menuItem>
@@ -4886,7 +4892,7 @@ Gw
         </scene>
     </scenes>
     <inferredMetricsTieBreakers>
-        <segue reference="vGd-zv-ZHl"/>
-        <segue reference="GJJ-N7-aJ4"/>
+        <segue reference="RCV-iL-b8f"/>
+        <segue reference="fjN-dc-8lX"/>
     </inferredMetricsTieBreakers>
 </document>
