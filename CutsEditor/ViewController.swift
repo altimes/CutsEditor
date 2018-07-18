@@ -2468,7 +2468,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       // before adding this one
       let threshold = 5
       if (pendingSeek.count > threshold) {
-        let tmp:[SeekParams] = pendingSeek.indices.flatMap
+        let tmp:[SeekParams] = pendingSeek.indices.compactMap
         {
           if ($0 > threshold / 2) { return pendingSeek[$0] }
           else { return nil}
@@ -2755,10 +2755,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 //          print("mouse show supposedly succeeded")
 //        }
         guard (self?.seekCompleted)! else {return}
+        
+        // protect against condition of closure call occuring duing file change
+        guard (self?.monitorView.player?.currentItem != nil) else { return }
         //        print("Called back at \(self?.clockSeconds() ?? "??")")
         // update player transport UI
         // check cut markers and skips over OUT -> IN sections
         let avItem = self?.monitorView.player?.currentItem
+        // FIXME: Can get called when avItem is nil - UI change before async update completed ?
         let avRate = CMTimebaseGetRate(avItem!.timebase!).description
         print("item rate = \(avRate)")
         if let currentCMTime =  self?.monitorView.player?.currentTime() {
