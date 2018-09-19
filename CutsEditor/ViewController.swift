@@ -55,7 +55,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBOutlet var programDescription: NSTextView!
   @IBOutlet weak var cutsTable: NSTableView!
   @IBOutlet var programDuration: NSTextField!
-  @IBOutlet weak var currentFile: NSPopUpButton!
+  @IBOutlet weak var currentFile: PopUpWithStatusFilter!
   @IBOutlet weak var statusField: NSTextFieldCell!
   
   // possibly better done as button array
@@ -86,7 +86,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   var imageGenerator : AVAssetImageGenerator?
   
-  let debug = false
+  let debug = true
   var startDate = Date()
   var fileSearchCancelled = false
   var filelist: [String] = []
@@ -313,7 +313,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
 
     //    AVPlayerItemTimeJumped
     NotificationCenter.default.addObserver(self, selector: #selector(sawTimeJumpInPlayer(_:)), name: NSNotification.Name.AVPlayerItemTimeJumped, object: nil)
-    
+    // Movie selector has changed programmatically
+    NotificationCenter.default.addObserver(self, selector: #selector(popUpWillChange(_:)), name: NSNotification.Name.PopUpWillChange, object: nil )
+    NotificationCenter.default.addObserver(self, selector: #selector(popUpHasChanged(_:)), name: NSNotification.Name.PopUpHasChanged, object: nil )
+
     //    NotificationCenter.default.addObserver(self, selector: #selector(boundaryDoubleGreen(_:)), name: NSNotification.Name.BoundaryIsDoubleGreen, object: nil )
     //
     //    addMatchingCutMark(toMark: prevCut)
@@ -411,6 +414,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (debug) { print("que?") }
     }
   }
+  
+  // Popup is about to change, so flush current movie
+  @objc func popUpWillChange(_ notification: Notification)
+  {
+    changeFile(-1)
+  }
+  
+  // Popup has Changed update GUI
+  @objc func popUpHasChanged(_ notification: Notification)
+  {
+    changeFile(-1)
+  }
+  
+
   
   /// testing
   @objc func sawRateChangeInPlayer(_ notification: Notification)
@@ -978,7 +995,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     thisTimeline.target = self
     
     let timelineBackground = NSColor(red: 0.0, green: 0.0, blue: 1.0, alpha: 0.4)
-    thisTimeline.backgroundColor = timelineBackground
+    thisTimeline.bookMarkBackgroundColor = timelineBackground
     thisTimeline.keyCatchDelegate = self
     
     
@@ -1113,7 +1130,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let backwardOK = (direction == .previous && filelistIndex > 0)
     if ( forwardOK || backwardOK)
     {
-      let adjustment = direction == .next ? 1 : -1
+//      let adjustment = direction == .next ? 1 : -1
+      let adjustment = stepToPopUpNotHidden(direction: direction)
       lastfileIndex = filelistIndex
       //      print("filelistIndex is now \(filelistIndex)")
       currentFile.selectItem(at: lastfileIndex+adjustment)
@@ -1129,6 +1147,39 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
     }
     huntButtonsReset()
+  }
+  
+  /// Find the next visible entry on the popUp in the given direction and return the index offset
+  /// - returns: arithmetic step in popUp Index to next visible item
+  private func stepToPopUpNotHidden(direction: ProgramChoiceStepDirection) -> Int
+  {
+    var step = 0
+    var found = false
+    if ( direction == .next) {
+      var index = filelistIndex + 1
+      while !found && index < currentFile.itemArray.count
+      {
+        found = currentFile.itemArray[index].isHidden == false
+        if !found { index += 1 }
+      }
+      if found {
+        step = index - filelistIndex
+        return step
+      }
+    }
+    else {
+      var index = filelistIndex - 1
+      while !found && index >= 0
+      {
+        found = currentFile.itemArray[index].isHidden == false
+        if !found { index -= 1 }
+      }
+      if found {
+        step = -(filelistIndex - index)
+        return step
+      }
+    }
+    return 0
   }
   
   @IBAction func prevButton(sender: NSButton) {
@@ -1888,6 +1939,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     programDuration.toolTip = ""
     statusField.stringValue = ""
     actionsSetEnabled(false)
+    currentFile.isEnabled = true
     self.cutsTable.reloadData()
     currentFile.toolTip = ""
     boundaryAdHunter?.reset()
@@ -2028,7 +2080,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .readyToPlay:
             if (true) {
               print("ready to play")
-              print("metadata duration = \(movie.meta.duration)")
+              print("metadata duration = \(movie.meta.duration)/\(PtsType(movie.meta.duration)!.asSeconds)")
               print("eit duration = \(movie.eit.eit.Duration)")
 //              if let asset = self.monitorView.player?.currentItem?.asset
 //              {
@@ -2113,7 +2165,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               programDurationInSecs = durationsInSecs.best
               if (debug) {
                 print("Player ready to play")
-                print("metadata duration = \(movie.meta.duration)")
+                print("metadata duration = \(movie.meta.duration)/\(PtsType(movie.meta.duration)!.asSeconds)")
               }
               if let metaDuration = PtsType(movie.meta.duration) {
                 self.programDuration.stringValue = metaDuration.hhMMss.appending(videoDurationString)
@@ -2404,8 +2456,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Update the timeline view
   func updateCutsMarksGUI()
   {
-    if (self.monitorView.player?.currentItem?.status == AVPlayerItemStatus.readyToPlay)
-    {
+//    if (self.monitorView.player?.currentItem?.status == AVPlayerItemStatus.readyToPlay)
+//    {
       timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
       timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
       timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
@@ -2414,7 +2466,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       timelineView?.setGapPositions(normalizedPositions: movie.ap.normalizedGaps)
       timelineView?.setPCRPositions(normalizedPositions: movie.ap.normalizedPCRs)
       timelineView?.setNeedsDisplay((timelineView?.bounds)!)
-    }
+//    }
   }
   
   /// Common function to write the status field GUI entry to match

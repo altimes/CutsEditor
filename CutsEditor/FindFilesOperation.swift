@@ -33,7 +33,7 @@ class FindFilesOperation: Operation
   
   /// Create a operation queue for file finding
   /// - returns: the queue
-  open static func createQueue() -> OperationQueue
+  public static func createQueue() -> OperationQueue
   {
     // create the queue
     let queue = OperationQueue()

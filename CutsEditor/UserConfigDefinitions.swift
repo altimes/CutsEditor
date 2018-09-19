@@ -49,6 +49,8 @@ let playerDidChange = "PlayerPreferencesControllerDidChange"
 let fileOpenDidChange = "FileToOpenFromMenuDidChange"
 let jobQueueDidChange = "JobQueueDidChange"
 let movieDidChange = "MovieDidChange"
+let popUpWillChange = "PopUpWillChange"
+let popUpHasChanged = "PupUPHasChanged"
 let eitDidChange = "EITDidChange"
 let applicationIsTerminating = "applicationIsTerminating"
 
@@ -170,4 +172,10 @@ public struct systemConfiguration {
   
   /// args for the external "cutter" program
   var mcutCommandArgs = [String]()
+}
+
+extension NSNotification.Name
+{
+  static let PopUpWillChange = NSNotification.Name(rawValue: popUpWillChange)
+  static let PopUpHasChanged = NSNotification.Name(rawValue: popUpHasChanged)
 }
