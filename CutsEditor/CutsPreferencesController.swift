@@ -187,7 +187,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   
   /// handle changes to text fields
   /// this relies of the tag codes +/- 501->505 / 601/605 ascribed to each of the 20 entry text fields
-  override func controlTextDidEndEditing(_ obj: Notification)
+  func controlTextDidEndEditing(_ obj: Notification)
   {
     let textField = obj.object as! NSTextField
     // print (textField.stringValue)
@@ -232,7 +232,7 @@ class CutsPreferencesController: NSViewController, NSTextFieldDelegate, NSContro
   /// Close this model dialog
   @IBAction func done(_ sender: NSButton) {
     // TODO: build a "modified" and warn on exit without save of changes
-    self.presenting?.dismiss(sender)
+    self.presentingViewController?.dismiss(sender)
   }
 
 }

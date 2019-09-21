@@ -18,6 +18,6 @@ class PreferencesTabController: NSTabViewController {
   @IBAction override func dismiss(_ sender: Any?) {
     //
     // print(#function+" called")
-    super.dismissViewController(self)
+    super.dismiss(self)
   }
 }

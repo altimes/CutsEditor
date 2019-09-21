@@ -258,7 +258,8 @@ extension Data {
   /// - parameter length: number of bytes to use for referred to type
   func decodeValue<T>(from: Int, length: Int) -> T
   {
-    return self.subdata(in: from..<from+length).withUnsafeBytes{$0.pointee}
+//    return self.subdata(in: from..<from+length).withUnsafeBytes{$0.pointee}
+    return self.subdata(in: from..<from+length).withUnsafeBytes{$0.load(as: T.self)}
   }
   /// Extract the unsigned byte array
   /// - parameter from: starting offset in the data

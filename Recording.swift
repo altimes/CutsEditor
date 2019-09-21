@@ -17,16 +17,18 @@ import Foundation
 /// with the objective a interrogation about commonly used elements
 /// such a pts ranges, discontinuity in pts and other
 @objcMembers
+
+
 class Recording 
 {
-//  var movie: TransportStream?
+  //  var movie: TransportStream?
   var movieName: String?
   var movieShortName: String?
   var eit  : EITInfo
   var meta : MetaData
   var cuts : CutsFile
   var ap   : AccessPoints
-//  var sc   : StuctureCache?
+  //  var sc   : StuctureCache?
   static var debug = false
   var isCuttable: Bool {
     get {
@@ -81,7 +83,7 @@ class Recording
     get {
       if (movieName == nil)
       {
-         return Array<String>(repeating: "", count:6)
+        return Array<String>(repeating: "", count:6)
       }
       else {
         var namesArray:[String] = Array<String>(repeating: "", count:6)
@@ -94,6 +96,31 @@ class Recording
         return namesArray
       }
     }
+  }
+  
+  /// Get the OS record of a fully specified file
+  /// - parameter filePath: fully specified file path
+  /// - returns: Byte count of file from OS
+  
+  static func getFileSize(filePath: String) -> UInt64
+  {
+    var fileSize : UInt64 = 0
+    
+    do {
+      //return [FileAttributeKey : Any]
+      let attr = try FileManager.default.attributesOfItem(atPath: filePath)
+      fileSize = attr[FileAttributeKey.size] as! UInt64
+      
+      //if you convert to NSDictionary, you can get file size old way as well.
+      //            let dict = attr as NSDictionary
+      //            fileSize = dict.fileSize()
+      
+    } catch {
+      print("Error - Cannot get filesize from OS: \(error)")
+    }
+    print ("actual size from os is \(fileSize)")
+    
+    return fileSize
   }
   
   convenience init() {
@@ -128,8 +155,16 @@ class Recording
       
       // load the ap file
       ap = AccessPoints()
-      if let apRawData = Recording.loadRawDataFrom(file: movieName!+ConstsCuts.AP_SUFFIX) {
-        if let apts = AccessPoints(data: apRawData)
+      if let apRawData = Recording.loadDataFromBinary(file: movieName!+ConstsCuts.AP_SUFFIX) {
+        if (apRawData.count > badApLoadThreshold)
+        {
+          print("What the ! the ap file is not \(apRawData.count) bytes in size")
+          let filePath = movieName!+ConstsCuts.AP_SUFFIX
+          let fileSize = Recording.getFileSize(filePath: filePath)
+          print ("OS reports file size of \(fileSize)")
+        }
+          // only proceed with rational ap counts otherwise leave ap unpopulated
+        else if let apts = AccessPoints(data: apRawData)
         {
           ap = apts
         }
@@ -142,7 +177,7 @@ class Recording
           eit = eitInfo
         }
       }
-   }
+    }
     cuts.container = self
     ap.container = self
     eit.container = self
@@ -180,6 +215,23 @@ class Recording
     return (fileMgr, fileExists, pathName)
   }
   
+  /// Read the file into a Data element but with an artificial delay.  The delay is
+  /// to accomodate a remote system that has notified of a completed a task, however, the underlying
+  /// remote OS has not completedthe write back to disk.  Resulting in the next access to the file
+  /// reading rubbish.  Only intended to be used when detached process is notified of completion
+  /// Simple wrapper around loadRawDataFromFile
+  
+  /// Seems to only affect meta data file for an unknown reason
+  
+  static func loadRawDataDelayedFrom(file filename:String, withDelay delay: UInt32) -> Data?
+  {
+    /// - parameter filename: fully defined file path
+    /// - parameter withDelay: int of seconds delay
+    /// - returns : raw arbitrary data
+    usleep(delay*1_000)
+    return loadRawDataFrom(file: filename)
+  }
+  
   /// Binary data loader
   /// - parameter filename: fully defined file path
   /// - returns : raw arbitrary data
@@ -192,8 +244,9 @@ class Recording
     
     if (foundFile)
     {
+      // FIXME: this is failing some how with huge amounts of data being read
       data = fileMgr.contents(atPath: fullFileName)
-      if (debug)  {
+      if (true)  {
         print("Found file \(fullFileName)")
         print("Found file of \((data?.count ?? 0))! size")
       }
@@ -205,12 +258,56 @@ class Recording
     return data
   }
   
+  static func loadDataFromBinary(file filename:String) -> Data?
+  {
+    var data:Data?
+    
+    let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
+    
+    if (foundFile)
+    {
+      let fileURL = URL(fileURLWithPath: fullFileName)
+      data = try? Data(contentsOf:fileURL)
+      
+      if (debug)  {
+        print("Found file \(fullFileName)")
+        print("Found file of \((data?.count ?? 0))! size")
+      }
+      // not interested in empty files.... may as well be missing
+      if (data?.count == 0 ) {
+        data = nil
+      }
+      if (data != nil && (data!.count > badApLoadThreshold) && fullFileName.hasSuffix(ConstsCuts.AP_SUFFIX) ) {
+        print("arghh bad structure size - got \((data != nil) ? data!.count : -1)")
+        // probably side effect of race condition in which operation has returned
+        // as complete, but OS may be still lazily persisting file to disk
+        // try a few more times before giving up
+        var badCount = true
+        var i = 0
+        while badCount && i<10 {
+          let fileURL = URL(fileURLWithPath: fullFileName)
+          data = try? Data(contentsOf:fileURL)
+          
+          if (debug)  {
+            print("Found file \(fullFileName)")
+            print("Found file of \((data?.count ?? 0))! size")
+          }
+          badCount = (data?.count ?? 0) < badApLoadThreshold
+          i += 1
+        }
+        data = nil
+      }
+    }
+    return data
+  }
+
   
-  // return to first PTS from the ap file, else 0
+  /// return to first PTS from the ap file, else 0
   // TODO: develop function to read first PTS from recording if ap file is not present
+  /// - returns: access the first ProgramTimeStamp in the AccessPoints
   func firstPts() -> PtsType
   {
-    return ap.firstPTS
+    return self.ap.firstPTS
   }
   
   /// Extract selected fields from expected "dateTime - channel - programTitle" formated string
@@ -262,28 +359,32 @@ class Recording
   }
   
   
-  /// Decode and return the thee stored recording durations in seconds
-  /// - returns : touple of (eitDuration, metaDuration, ptsDuration) all Doubles
+  /// Decode and return the three stored recording durations in seconds.  Durations
+  /// come from the EIT, the metaData and calculated from the AccessPoints
+  /// - returns: touple of (eitDuration, metaDuration, ptsDuration) all Doubles
   
   func getStoredDurations() -> (eitDuration: Double, metaDuration:Double, ptsDuration:Double)
   {
     var metaFileDuration: Double = 0.0
     var eitFileDuration: Double = 0.0
     var accessPointsFileDuration: Double
+    
+    // get from EIT
     if (eit.eit.Duration != "00:00:00" && eit.eit.Duration != "") {
       //        self.programDuration.stringValue = eitInfo.eit.Duration
       let timeParts = eit.eit.Duration.components(separatedBy: ":")
       eitFileDuration = Double(timeParts[0])!*3600.0 + Double(timeParts[1])!*60.0+Double(timeParts[2])!
     }
     
-    // metaData
+    // get from metaData
     if (meta.duration != "0" && meta.duration != "")
     {  // meta data looks OK, use it for duration display
       metaFileDuration = Double(meta.duration)!*CutsTimeConst.PTS_DURATION
     }
     
-    // accessPoints
+    // get from accessPoints
     accessPointsFileDuration = ap.durationInSecs()
+    
     return (eitFileDuration, metaFileDuration, accessPointsFileDuration)
   }
   
@@ -348,7 +449,7 @@ class Recording
     {
       if (isMetaDurationOK(metaTime: metaDuration, eitTime: eitDuration, playerTime: playerDuration, apTime: accessPointsDuration))
       {
-       bestDuration = min(bestDuration, metaDuration)
+        bestDuration = min(bestDuration, metaDuration)
       }
     }
     else if (metaDuration != 0.0 && isMetaDurationOK(metaTime: metaDuration, eitTime: eitDuration, playerTime: playerDuration, apTime: accessPointsDuration))
@@ -383,5 +484,5 @@ class Recording
       return [eitString, metaString, apString]
     }
   }
-
+  
 }

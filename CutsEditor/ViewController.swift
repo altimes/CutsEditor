@@ -163,7 +163,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       var pts : UInt64 = 0
       if let entry = movie.cuts.firstInCutMark
       {
-        if movie.cuts.inOutOnly.index(of: entry) == 0 {
+        if movie.cuts.inOutOnly.firstIndex(of: entry) == 0 {
           pts = entry.cutPts
         }
       }
@@ -270,6 +270,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     currentFile.removeAllItems()
     currentFile.addItem(withTitle: StringsCuts.NO_FILE_CHOOSEN)
     currentFile.selectItem(at: 0)
+ //   currentFile.filter?.menu?.autoenablesItems = false
     cutsTable.dataSource = self
     cutsTable.delegate = self
     actionsSetEnabled(false)
@@ -608,7 +609,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     for newIndex in 0 ..< self.namelist.count
     {
       let title = namelist[newIndex]
-      if let oldIndex = itemTitles.index(of: title)
+      if let oldIndex = itemTitles.firstIndex(of: title)
       {
         self.currentFile.item(at: newIndex)?.attributedTitle = menuItems[oldIndex].attributedTitle
         self.currentFile.item(at: newIndex)?.toolTip = menuItems[oldIndex].toolTip
@@ -630,7 +631,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       let savedLastDiskURL = filelist[lastfileIndex]
       
       sortNames()
-      lastfileIndex = filelist.index(of: savedLastDiskURL)!
+      lastfileIndex = filelist.firstIndex(of: savedLastDiskURL)!
       
       let (itemTitles, itemArray) = retainAttributedStringList(self.currentFile)
       self.currentFile.removeAllItems()
@@ -638,7 +639,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       restoreAttributedStringList(currentFile, itemTitles: itemTitles, menuItems: itemArray)
       
       // reselect the current program in the resorted list
-      currentFile.selectItem(at: filelist.index(of: savedCurrentDiskURL)!)
+      currentFile.selectItem(at: filelist.firstIndex(of: savedCurrentDiskURL)!)
       mouseDownPopUpIndex = nil
       setPrevNextButtonState(filelistIndex)
       changeFile(filelistIndex)
@@ -710,6 +711,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @objc func progressBarVisibilityChange(_ notification: Notification)
   {
     deleteRecordingButton.isEnabled = progressBar.isHidden
+    if let _ = currentFile.filter {
+      print("file is \(currentFile.stringValue)")
+      currentFile.filter!.filterMenuEnabled = progressBar.isHidden
+    }
   }
   
   override var representedObject: Any? {
@@ -908,7 +913,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       var fontSize:CGFloat = 64
       let fudgeFactor:CGFloat = 1.0   // size is NOT returning a sizeThatFits (due to Kerning?), so fudge it
       // the frame size is being automagically increased and text is folding
-      let labelText = NSMutableAttributedString(string: newText, attributes: [NSAttributedStringKey.font:NSFont(name: "Helvetica-Bold",size: fontSize)!])
+      let labelText = NSMutableAttributedString(string: newText, attributes: [NSAttributedString.Key.font:NSFont(name: "Helvetica-Bold",size: fontSize)!])
       labelText.setAlignment(NSTextAlignment.center, range: NSMakeRange(0, labelText.length))
       var boundingRect = labelText.boundingRect(with: label.bounds.size, options: [])
       var stringWidth = boundingRect.width
@@ -916,7 +921,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       //      print ("testing \(stringWidth)/\(stringHeight) against \(overlayFrame.size)")
       while (stringWidth >= overlayWidth*fudgeFactor || stringHeight > overlayHeight*fudgeFactor && fontSize > CGFloat(12.0)) {
         fontSize -= 1.0
-        labelText.setAttributes([NSAttributedStringKey.font: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
+        labelText.setAttributes([NSAttributedString.Key.font: NSFont(name: "Helvetica-Bold",size: fontSize)!], range: NSMakeRange(0, labelText.length))
         boundingRect = labelText.boundingRect(with: label.bounds.size, options: NSString.DrawingOptions.truncatesLastVisibleLine)
         stringWidth = boundingRect.width
         stringHeight = boundingRect.height
@@ -1057,7 +1062,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (movie.cuts.count>0 && movie.cuts.count<=3)
     {
       //      let startPTS = Int64(movie.cuts.first!.cutPts)
-      startTime = CMTimeMake(Int64(movie.ap.firstPTS), CutsTimeConst.PTS_TIMESCALE)
+      startTime = CMTimeMake(value: Int64(movie.ap.firstPTS), timescale: CutsTimeConst.PTS_TIMESCALE)
       //      startTime = CMTimeMake(startPTS, CutsTimeConst.PTS_TIMESCALE)
     }
     else {
@@ -1119,7 +1124,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (self.monitorView.player != nil)
     {
       let playerState = self.monitorView.player?.status
-      if (playerState != AVPlayerStatus.failed)
+      if (playerState != AVPlayer.Status.failed)
       {
         videoPlayer(.pause)
       }
@@ -1150,6 +1155,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   /// Find the next visible entry on the popUp in the given direction and return the index offset
+  /// - parameter direction: which way to search (forward or backward through list)
   /// - returns: arithmetic step in popUp Index to next visible item
   private func stepToPopUpNotHidden(direction: ProgramChoiceStepDirection) -> Int
   {
@@ -1345,19 +1351,24 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  
   /// Used to determine from recording path which configuration should be used for
-  /// setting up the "Cut" task.  Uses a the unchangable local name determining fi
+  /// setting up the "Cut" task.  Uses a the unchangable local name determining if
   /// we are doing a local or remote cut.
-  /// - parameter dirPath: path of the recording
-  /// - returns : touple local or remote cut, index into the configurations array
+  /// - parameter dirPath: local form representation of the path of the recording
+  /// - returns: touple of local or remote cut, index into the configurations array
   func pvrLocalMount(containedIn dirPath: String) -> (isLocal: Bool, configIndex: Int)
   {
     // note index 0 is always local cutting configuration
     // so only look at remote mounts roots
+    
     for i in 1 ..< self.systemSetup.pvrSettings.count {
       let pvr = systemSetup.pvrSettings[i]
-      if dirPath.contains(pvr.cutLocalMountRoot)
+      var pvrMount = pvr.cutLocalMountRoot
+      // ensure consistent format
+      if dirPath.last == "/" && pvrMount.last != "/" {
+        pvrMount += "/"
+      }
+      if dirPath == pvrMount
       {
         let isRemote = (pvr.title != mcutConsts.fixedLocalName)
         return (isRemote, i)
@@ -1370,20 +1381,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @IBAction func seekToAction(_ sender: NSButton) {
     if let key = skipButtons(rawValue: sender.tag) {
       switch key {
-      case skipButtons.MINUS_A: seekToSkip(skips.lhs[0].value)
-      case skipButtons.PLUS_A: seekToSkip(skips.rhs[0].value)
+        case skipButtons.MINUS_A: seekToSkip(skips.lhs[0].value)
+        case skipButtons.PLUS_A: seekToSkip(skips.rhs[0].value)
         
-      case skipButtons.MINUS_B: seekToSkip(skips.lhs[1].value)
-      case skipButtons.PLUS_B: seekToSkip(skips.rhs[1].value)
+        case skipButtons.MINUS_B: seekToSkip(skips.lhs[1].value)
+        case skipButtons.PLUS_B: seekToSkip(skips.rhs[1].value)
         
-      case skipButtons.MINUS_C: seekToSkip(skips.lhs[2].value)
-      case skipButtons.PLUS_C: seekToSkip(skips.rhs[2].value)
+        case skipButtons.MINUS_C: seekToSkip(skips.lhs[2].value)
+        case skipButtons.PLUS_C: seekToSkip(skips.rhs[2].value)
         
-      case skipButtons.MINUS_D: seekToSkip(skips.lhs[3].value)
-      case skipButtons.PLUS_D: seekToSkip(skips.rhs[3].value)
+        case skipButtons.MINUS_D: seekToSkip(skips.lhs[3].value)
+        case skipButtons.PLUS_D: seekToSkip(skips.rhs[3].value)
         
-      case skipButtons.MINUS_E: seekToSkip(skips.lhs[4].value)
-      case skipButtons.PLUS_E: seekToSkip(skips.rhs[4].value)
+        case skipButtons.MINUS_E: seekToSkip(skips.lhs[4].value)
+        case skipButtons.PLUS_E: seekToSkip(skips.rhs[4].value)
       }
     }
     boundaryHuntReset()
@@ -1461,7 +1472,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     var namePairs = [namePair]()
     for name in namelist
     {
-      let pair = namePair(diskURL: filelist[namelist.index(of: name)!], programeName: name)
+      let pair = namePair(diskURL: filelist[namelist.firstIndex(of: name)!], programeName: name)
       namePairs.append(pair)
     }
     sortNamePairs(&namePairs)
@@ -1535,7 +1546,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let fileManager = FileManager.default
     guard (!filelist.contains(filename)) else {
       // simply find it and select it
-      currentFile.selectItem(at: filelist.index(of: filename)!)
+      currentFile.selectItem(at: filelist.firstIndex(of: filename)!)
       setPrevNextButtonState(filelistIndex)
       changeFile(filelistIndex)
       return true
@@ -1566,7 +1577,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     sortFilelist()
     restoreAttributedStringList(currentFile, itemTitles: menuTitles, menuItems: menuItemArray)
     
-    currentFile.selectItem(at: filelist.index(of: fileURL.absoluteString)!)
+    currentFile.selectItem(at: filelist.firstIndex(of: fileURL.absoluteString)!)
     setDropDownColourForIndex(filelistIndex)
     setPrevNextButtonState(filelistIndex)
     changeFile(filelistIndex)
@@ -1706,7 +1717,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
                   let apDuration = attributes[index].apDuration
                   let episodeText = attributes[index].episodeText
                   let title = (weakself?.currentFile.item(at: index)?.title)!
-                  weakself?.currentFile.item(at: index)?.attributedTitle = NSAttributedString(string: title, attributes:[NSAttributedStringKey.foregroundColor: colourAttribute, NSAttributedStringKey.font:fontAttribute])
+                  weakself?.currentFile.item(at: index)?.attributedTitle = NSAttributedString(string: title, attributes:[NSAttributedString.Key.foregroundColor: colourAttribute, NSAttributedString.Key.font:fontAttribute])
                   if let pathURL = weakself?.filelist[index],
                     let tooltip = weakself?.tooltipFrom(url: pathURL, duration: apDuration, episodeTitle: episodeText)
                   {
@@ -1728,6 +1739,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     queue.addOperation(blockOperation)
     return blockOperation
+  }
+  
+  func getAttributesForIndex(_ index:Int) -> (font :NSFont, colour: NSColor, apDuration:Double, episodeTitle: String)
+  {
+    return getFontAttributesDurationForIndex(index)
   }
   
   /// Determine the colour and font for an attributed string for the program at the given Index
@@ -1804,9 +1820,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       //      let tooltip = (path.removingPercentEncoding!) + " (\(CutEntry.hhMMssFromSeconds(apDuration)))"
       let tooltip = tooltipFrom(url: filelist[index], duration: apDuration, episodeTitle: episodeText)
       
-      menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSAttributedStringKey.foregroundColor: colourAttribute, NSAttributedStringKey.font: fontAttribute])
+      menuItem.attributedTitle = NSAttributedString(string: menuItem.title, attributes: [NSAttributedString.Key.foregroundColor: colourAttribute, NSAttributedString.Key.font: fontAttribute])
       menuItem.toolTip = tooltip
     }
+  }
+  
+  func determineDropDownColourForIndex(_ index:Int) -> NSColor
+  {
+    let (fontAttribute, colourAttribute, apDuration, episodeText) = getAttributesForIndex(index)
+    return colourAttribute
   }
   
   /// Construct the dropdown tool tip to be full (local) path and the calculated duration
@@ -1857,7 +1879,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     changeFile(filelistIndex)
   }
   // Determine if menu item should be enabled or not
-  override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+  @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+//    print("called with item = \(menuItem.title)")
     if (menuItem.action == #selector(clearBookMarks(_:))
       || menuItem.action == #selector(clearCutMarks(_:))
       || menuItem.action == #selector(clearLastPlayMark(_:))
@@ -2052,11 +2075,16 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         {
           if (debug) {
             print("videoFieldMode: \(track.videoFieldMode ?? "No videoFieldMode")")
-            print("assetTrack.trackID: \(track.assetTrack.trackID)")
-            print("track.assetTrack.mediaType: \(track.assetTrack.mediaType)")
-            print("track.assetTrack.playable: \(track.assetTrack.isPlayable)")
+            if let thisTrack = track.assetTrack {
+              print("assetTrack.trackID: \(thisTrack.trackID)")
+              print("track.assetTrack.mediaType: \(thisTrack.mediaType)")
+              print("track.assetTrack.playable: \(thisTrack.isPlayable)")
+            }
+            else {
+              print("track.assetTrack is NIL")
+            }
           }
-          let duration = track.assetTrack.asset?.duration
+          let duration = track.assetTrack?.asset?.duration
           let durationInSeconds = CMTimeGetSeconds(duration!)
           if (debug) { print("duration = \(durationInSeconds) secs") }
           movie.videoDurationFromPlayer = durationInSeconds
@@ -2071,7 +2099,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       if let newStatus = change?[NSKeyValueChangeKey.newKey]
       {
-        if let status = AVPlayerStatus(rawValue: Int(newStatus as! Int))
+        if let status = AVPlayer.Status(rawValue: Int(newStatus as! Int))
         {
           if (debug) { print("status Enum = \(status)") }
           switch status {
@@ -2080,7 +2108,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .readyToPlay:
             if (true) {
               print("ready to play")
-              print("metadata duration = \(movie.meta.duration)/\(PtsType(movie.meta.duration)!.asSeconds)")
+              let debugDuration = (movie.meta.duration.count > 0) ? movie.meta.duration : "0"
+              print("metadata duration = \(movie.meta.duration)/\(PtsType(debugDuration)!.asSeconds)")
               print("eit duration = \(movie.eit.eit.Duration)")
 //              if let asset = self.monitorView.player?.currentItem?.asset
 //              {
@@ -2108,7 +2137,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             self.programDuration.stringValue = CutEntry.hhMMssFromSeconds(programDurationInSecs)
             self.programDuration.toolTip = movie.durationStrings.joined(separator: "\n").appending(videoDurationString)
             //            let startTime = CMTimeMake(Int64(movie.firstVideoPosition().cutPts), CutsTimeConst.PTS_TIMESCALE)
-            let startTime = CMTimeMake(Int64(0), CutsTimeConst.PTS_TIMESCALE)
+            let startTime = CMTimeMake(value: Int64(0), timescale: CutsTimeConst.PTS_TIMESCALE)
             
             if (self.monitorView.player?.status == .readyToPlay)
             {
@@ -2133,6 +2162,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             self.actionsSetEnabled(true)
           case .unknown:
             if (debug) { print("Unknown") }
+          @unknown default:
+            if (debug) { print("Unknown") }
           }
         }
         if (debug) { print ("new value of status = \(newStatus)") }
@@ -2145,7 +2176,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     {
       if let newStatus = change?[NSKeyValueChangeKey.newKey]
       {
-        if let status = AVPlayerStatus(rawValue: Int(newStatus as! Int))
+        if let status = AVPlayer.Status(rawValue: Int(newStatus as! Int))
         {
           if (debug) { print("status Enum = \(status)") }
           var videoDuration = Float64(0.0)
@@ -2157,7 +2188,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             // trap is that the player status can change BEFORE the item status (go figure....)
             if self.monitorView.player?.currentItem?.status == .readyToPlay {
               let itemDuration = self.monitorView.player?.currentItem?.duration
-              if itemDuration != kCMTimeIndefinite {
+              if itemDuration != CMTime.indefinite {
                 videoDuration = CMTimeGetSeconds(itemDuration!)
                 videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
               }
@@ -2184,6 +2215,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
             }
           case .unknown:
             if (debug) { print("Unknown") }
+          @unknown default:
+            if (debug) { print("Unknown unexpected/new enum case") }
           }
         }
         if (debug) { print ("new value of player status = \(newStatus)") }
@@ -2199,7 +2232,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let avItem = self.monitorView.player?.currentItem
         let avRate = CMTimebaseGetRate(avItem!.timebase!).description
         print("item rate = \(avRate)")
-        let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayerTimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
+        let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayer.TimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayer.TimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
         if (timeControlString == "waiting") {
           if (debug) { print ("waiting ??") }
         }
@@ -2322,14 +2355,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     let videoURL = URL(string: fileURL)!
     let avAsset = AVURLAsset(url: videoURL)
-    if (debug) { print("available formats:  \(avAsset.availableMetadataFormats)") ; print(" media chars = \(avAsset.availableMediaCharacteristicsWithMediaSelectionOptions)")}
+    if (true) { print("available formats:  \(avAsset.availableMetadataFormats)") ; print(" media chars = \(avAsset.availableMediaCharacteristicsWithMediaSelectionOptions)")}
     
 
     // ensure all track durations are valid - don't known enough video to
     // write bad video recovery functions
     var durationIsValid = true
     for trackAsset in avAsset.tracks {
-      if (debug) {
+      if (true) {
         print("Asset description:\(trackAsset.description)")
         print("Asset sample Cursor:\(trackAsset.canProvideSampleCursors)")
         print("Asset formatDescriptions:\(trackAsset.formatDescriptions)")
@@ -2349,7 +2382,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         if (debug) { print(#function+" target Image Size\(imageSize)") }
         imageGenerator?.maximumSize = imageSize
         imageGenerator?.appliesPreferredTrackTransform = true
-        imageGenerator?.apertureMode = AVAssetImageGeneratorApertureMode.productionAperture
+        imageGenerator?.apertureMode = AVAssetImageGenerator.ApertureMode.productionAperture
         //        updateFilmStripSynchronous(time: CMTime(seconds:300.0, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: frameGap, imageGenerator: imageGenerator!)
         self.filmStrip.updateFor(time: CMTime(seconds:10.0+3.0*filmstripFrameGap, preferredTimescale: CutsTimeConst.PTS_TIMESCALE), secondsApart: filmstripFrameGap, imageGenerator: imageGenerator!)
       }
@@ -2375,11 +2408,11 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       
       avItem.addObserver(self, forKeyPath: #keyPath(AVPlayerItem.tracks), options: [.new], context: nil)
       avItem.addObserver(self, forKeyPath: #keyPath(AVPlayerItem.status), options: [.new], context: nil)
-      
       let samplePlayer = AVPlayer(playerItem: avItem)
       samplePlayer.addObserver(self, forKeyPath: #keyPath(AVPlayer.rate), options: [.new], context: nil)
       samplePlayer.addObserver(self, forKeyPath: #keyPath(AVPlayer.status), options: [.new], context: nil)
-      samplePlayer.isClosedCaptionDisplayEnabled = true
+//      samplePlayer.isClosedCaptionDisplayEnabled = true
+      samplePlayer.appliesMediaSelectionCriteriaAutomatically = true
       
       self.monitorView.controlsStyle = playerPrefs.playbackControlStyle == videoControlStyle.floating ? .floating : .inline
 //      self.monitorView.controlsStyle = AVPlayerViewControlsStyle.none
@@ -2504,7 +2537,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// wrapper functions to seek or queue seek if a seek is pending
   func seekInSequence(to time: CMTime)
   {
-    seekInSequence(to: time, toleranceBefore: kCMTimePositiveInfinity, toleranceAfter: kCMTimePositiveInfinity)
+    seekInSequence(to: time, toleranceBefore: CMTime.positiveInfinity, toleranceAfter: CMTime.positiveInfinity)
   }
   
   func seekInSequence(to time:CMTime, toleranceBefore beforeValue: CMTime, toleranceAfter afterValue: CMTime)
@@ -2628,7 +2661,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let seekTolerance = BoundaryHunter.seekTolerance
 //    seekCompleted = false
 //    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: seekTolerance, completionHandler: seekCompletedOK)
-    seekInSequence(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: seekTolerance)
+    seekInSequence(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: CMTime.zero, toleranceAfter: seekTolerance)
   }
   
   /// Get the video players current position as a PTS value
@@ -2856,7 +2889,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               {
 //                self?.seekCompleted = false
 //                self?.monitorView.player?.seek(to: afterAdTime, toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity, completionHandler: (self?.seekCompletedOK)!)
-                self?.seekInSequence(to: afterAdTime, toleranceBefore: kCMTimeZero, toleranceAfter: kCMTimePositiveInfinity)
+                self?.seekInSequence(to: afterAdTime, toleranceBefore: CMTime.zero, toleranceAfter: CMTime.positiveInfinity)
               }
               if (closureDebug) { print("Will Skip to time \(afterAdTime.seconds)") }
               self?.highlightCutTableEntryBefore(currentTime: Double(afterAdTime.seconds))
@@ -2902,7 +2935,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func movieCuttingFinished(_ resultMessage: String, movieAtPath: String)
   {
-    if let movieIndex = self.filelist.index(of: movieAtPath) {
+    if let movieIndex = self.filelist.firstIndex(of: movieAtPath) {
       setDropDownColourForIndex(movieIndex)
       changeFile(movieIndex)
     }
@@ -2982,6 +3015,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         else {
           cutterQ.jobCompleted(moviePath: URLToMovieToCut, result: statusValue, resultMessage: resultMessage)
           if (statusValue == 0)  {
+            // inject an artificial delay to allow remote system to flush to disk
+            // it *appears* to say that job is done before all files are completed.
+            // since this is only updating the colouring of the drop down list a delay is not significant
+            // IF this is executed on as a detached process  NOT ON THE MAIN QUEUE
+//            let gotColorCompletionBlock = newColour, listIndex in {
+//              self.currentF
+//            }
             if let index = self.indexOfMovie(of: URLToMovieToCut) {
               self.setDropDownColourForIndex(index)
               // acquire index of program, in case environment has changed whilst cutting the recording
@@ -3074,7 +3114,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func indexOfMovie(of movieURLEntry: String) -> Int?
   {
-    return filelist.index(of: movieURLEntry)
+    return filelist.firstIndex(of: movieURLEntry)
   }
   
   // MARK: - TableView delegate, datasource and table related functions
@@ -3312,17 +3352,18 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     var statusMessageChanged = false
     if (false) { // examining track character
-      let tracks = self.monitorView.player?.currentItem?.tracks
-      for track in tracks! {
-        print ("track type = \(track.assetTrack.description)")
-        let astrck = track.assetTrack
-        print ("astrck trackID = \(astrck.trackID)")
-        print ("astrck media type = \(astrck.mediaType)")
-        print ("astrck nominal frame rate = \(astrck.nominalFrameRate)")
-        print ("astrck naturalSize = \(astrck.naturalSize)")
-        print ("astrck estimatedDataRate = \(astrck.estimatedDataRate)")
-        print ("astrck metadata = \(astrck.metadata)")
-        print ("astrck minFrameDuration = \(astrck.minFrameDuration)")
+      let tracks = self.monitorView.player?.currentItem?.tracks ?? []
+      for track in tracks {
+        print ("track type = \((track.assetTrack != nil) ? track.assetTrack!.description : "No track Asset")")
+        if let astrck = track.assetTrack {
+          print ("astrck trackID = \(astrck.trackID)")
+          print ("astrck media type = \(astrck.mediaType)")
+          print ("astrck nominal frame rate = \(astrck.nominalFrameRate)")
+          print ("astrck naturalSize = \(astrck.naturalSize)")
+          print ("astrck estimatedDataRate = \(astrck.estimatedDataRate)")
+          print ("astrck metadata = \(astrck.metadata)")
+          print ("astrck minFrameDuration = \(astrck.minFrameDuration)")
+        }
 
         print ("track frame rate = \(track.currentVideoFrameRate)")
         print ("track enabled = \(track.isEnabled)")
@@ -3832,7 +3873,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     //    if (event.keyCode == UInt16(kVK_Delete)) { interpretKeyEvents([event]);return } // interpret has dealt with it
     // with thanks based on: http://stackoverflow.com/questions/35539256/detect-when-delete-key-pressed-on-control
     let controlKeyDictionary = defaultControlKeyDictionary
-    if let uniCodeDelete = UnicodeScalar(NSDeleteCharacter)
+    if let uniCodeDelete = UnicodeScalar(NSEvent.SpecialKey.delete.rawValue)
     {
       if event.charactersIgnoringModifiers == String(Character(uniCodeDelete))
       {
@@ -3845,7 +3886,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
       }
     }
-    if let uniCodeLeftArrow = UnicodeScalar(NSLeftArrowFunctionKey)
+    if let uniCodeLeftArrow = UnicodeScalar(NSEvent.SpecialKey.leftArrow.rawValue)
     {
       if event.charactersIgnoringModifiers == String(Character(uniCodeLeftArrow))
       {
@@ -3858,7 +3899,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         }
       }
     }
-    if let uniCodeRightArrow = UnicodeScalar(NSRightArrowFunctionKey)
+    if let uniCodeRightArrow = UnicodeScalar(NSEvent.SpecialKey.rightArrow.rawValue)
     {
       if event.charactersIgnoringModifiers == String(Character(uniCodeRightArrow))
       {
@@ -3911,6 +3952,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       NSSound.beep();NSSound.beep();NSSound.beep()
     default: NSSound.beep()
     }
+    // and skip forward
+    seekToAction(seekButton2c)
   }
   /// Delegate function
   /// Respond to user taping the "delete" button on the keyboard to remove mark
@@ -4032,7 +4075,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   
   override func prepare(for segue: NSStoryboardSegue, sender: Any?) {
-    if ((segue.identifier)?.rawValue == "EITEdit") {
+    if ((segue.identifier) == "EITEdit") {
       print("Saw menu EITEdit segue")
       let eit = sender as! ShortEventDescriptorViewController
       eit.movie = self.movie

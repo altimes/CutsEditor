@@ -25,7 +25,9 @@ public struct MetaData {
   var serviceData : String
   var packetSize : String
   var scrambled : String
+  var isPopulated = false
   let debug = false
+  
   
   init()
   {
@@ -39,6 +41,7 @@ public struct MetaData {
     serviceData = ""
     packetSize = ""
     scrambled = ""
+    isPopulated = false
   }
   
   init(fromFilename: URL)
@@ -50,10 +53,15 @@ public struct MetaData {
     if let fileText = try? String(contentsOf: fromFilename, encoding: String.Encoding.utf8) {
       if !decode(text: fileText) {
         print("Failed Decoding: Initialzed with empty values")
+        isPopulated = false
+      }
+      else {
+        isPopulated = true
       }
     }
     else {
       print("Failed reading file: Initialzed with empty values")
+      isPopulated = false
     }
   }
   
@@ -63,10 +71,15 @@ public struct MetaData {
     {
       if !decode(text: fileText) {
         print("Failed Decoding: Initialzed with empty values")
+        isPopulated = false
+      }
+      else {
+        isPopulated = true
       }
     }
     else {
       print("Failed Converting Data To String: Initialzed with empty values")
+      isPopulated = false
     }
   }
   
@@ -114,11 +127,16 @@ public struct MetaData {
   
   func decodeServiceReference(_ serviceRef : String) -> EServiceReference
   {
+    // TODO: needs guard action against initialized but empty serviceRef
+    //  (or serviceRef needs a better set of initilized values)
     // from http://radiovibrations.com/dreambox/services.htm
     //  REFTYPE:   -1=invalid id, 0=structure id, 1= Dvb Service, 2= File
-    
-    let items = serviceRef.components(separatedBy: ":")
     var referenceDecoded = EServiceReference()
+    guard self.isPopulated else {
+      referenceDecoded.setDummyValues()
+      return referenceDecoded
+    }
+    let items = serviceRef.components(separatedBy: ":")
     if let refTypeRawValue = Int(items[0]), let refType = ENIGMA2_SERVICEREFERENCE_REFTYPE(rawValue: refTypeRawValue)
     {
       referenceDecoded.referenceType = refType
@@ -350,6 +368,23 @@ public struct EServiceReference
   var unused: String?
   var path : String?
   var name : String?
+  
+  // Initialize to dummy values if metadata file is missing
+  mutating func setDummyValues()
+  {
+    referenceType = ENIGMA2_SERVICEREFERENCE_REFTYPE.INVALID
+    flags = []
+    serviceType = ENIGMA2_SERVICEREFERENCE_TYPE.unknown
+    service_id = 0
+    transport_stream_id = 0
+    original_network_id = 0
+    namespace = 0
+    parent_service_id = 0
+    parent_transport_stream_id = 0
+    unused = ""
+    path = ""
+    name = ""
+  }
   
   func description() -> String
   {

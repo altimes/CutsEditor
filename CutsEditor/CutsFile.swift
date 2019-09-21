@@ -51,7 +51,7 @@ class CutsFile: NSObject, NSCopying {
     get {
       var startTime: CMTime
       if let firstMark = self.first {
-        startTime = CMTimeMake(Int64(firstMark.cutPts), CutsTimeConst.PTS_TIMESCALE)
+        startTime = CMTimeMake(value: Int64(firstMark.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE)
       }
       else {
         startTime = CMTime(seconds: 0.0, preferredTimescale: 1)
@@ -545,7 +545,7 @@ class CutsFile: NSObject, NSCopying {
   /// - returns : true if entry was found, false if not
   public func removeEntry(_ cutEntry: CutEntry) -> Bool
   {
-    guard let index = cutsArray.index(of: cutEntry) else {
+    guard let index = cutsArray.firstIndex(of: cutEntry) else {
       return false
     }
     cutsArray.remove(at: index)
@@ -584,7 +584,7 @@ class CutsFile: NSObject, NSCopying {
   /// - returns : sequence position or nil
   public func index(of entry: CutEntry) -> Int?
   {
-    return cutsArray.index(of: entry)
+    return cutsArray.firstIndex(of: entry)
   }
 
   /// Find the cut entry that preceeds the current time or is within the provivded tolerance of the
@@ -609,7 +609,7 @@ class CutsFile: NSObject, NSCopying {
     }
     if found != nil
     {
-      return (found!, cutsArray.index(of: found!)!)
+      return (found!, cutsArray.firstIndex(of: found!)!)
     }
     return nil
   }
@@ -626,7 +626,7 @@ class CutsFile: NSObject, NSCopying {
       var markInSecs = entry.asSeconds()
       if (entry.cutType == MARK_TYPE.IN.rawValue || entry.cutType == MARK_TYPE.OUT.rawValue)
       {
-        var markTime = CMTimeMake(Int64(entry.cutPts), CutsTimeConst.PTS_TIMESCALE)
+        var markTime = CMTimeMake(value: Int64(entry.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE)
         
         if (nowInSecs > markInSecs && entry.cutType == MARK_TYPE.OUT.rawValue)
         {
@@ -637,7 +637,7 @@ class CutsFile: NSObject, NSCopying {
         
         if (nowInSecs < markInSecs && entry.cutType == MARK_TYPE.IN.rawValue && skipCandidate) {
           markInSecs += 0.25
-          markTime = CMTimeMake(Int64(markInSecs*1000.0)*Int64(CutsTimeConst.PTS_TIMESCALE/1000), CutsTimeConst.PTS_TIMESCALE)
+          markTime = CMTimeMake(value: Int64(markInSecs*1000.0)*Int64(CutsTimeConst.PTS_TIMESCALE/1000), timescale: CutsTimeConst.PTS_TIMESCALE)
           return markTime
         }
         else {

@@ -70,7 +70,7 @@ class MovieCuttingOperation: Operation
     super.cancel()
     // prevent double logging with before and after check
     if (self.isCancelled && shouldLogCancelled) {
-      let cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
+      let cutResultStatusValue: Int = global_mcut_errors.firstIndex(of: ABORTED_MESSAGE)! // aborted
       let shortTitle = Recording.programDateTitleFrom(movieURLPath: moviePath)
       resultMessage = String(format: global_mcut_errors[cutResultStatusValue], shortTitle)
       DispatchQueue.main.async {
@@ -80,7 +80,7 @@ class MovieCuttingOperation: Operation
   }
   
   override func main() {
-    var cutResultStatusValue: Int = global_mcut_errors.index(of: ABORTED_MESSAGE)! // aborted
+    var cutResultStatusValue: Int = global_mcut_errors.firstIndex(of: ABORTED_MESSAGE)! // aborted
     
     // have we been cancelled ?
     let shortTitle = Recording.programDateTitleFrom(movieURLPath: moviePath)
@@ -97,7 +97,7 @@ class MovieCuttingOperation: Operation
     guard let diskPathName = moviePath.replacingOccurrences(of: "file://",
                                                         with: "").removingPercentEncoding else
     {
-      cutResultStatusValue = global_mcut_errors.index(of: FAILED_TO_NORMALIZE_MESSAGE)!
+      cutResultStatusValue = global_mcut_errors.firstIndex(of: FAILED_TO_NORMALIZE_MESSAGE)!
       resultMessage = String(format: global_mcut_errors[Int(cutResultStatusValue)], targetPathName)
       DispatchQueue.main.async {
         self.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
@@ -133,7 +133,10 @@ class MovieCuttingOperation: Operation
       }
     }
   
-    // job done.  Send results back to caller
+    // job done.  Delay in background process and then send results back to caller on the main queue
+    // Delay found necessary due to finding garbage in the ap file after cutting is "Complete" guessed at
+    // being due to remote host not having closed and flushed file to disk.
+    usleep(1_000) // 1 sec delay allow remote caches to be flushed to disk - can end up re-accessing remote whilst dodgey
     DispatchQueue.main.async  { [weak weakSelf = self] in
       weakSelf?.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
     }

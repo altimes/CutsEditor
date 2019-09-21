@@ -20,8 +20,8 @@ Primary Usage
 1. Select a file or directory to work with.  A single file can be chosen using
 File/Open, the more expected usage is to work with all the files below a selected
 directory.  When a directory is selected, all the files in and below the
-directory are collected into a list.  Directories called ".Trash" are excluded
-from the search.
+directory are collected into a list.  Directories called ".Trash" and #recycle are excluded
+from the search. (TODO: make this list configurable)
 
 2. The first recording is opened and the video is positioned at (first bookmark
 or) the beginning of the recording.  Some of the details of the recording from
@@ -80,7 +80,7 @@ with the same tree).
 Delete recording: Selected recording is deleted.  No not really, like the PVR, the recording
 is moved to the "Trash" folder.  (Provided the movie directory is selected and a .Trash exists)
 (currently the program looks for a .Trash file BELOW the starting directory - yeah, a poor design
-non decision).
+non decision).  TODO: Fix to find .Trash file is some rational manner.
 
 Verbal Control.
 

@@ -222,7 +222,7 @@ class BoundaryHunter {
   func jump(direction: huntDirection, distance: Double, using fromButton:NSButton)
   {
     //    let seekTolerance = CMTime(seconds: 0.1, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
-    let seekStep = CMTimeMake(Int64(distance*Double(CutsTimeConst.PTS_TIMESCALE)), CutsTimeConst.PTS_TIMESCALE)
+    let seekStep = CMTimeMake(value: Int64(distance*Double(CutsTimeConst.PTS_TIMESCALE)), timescale: CutsTimeConst.PTS_TIMESCALE)
     let seekPos = CMTimeAdd(player.currentTime(), seekStep)
     if (debug)
     {print(String(format: "jumping %6.2f, from %6.2f, to: %6.2f", distance, player.currentTime().seconds, seekPos.seconds))}

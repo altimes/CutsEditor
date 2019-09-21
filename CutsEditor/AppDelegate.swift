@@ -291,7 +291,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
       {
         // pvr removed - kill all pending jobs in queue and delete queue
         entry.queue.cancelAllOperations()
-        let entryIndex = cuttingQueues.index(of: entry)
+        let entryIndex = cuttingQueues.firstIndex(of: entry)
         cuttingQueues.remove(at: entryIndex!)
       }
     }
@@ -311,7 +311,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   /// - returns: the queue or nil
   internal func cuttingQueue(withTitle title: String) -> CuttingQueue?
   {
-    if let index = cuttingQueues.index(where: {$0.queue.name == title})
+    if let index = cuttingQueues.firstIndex(where: {$0.queue.name == title})
     {
       return cuttingQueues[index]
     }

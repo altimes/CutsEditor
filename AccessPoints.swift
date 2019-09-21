@@ -11,9 +11,12 @@ import AVFoundation
 
 typealias PtsOff = (pts: PtsType, offset: OffType)
 
+let badApLoadThreshold = 1_200_000  // only a really long recording should trigger this - typical GOP is 0.5 secs
+// so this 600_000 secs ~= 10_000 mins ~= 167 hours ~= 1 week
+
 /// Loads a ProgramName.ts.ap file which is a map of pts and file offsets for a ts file
 /// for each GOP header in the file,  used by streamer to fast forward through
-/// the file without having and read and decode every frame, by giving if file
+/// the file without having and read and decode every frame, by giving it a
 /// file offset that guarantees a GOP start point
 
 class AccessPoints {
@@ -74,16 +77,40 @@ class AccessPoints {
   /// Initialize from raw contents, typically content of file
   /// Contrived to ensure that collection maintained in order
   /// sorted by file offset.
-  convenience init?( data: Data) {
+  convenience init?( data: Data)
+  {
     self.init()
     var d = [UInt64](repeating: 0, count: 2)
     var sorted = true
     var lastOffset = OffType(0)
     let dataElementCount = data.count/MemoryLayout<UInt64>.size
-    var index = 0
-    let littleEndian = data.withUnsafeBytes {
-      Array(UnsafeBufferPointer<UInt64>(start: $0, count: data.count/MemoryLayout<UInt64>.size))
+    // for an unknown reason binary loads of data have returned crazy (200 Gb) array
+    // counts for ap files.  So this is sanity check on the Data being offered
+    guard (dataElementCount*8 < badApLoadThreshold) else {
+      print("Got crazy data with size count of \(dataElementCount*8) bytes")
+      return nil
     }
+    var index = 0
+//    let littleEndian = data.withUnsafeBytes {
+//      Array(UnsafeBufferPointer<UInt64>(start: $0, count: data.count/MemoryLayout<UInt64>.size))
+//    }
+    
+    let chunkCount = data.count/MemoryLayout<UInt64>.size
+    var littleEndian:[UInt64] = Array(repeating: 0, count: chunkCount)
+    littleEndian.withUnsafeMutableBytes { destBytes in
+      data.withUnsafeBytes { srcBytes in
+        destBytes.copyBytes(from: srcBytes)
+      }
+    }
+    
+//    // comparison check of old and new code
+//    for index in 0..<fred.count{
+//      if (littleEndian[index] != fred[index])
+//      {
+//        print(" argh bugger!")
+//      }
+//    }
+    
     while (index+1 < dataElementCount)
     {
       d[0] = littleEndian[index].bigEndian  // file offset
@@ -120,6 +147,8 @@ class AccessPoints {
   /// sorted by file offset.
   /// - parameter filename: full path the to file
   /// - returns: success or failure of load collection
+  /// Beware of ap files that cross a PCR Reset this will
+  /// result in incorrectly ordered AP file
   
   func loadAP(_ filename: URL) -> Bool
   {
@@ -148,6 +177,8 @@ class AccessPoints {
     var sorted = true
     var lastOffset = OffType(0)
     /// read 16 bytes each time until we run out of data
+    
+    // FIXME: this code does not allow for PCR Reset clean handling
     while (true)
     {
       if (fread(&d, 16, 1, f) < 1)

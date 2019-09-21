@@ -222,7 +222,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
     }
   }
   
-  override func controlTextDidEndEditing(_ obj: Notification)
+  func controlTextDidEndEditing(_ obj: Notification)
   {
     let textField = obj.object as! NSTextField
 //    print (#function+":"+textField.stringValue)
@@ -250,7 +250,7 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   
   @IBAction func done(_ sender: NSButton) {
     // TODO: build a "modified" and warn on exit without save of changes
-    self.presenting?.dismiss(sender)
+    self.presentingViewController?.dismiss(sender)
   }
   
   @IBAction func changeCutPathSetting(_ sender: NSTextField) {
@@ -299,8 +299,11 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
     if let fieldIdentifier = sender.identifier {
       switch (fieldIdentifier.rawValue) {
       case generalStringConsts.shPath: general.systemConfig.pvrSettings[pvrIndex].shPath = sender.stringValue
+        pvr.shPath = sender.stringValue
       case generalStringConsts.sshPath: general.systemConfig.pvrSettings[pvrIndex].sshPath = sender.stringValue
+        pvr.sshPath = sender.stringValue
       case generalStringConsts.remoteLogin: general.systemConfig.pvrSettings[pvrIndex].remoteMachineAndLogin = sender.stringValue
+        pvr.remoteMachineAndLogin = sender.stringValue
       default: print("Argh unknown \(sender.identifier ?? NSUserInterfaceItemIdentifier(rawValue: "missing id")) "+#function)
       }
     }

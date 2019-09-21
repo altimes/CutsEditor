@@ -9,6 +9,7 @@
 import Cocoa
 
 let trashDirectoryName = ".Trash"
+let NASTrash = "#recycle"
 
 // MARK: - file search support class
 
@@ -26,11 +27,16 @@ class FindFilesOperation: Operation
   var localMountPoint: String
   var remoteExportPath: String
   var pvrIndex: Int
+  
+  // FIXME: subdirectories are derived as LOCAL !! (oopps)
   var isRemote: Bool
   var sysConfig: systemConfiguration
   var onCompletionBlock: FindCompletionBlock
   let debug = false
-  
+  var trashes = [trashDirectoryName,NASTrash]
+//  trashes.append(trashDirectoryName)
+//  trashes.append(NASTrash)
+
   /// Create a operation queue for file finding
   /// - returns: the queue
   public static func createQueue() -> OperationQueue
@@ -68,21 +74,30 @@ class FindFilesOperation: Operation
     if (self.isCancelled) {
       return
     }
+    
+    // build directory exclusion chain
+    
+    var excluding = ""
+    for dir in trashes {
+      excluding += " | grep -v \\\(dir) "
+    }
     // use a task to get a count of the files in the directory
     // this does pick up current recordings, but we only later look for "*.cuts" of finished recordings
     // so no big deal, this is just the quickest sizing that I can think of for setting up a progress bar
     // CLI specifics are for BeyonWiz Enigma2 BusyBox 4.4
+    
+    
     var searchPath: String
     let fileCountTask = Process()
     let outPipe = Pipe()
     if (self.foundRootPath.contains(self.localMountPoint) && isRemote) {
       searchPath = self.foundRootPath.replacingOccurrences(of: self.localMountPoint, with: self.remoteExportPath)
       fileCountTask.launchPath = sysConfig.pvrSettings[pvrIndex].sshPath
-      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash | grep -v denied"]
+      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied | grep -v \"^.*/\\.\""]
     }
     else {
       fileCountTask.launchPath = mcutConsts.shPath
-      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" | grep -v \\.Trash | grep -v denied"]
+      fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied"]
       searchPath = self.foundRootPath
     }
     fileCountTask.standardOutput = outPipe

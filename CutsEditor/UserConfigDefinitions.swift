@@ -89,7 +89,10 @@ let defaultColourLookup : [FileColourStates:NSColor] =
 let colourLookup = defaultColourLookup
 
 /// Dictionary that maps mark types to GUI button identifier strings
-let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,"addInMark":MARK_TYPE.IN, "addOutMark":MARK_TYPE.OUT, "addLastPlay":MARK_TYPE.LASTPLAY]
+let marksDictionary = ["addBookmark":MARK_TYPE.BOOKMARK,
+                       "addInMark":MARK_TYPE.IN,
+                       "addOutMark":MARK_TYPE.OUT,
+                       "addLastPlay":MARK_TYPE.LASTPLAY]
 
 /// Pair of String and Double for association with a GUI "skip" button.
 /// The String is the text used on the button and the double is the skip
