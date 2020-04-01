@@ -6,6 +6,8 @@
 //  Copyright © 2016 Alan Franklin. All rights reserved.
 //
 
+// FIXME: Long recording title is causing dialog to resize unexpectedly
+
 import Cocoa
 
 @NSApplicationMain

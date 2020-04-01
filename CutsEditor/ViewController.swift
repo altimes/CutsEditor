@@ -689,6 +689,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   @objc func fileToOpenChange(_ notification: Notification)
   {
     let filename = notification.object as! String
+    let filePath = String(NSString(string: filename).deletingLastPathComponent) + "/"
+    let pathComponents = filePath.components(separatedBy: "/")
+    // reconstruct a "normal" mount point path
+    if pathComponents.count >= 3 {
+      let rootPath = "/" + pathComponents[1] + "/" + pathComponents[2] + "/"
+      (isRemote, pvrIndex) = pvrLocalMount(containedIn: rootPath)
+    }
     if (!appendSingleFileToListAndSelect(filename))
     {
       let message = String.localizedStringWithFormat( StringsCuts.FAILED_TRYING_TO_ACCESS, filename)

@@ -200,7 +200,7 @@ class Recording
   {
     var pathName : String
     let fileMgr : FileManager = FileManager.default
-    if (debug) { print (fullyPathedFilename) }
+    if (true) { print (#function+":"+fullyPathedFilename) }
     
     pathName = ""
     if let checkIsURLFormat = URL(string: fullyPathedFilename)

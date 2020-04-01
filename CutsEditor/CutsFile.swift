@@ -435,6 +435,7 @@ class CutsFile: NSObject, NSCopying {
       _ = addEntry(CutEntry(cutPts: bookmarkPosition, mark: .BOOKMARK))
       bookmarkPosition += spacing
     }
+    // FIXME: fails here when editing an already edited file.
     let used = spacing - (bookmarkPosition - upToPos)
     if (debug) { print("returning remainder of \(Double(used)*CutsTimeConst.PTS_DURATION)") }
     return used
