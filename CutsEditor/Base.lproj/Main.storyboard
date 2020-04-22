@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="15702" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="16096" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.AVKitIBPlugin" version="15702"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="15702"/>
+        <plugIn identifier="com.apple.AVKitIBPlugin" version="16096"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="16096"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -2228,13 +2228,13 @@ Gw
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
                             <scrollView autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="A1j-Yh-gNp">
-                                <rect key="frame" x="20" y="61" width="1012" height="86"/>
+                                <rect key="frame" x="20" y="61" width="1012" height="74"/>
                                 <clipView key="contentView" id="iUv-6I-bhw">
-                                    <rect key="frame" x="1" y="0.0" width="1010" height="85"/>
+                                    <rect key="frame" x="1" y="0.0" width="1010" height="73"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
                                         <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" emptySelection="NO" autosaveColumns="NO" typeSelect="NO" rowSizeStyle="automatic" headerView="mqT-Ps-IzE" viewBased="YES" id="Ujf-AW-G7M">
-                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="62"/>
+                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="50"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <size key="intercellSpacing" width="3" height="2"/>
                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -2242,7 +2242,6 @@ Gw
                                             <tableColumns>
                                                 <tableColumn identifier="queuename" editable="NO" width="146" minWidth="10" maxWidth="3.4028234663852886e+38" id="ZWT-zR-5mw">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Queued For">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -2279,7 +2278,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="timestamp" editable="NO" width="185.06255168446421" minWidth="40" maxWidth="1000" id="t24-xu-QzE">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="Time">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -2316,7 +2314,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="status" editable="NO" width="120.07990867543344" minWidth="10" maxWidth="3.4028234663852886e+38" id="vtJ-o2-WP2">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="State">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -2353,7 +2350,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="moviename" editable="NO" width="212.18965517241645" minWidth="40" maxWidth="1000" id="U7z-wJ-RXY">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="Recording">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -2390,7 +2386,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="resultMessage" editable="NO" width="239" minWidth="10" maxWidth="3.4028234663852886e+38" id="aP1-rg-Hgg">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Message">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -2427,7 +2422,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="resultValue" editable="NO" width="90" minWidth="10" maxWidth="3.4028234663852886e+38" id="Gv7-sL-mIl">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Result">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -2697,7 +2691,6 @@ Gw
                                             <tableColumns>
                                                 <tableColumn identifier="Time" width="96.610360227757241" minWidth="40" maxWidth="1000" id="nfX-T2-4vN">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Time">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -2734,7 +2727,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn identifier="Type" width="85.274517907513427" minWidth="40" maxWidth="1000" id="nmK-SZ-Hcc">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Type">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -2919,7 +2911,7 @@ Gw
                                     <action selector="seekToAction:" target="XfG-lQ-9wD" id="rgH-Xo-Wff"/>
                                 </connections>
                             </button>
-                            <button identifier="addBookmark" verticalHuggingPriority="750" ambiguous="YES" tag="3" translatesAutoresizingMaskIntoConstraints="NO" id="hHg-iT-een">
+                            <button identifier="executeCuts" verticalHuggingPriority="750" ambiguous="YES" tag="3" translatesAutoresizingMaskIntoConstraints="NO" id="hHg-iT-een">
                                 <rect key="frame" x="720" y="1011" width="72" height="32"/>
                                 <buttonCell key="cell" type="push" title="CUT" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="PgS-fG-rdT">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -3038,8 +3030,16 @@ Gw
                                     <action selector="swapStepControls:" target="XfG-lQ-9wD" id="Tm5-XD-Zoy"/>
                                 </connections>
                             </button>
+                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="j17-VB-aZQ">
+                                <rect key="frame" x="803" y="18" width="57" height="18"/>
+                                <buttonCell key="cell" type="check" title="Video" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="vix-3Z-f5W">
+                                    <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                            </button>
                         </subviews>
                         <constraints>
+                            <constraint firstItem="j17-VB-aZQ" firstAttribute="top" secondItem="x0q-np-dZq" secondAttribute="bottom" constant="6" id="0iW-Ga-6XS"/>
                             <constraint firstItem="2Lq-xi-3jC" firstAttribute="leading" secondItem="q62-z1-WB1" secondAttribute="trailing" constant="8" symbolic="YES" id="18f-tL-Uo3"/>
                             <constraint firstItem="oCh-CT-tkN" firstAttribute="leading" secondItem="YqC-ke-taM" secondAttribute="trailing" constant="12" symbolic="YES" id="1OG-rM-Wgt"/>
                             <constraint firstItem="kB8-IR-HoH" firstAttribute="top" secondItem="q62-z1-WB1" secondAttribute="bottom" constant="16" id="1P1-YI-wpQ"/>
@@ -3055,6 +3055,7 @@ Gw
                             <constraint firstItem="Sia-I2-wuO" firstAttribute="leading" secondItem="CBy-J1-zR3" secondAttribute="leading" id="9Pr-jk-fdF"/>
                             <constraint firstItem="E7O-X8-0fB" firstAttribute="top" secondItem="WFE-RY-pdG" secondAttribute="top" id="9Wo-rO-FeX"/>
                             <constraint firstItem="Xg0-c6-cdH" firstAttribute="top" secondItem="E7O-X8-0fB" secondAttribute="bottom" constant="8" symbolic="YES" id="9xz-xu-wq7"/>
+                            <constraint firstItem="j17-VB-aZQ" firstAttribute="trailing" secondItem="x0q-np-dZq" secondAttribute="trailing" id="A7Q-tn-G17"/>
                             <constraint firstItem="bDf-kM-erf" firstAttribute="baseline" secondItem="LEy-ii-des" secondAttribute="baseline" id="AC7-NO-tpv"/>
                             <constraint firstAttribute="trailing" secondItem="x0q-np-dZq" secondAttribute="trailing" constant="20" id="BcB-zv-YIk"/>
                             <constraint firstItem="NQz-Ge-MpX" firstAttribute="trailing" secondItem="SGi-yn-U5k" secondAttribute="trailing" id="C1v-pw-vk0"/>
@@ -3151,6 +3152,7 @@ Gw
                         <outlet property="filmStrip" destination="eL7-Qx-yvJ" id="5An-a2-Emh"/>
                         <outlet property="forwardHuntButton" destination="n7j-4x-qsS" id="km7-lG-oew"/>
                         <outlet property="inButton" destination="WFE-RY-pdG" id="83z-OM-fA2"/>
+                        <outlet property="isVideoEnabled" destination="j17-VB-aZQ" id="rhT-bJ-g8K"/>
                         <outlet property="microphoneButton" destination="Jze-qg-TNR" id="kC1-ui-thb"/>
                         <outlet property="monitorView" destination="Xg0-c6-cdH" id="97g-bQ-cro"/>
                         <outlet property="nextButton" destination="Chq-ru-CW5" id="9mu-td-UBh"/>
@@ -3179,7 +3181,7 @@ Gw
                 </viewController>
                 <customObject id="rPt-NT-nkU" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="116.5" y="1006"/>
+            <point key="canvasLocation" x="116" y="1006"/>
         </scene>
         <!--Meta-->
         <scene sceneID="CZk-jw-wdP">
@@ -4436,7 +4438,7 @@ Gw
         <scene sceneID="uod-pc-J5R">
             <objects>
                 <viewController title="Extended Event Descriptor" id="2ry-R6-fnM" customClass="ExtendedEventDescriptorController" customModule="EnigmaEdit" customModuleProvider="target" sceneMemberID="viewController">
-                    <view key="view" misplaced="YES" id="ocO-Bw-YEt">
+                    <view key="view" id="ocO-Bw-YEt">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="298"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
@@ -4601,7 +4603,6 @@ Gw
                                             <tableColumns>
                                                 <tableColumn width="177" minWidth="40" maxWidth="300" id="vfN-FI-XJM">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="Item">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -4638,7 +4639,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn width="20" minWidth="20" maxWidth="20" id="SLX-tv-Wej">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" title="FX">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
                                                     </tableHeaderCell>
@@ -4675,7 +4675,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn width="180" minWidth="180" maxWidth="300" id="MXd-DD-Mar">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="Desciption">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -4712,7 +4711,6 @@ Gw
                                                 </tableColumn>
                                                 <tableColumn width="20" minWidth="20" maxWidth="20" id="erU-oJ-aPN">
                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="FX">
-                                                        <font key="font" metaFont="controlContent" size="11"/>
                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                         <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="calibratedWhite"/>
                                                     </tableHeaderCell>
@@ -4797,7 +4795,7 @@ Gw
                                                 <fragment content="Event Description ...">
                                                     <attributes>
                                                         <color key="NSColor" name="textColor" catalog="System" colorSpace="catalog"/>
-                                                        <font key="NSFont" metaFont="controlContent" size="11"/>
+                                                        <font key="NSFont" metaFont="label" size="11"/>
                                                         <paragraphStyle key="NSParagraphStyle" alignment="natural" lineBreakMode="wordWrapping" baseWritingDirection="natural" tighteningFactorForTruncation="0.0"/>
                                                     </attributes>
                                                 </fragment>
@@ -4892,6 +4890,6 @@ Gw
     </scenes>
     <inferredMetricsTieBreakers>
         <segue reference="RCV-iL-b8f"/>
-        <segue reference="GJJ-N7-aJ4"/>
+        <segue reference="fjN-dc-8lX"/>
     </inferredMetricsTieBreakers>
 </document>

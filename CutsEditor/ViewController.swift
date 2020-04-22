@@ -80,13 +80,17 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   @IBOutlet weak var filmStrip: FilmStrip!
   @IBOutlet weak var descriptionScrollView: NSScrollView!
+  
+  // control to enable or disable video part of presentation
+  @IBOutlet weak var isVideoEnabled: NSButton!
+  
   // MARK: model
   
   var movie = Recording()
   
   var imageGenerator : AVAssetImageGenerator?
   
-  let debug = true
+  let debug = false
   var startDate = Date()
   var fileSearchCancelled = false
   var filelist: [String] = []
@@ -254,7 +258,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   /// flag set when closing down
   var beingTerminated = false
+
   
+
   // MARK: - functions start here
 
   override func viewDidLoad() {
@@ -371,6 +377,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.addObserver(self, forKeyPath: "isReadyForDisplay", options: NSKeyValueObservingOptions.new, context: nil)
     // testing for missing keydown events
     NSEvent.addLocalMonitorForEvents(matching: NSEvent.EventTypeMask.keyDown, handler: myKeyDownEvent)
+    
   }
   
   func myKeyDownEvent(event: NSEvent) -> NSEvent
@@ -1100,7 +1107,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       programDescription.string = movie.eit.episodeText
     }
     let TSNameURL = baseNameURL+ConstsCuts.TS_SUFFIX
-    setupAVPlayerFor(TSNameURL, startTime: startTime)
+    if (isVideoEnabled.state == NSControl.StateValue.on) {
+      setupAVPlayerFor(TSNameURL, startTime: startTime)
+      
+    }
     // found a loaded a file, update the recent file menu
     let cutsNameURL = baseNameURL+ConstsCuts.CUTS_SUFFIX
     let fileURL = URL(string: cutsNameURL)!
@@ -1236,6 +1246,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     removePlayerObserversAndItem()
     // clear current dialog entries
+    self.movie.removeFromCache()
     resetCurrentMovie()
     resetGUI()
   }
@@ -1375,7 +1386,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if dirPath.last == "/" && pvrMount.last != "/" {
         pvrMount += "/"
       }
-      if dirPath == pvrMount
+//      if dirPath == pvrMount
+      if dirPath.contains(pvrMount)
       {
         let isRemote = (pvr.title != mcutConsts.fixedLocalName)
         return (isRemote, i)
@@ -2022,6 +2034,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     currentFile.selectItem(at: 0)
     lastfileIndex = 0
     removePlayerObserversAndItem()
+    Recording.cache.removeAll()
   }
   
   /// Reset all element for a fresh file search (note that this leaves the current cutting jobs queue intact)
@@ -2377,6 +2390,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
       let frameRate = Double(trackAsset.nominalFrameRate)
       if (debug) { print ("Found frame rate of \(frameRate) for mediaType = \(trackAsset.mediaType)") }
+//      if (false)
       if (trackAsset.mediaType == AVMediaType.video)
       {
         imageGenerator = AVAssetImageGenerator(asset: avAsset)

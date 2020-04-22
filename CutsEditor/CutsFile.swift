@@ -794,7 +794,11 @@ class CutsFile: NSObject, NSCopying {
       if (fileWritten && debug) {
         print(MessageStrings.DID_WRITE_FILE)
       }
-      if (fileWritten) { modified = false }
+      if (fileWritten) {
+        modified = false
+        // update cache to match
+        container!.updateValueInCache( cutsData, forKey: fullFileName)
+      }
       return fileWritten
     }
     return false

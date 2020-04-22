@@ -98,6 +98,9 @@ class Recording
     }
   }
   
+  /// Cache of all the "small" files to save from reaccessing high latency network connections (VPN)
+  static var cache = Cache<NSString,Data>()
+  
   /// Get the OS record of a fully specified file
   /// - parameter filePath: fully specified file path
   /// - returns: Byte count of file from OS
@@ -106,6 +109,12 @@ class Recording
   {
     var fileSize : UInt64 = 0
     
+    // if file is in caches, then return data count
+    if let data = cache.value(forKey: NSString(string: filePath)) {
+      // all good
+      print ("actual size from cache is \(data.count)")
+      return UInt64(data.count)
+    }
     do {
       //return [FileAttributeKey : Any]
       let attr = try FileManager.default.attributesOfItem(atPath: filePath)
@@ -123,6 +132,7 @@ class Recording
     return fileSize
   }
   
+  // dummy initialzer
   convenience init() {
     self.init(rootURLName: "")
   }
@@ -158,7 +168,7 @@ class Recording
       if let apRawData = Recording.loadDataFromBinary(file: movieName!+ConstsCuts.AP_SUFFIX) {
         if (apRawData.count > badApLoadThreshold)
         {
-          print("What the ! the ap file is not \(apRawData.count) bytes in size")
+          print("What the fudge, the ap file is not \(apRawData.count) bytes in size")
           let filePath = movieName!+ConstsCuts.AP_SUFFIX
           let fileSize = Recording.getFileSize(filePath: filePath)
           print ("OS reports file size of \(fileSize)")
@@ -240,19 +250,29 @@ class Recording
   {
     var data:Data?
     
-    let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
-    
-    if (foundFile)
-    {
-      // FIXME: this is failing some how with huge amounts of data being read
-      data = fileMgr.contents(atPath: fullFileName)
-      if (true)  {
-        print("Found file \(fullFileName)")
-        print("Found file of \((data?.count ?? 0))! size")
+    // check cache for data
+    if (false) {
+      print(#function+" Cache keys are \(cache.keys)")
+    }
+    data = cache.value(forKey: NSString(string: filename))
+    if ( data == nil ) { // load the file from disk
+      let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
+      
+      if (foundFile)
+      {
+        // FIXME: this is failing some how with huge amounts of data being read
+        data = fileMgr.contents(atPath: fullFileName)
+        if (true)  {
+          print("Found file \(fullFileName)")
+          print("Found file of \((data?.count ?? 0))! size")
+        }
+        // not interested in empty files.... may as well be missing
+        if (data?.count == 0 ) {
+          data = nil
+        }
       }
-      // not interested in empty files.... may as well be missing
-      if (data?.count == 0 ) {
-        data = nil
+      if data != nil { // add to cache
+        cache.insert(data!, forKey: NSString(string: filename))
       }
     }
     return data
@@ -262,40 +282,50 @@ class Recording
   {
     var data:Data?
     
-    let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
-    
-    if (foundFile)
-    {
-      let fileURL = URL(fileURLWithPath: fullFileName)
-      data = try? Data(contentsOf:fileURL)
+    // check cache for data
+    if (false) {
+      print(#function+" Cache keys are \(cache.keys)")
+    }
+    data = cache.value(forKey: NSString(string: filename))
+    if ( data == nil ) { // load the file from disk
+      let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
       
-      if (debug)  {
-        print("Found file \(fullFileName)")
-        print("Found file of \((data?.count ?? 0))! size")
-      }
-      // not interested in empty files.... may as well be missing
-      if (data?.count == 0 ) {
-        data = nil
-      }
-      if (data != nil && (data!.count > badApLoadThreshold) && fullFileName.hasSuffix(ConstsCuts.AP_SUFFIX) ) {
-        print("arghh bad structure size - got \((data != nil) ? data!.count : -1)")
-        // probably side effect of race condition in which operation has returned
-        // as complete, but OS may be still lazily persisting file to disk
-        // try a few more times before giving up
-        var badCount = true
-        var i = 0
-        while badCount && i<10 {
-          let fileURL = URL(fileURLWithPath: fullFileName)
-          data = try? Data(contentsOf:fileURL)
-          
-          if (debug)  {
-            print("Found file \(fullFileName)")
-            print("Found file of \((data?.count ?? 0))! size")
-          }
-          badCount = (data?.count ?? 0) < badApLoadThreshold
-          i += 1
+      if (foundFile)
+      {
+        let fileURL = URL(fileURLWithPath: fullFileName)
+        data = try? Data(contentsOf:fileURL)
+        
+        if (debug)  {
+          print("Found file \(fullFileName)")
+          print("Found file of \((data?.count ?? 0))! size")
         }
-        data = nil
+        // not interested in empty files.... may as well be missing
+        if (data?.count == 0 ) {
+          data = nil
+        }
+        if (data != nil && (data!.count > badApLoadThreshold) && fullFileName.hasSuffix(ConstsCuts.AP_SUFFIX) ) {
+          print("arghh bad structure size - got \((data != nil) ? data!.count : -1)")
+          // probably side effect of race condition in which operation has returned
+          // as complete, but OS may be still lazily persisting file to disk
+          // try a few more times before giving up
+          var badCount = true
+          var i = 0
+          while badCount && i<10 {
+            let fileURL = URL(fileURLWithPath: fullFileName)
+            data = try? Data(contentsOf:fileURL)
+            
+            if (debug)  {
+              print("Found file \(fullFileName)")
+              print("Found file of \((data?.count ?? 0))! size")
+            }
+            badCount = (data?.count ?? 0) < badApLoadThreshold
+            i += 1
+          }
+          data = nil
+        }
+        if data != nil { // add to cache
+          cache.insert(data!, forKey: NSString(string: filename))
+        }
       }
     }
     return data
@@ -485,4 +515,17 @@ class Recording
     }
   }
   
+  /// Clear cache of entries for this recording
+  
+  func removeFromCache() {
+    for item in movieFiles {
+      Recording.cache.removeValue(forKey: NSString(string: item))
+    }
+  }
+  
+  /// Update data content of cache. Ensure that cache is kept in sync with "Save" operations
+  
+  func updateValueInCache(_ value: Data, forKey key: String) {
+    Recording.cache.update(value, forKey: NSString(string: key))
+  }
 }

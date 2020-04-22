@@ -25,7 +25,7 @@ class QueueViewController: NSViewController, NSTableViewDelegate, NSTableViewDat
   @IBOutlet weak var cancelJobButton: NSButton!
   @IBOutlet weak var queueJobCount: NSTextField!
   
-  var debug = true
+  var debug = false
   var queues = [CuttingQueue]()
   var preferences = NSApplication.shared.delegate as! AppPreferences
   var jobsListing = [compositeLog]()

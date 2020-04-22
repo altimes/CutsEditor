@@ -9,6 +9,7 @@
 import Cocoa
 
 let trashDirectoryName = ".Trash"
+let localTrash = ".Trashes"
 let NASTrash = "#recycle"
 
 // MARK: - file search support class
@@ -33,9 +34,7 @@ class FindFilesOperation: Operation
   var sysConfig: systemConfiguration
   var onCompletionBlock: FindCompletionBlock
   let debug = false
-  var trashes = [trashDirectoryName,NASTrash]
-//  trashes.append(trashDirectoryName)
-//  trashes.append(NASTrash)
+  static let trashes = [trashDirectoryName, NASTrash, localTrash]
 
   /// Create a operation queue for file finding
   /// - returns: the queue
@@ -78,7 +77,7 @@ class FindFilesOperation: Operation
     // build directory exclusion chain
     
     var excluding = ""
-    for dir in trashes {
+    for dir in FindFilesOperation.trashes {
       excluding += " | grep -v \\\(dir) "
     }
     // use a task to get a count of the files in the directory
