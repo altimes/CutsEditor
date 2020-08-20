@@ -250,8 +250,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   let progressBarVisibilityChange = "progressBarVisibilityChange"
   
   // TODO: create protocol to pass value into instance
-  var filmstripFrameGap: Double = 0.2         // seconds
-  
+//  var filmstripFrameGap: Double = 0.2         // seconds
+  var filmstripFrameGap: Double = 30.0         // seconds
+
   /// number of steps(?) to move marker on right/left arrow for fine adjustment
   /// TODO: make yet another configuration item
   var creepSteps = 2
@@ -378,6 +379,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     // testing for missing keydown events
     NSEvent.addLocalMonitorForEvents(matching: NSEvent.EventTypeMask.keyDown, handler: myKeyDownEvent)
     
+    // make VC visible in button
+    currentFile.parentViewController = self
+    
   }
   
   func myKeyDownEvent(event: NSEvent) -> NSEvent
@@ -402,7 +406,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let origin = CGPoint(x:50,y:5)
     self.view.window?.setFrameOrigin(origin)
     self.monitorView.window!.delegate = self
-    self.filmStrip.updateTimeTextLabels()
+    self.filmStrip.updateTimeTextLabels(timeStep: self.preferences.videoPlayerPreference().filmStripSpacing)
   }
   
   func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -687,7 +691,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     stepSwapperButton.isEnabled =  (playerPrefs.playbackControlStyle == videoControlStyle.floating)
     self.honourOutInMarks = playerPrefs.skipCutSections
     self.filmstripFrameGap = playerPrefs.filmStripSpacing
-    self.filmStrip.updateTimeTextLabels()
+    self.filmStrip.updateTimeTextLabels(timeStep: self.preferences.videoPlayerPreference().filmStripSpacing)
   }
   
   /// Observer function that responds to the selection of
@@ -726,7 +730,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     deleteRecordingButton.isEnabled = progressBar.isHidden
     if let _ = currentFile.filter {
-      print("file is \(currentFile.stringValue)")
+      if (debug) { print("file index is \(currentFile.stringValue)")}
       currentFile.filter!.filterMenuEnabled = progressBar.isHidden
     }
   }
@@ -1048,6 +1052,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       toggleVoiceRecognition(microphoneButton)
     }
     //  clean out the GUI and context for the next file
+    self.deleteRecordingButtonTimer.invalidate()
+//    if (true) {print(#function + " invalidated delete button timer")}
     self.monitorView.player?.cancelPendingPrerolls()
     self.monitorView.player?.currentItem?.cancelPendingSeeks()
     self.pendingSeek.removeAll()
@@ -1846,7 +1852,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
   func determineDropDownColourForIndex(_ index:Int) -> NSColor
   {
-    let (fontAttribute, colourAttribute, apDuration, episodeText) = getAttributesForIndex(index)
+//    let (fontAttribute, colourAttribute, apDuration, episodeText) = getAttributesForIndex(index)
+    let (_, colourAttribute, _, _) = getAttributesForIndex(index)
     return colourAttribute
   }
   
@@ -1966,6 +1973,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       deleteRecordingButton.isEnabled = state && progressBar.isHidden
     }
     enableAdHuntingButtons(state)
+    // kill the timer if the button is enabled
+    if (deleteRecordingButton.isEnabled) {deleteRecordingButtonTimer.invalidate()}
   }
   
   /// Reset GUI elements to blank that reflect selected movie / directory
@@ -2094,7 +2103,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         for track in tracks
         {
           if (debug) {
-            print("videoFieldMode: \(track.videoFieldMode ?? "No videoFieldMode")")
+           print("videoFieldMode: \(track.videoFieldMode ?? "No videoFieldMode")")
             if let thisTrack = track.assetTrack {
               print("assetTrack.trackID: \(thisTrack.trackID)")
               print("track.assetTrack.mediaType: \(thisTrack.mediaType)")
@@ -2126,7 +2135,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           case .failed:
             if (debug) { print("failed state") }
           case .readyToPlay:
-            if (true) {
+            if (debug) {
               print("ready to play")
               let debugDuration = (movie.meta.duration.count > 0) ? movie.meta.duration : "0"
               print("metadata duration = \(movie.meta.duration)/\(PtsType(debugDuration)!.asSeconds)")
@@ -2244,14 +2253,14 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     else if (keyPath == "rate" && object is AVPlayer)
     {
-      if (true)  { print("change dict \(keyPath!) = \(String(describing: change))") }
+      if (debug)  { print("change dict \(keyPath!) = \(String(describing: change))") }
       if let newRate = change?[NSKeyValueChangeKey.newKey] as? Double
       {
-        if (true) {print("new rate is ...  \(newRate)")}
+        if (debug) {print("new rate is ...  \(newRate)")}
         //        wasPlaying = newRate != 0.0
         let avItem = self.monitorView.player?.currentItem
         let avRate = CMTimebaseGetRate(avItem!.timebase!).description
-        print("item rate = \(avRate)")
+        if (debug) { print("item rate = \(avRate)") }
         let timeControlString = self.monitorView.player?.timeControlStatus == AVPlayer.TimeControlStatus.paused ? "paused" : ( (self.monitorView.player?.timeControlStatus == AVPlayer.TimeControlStatus.waitingToPlayAtSpecifiedRate) ? "waiting" : "playing")
         if (timeControlString == "waiting") {
           if (debug) { print ("waiting ??") }
@@ -2363,7 +2372,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     self.monitorView.player = nil
   }
   
-  /// Initializ the AVPlayer for the file URL given with filename
+  ///
+  var deleteRecordingButtonTimer = Timer()
+  
+  /// Initialize the AVPlayer for the file URL given with filename
   /// and seek to the startTime
   
   func setupAVPlayerFor(_ fileURL:String, startTime: CMTime)
@@ -2374,26 +2386,31 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     removePlayerObserversAndItem()
     
     let videoURL = URL(string: fileURL)!
-    let avAsset = AVURLAsset(url: videoURL)
-    if (true) { print("available formats:  \(avAsset.availableMetadataFormats)") ; print(" media chars = \(avAsset.availableMediaCharacteristicsWithMediaSelectionOptions)")}
+    let tsAsset = AVURLAsset(url: videoURL)
+    if (debug) { print("available formats:  \(tsAsset.availableMetadataFormats)") ; print(" media chars = \(tsAsset.availableMediaCharacteristicsWithMediaSelectionOptions)")}
     
-
     // ensure all track durations are valid - don't known enough video to
     // write bad video recovery functions
     var durationIsValid = true
-    for trackAsset in avAsset.tracks {
-      if (true) {
+    if (debug) {
+      print("Track Count:\(tsAsset.tracks.count)")
+      print("Audio Support: \(String(describing: AVURLAsset.audiovisualMIMETypes))")
+    }
+    for trackAsset in tsAsset.tracks {
+      if (debug) {
         print("Asset description:\(trackAsset.description)")
         print("Asset sample Cursor:\(trackAsset.canProvideSampleCursors)")
         print("Asset formatDescriptions:\(trackAsset.formatDescriptions)")
         print("Asset mediaType:\(trackAsset.mediaType)")
+        print(">>> \(trackAsset.mediaFormat) <<<")
+
       }
       let frameRate = Double(trackAsset.nominalFrameRate)
       if (debug) { print ("Found frame rate of \(frameRate) for mediaType = \(trackAsset.mediaType)") }
 //      if (false)
       if (trackAsset.mediaType == AVMediaType.video)
       {
-        imageGenerator = AVAssetImageGenerator(asset: avAsset)
+        imageGenerator = AVAssetImageGenerator(asset: tsAsset)
         let frameTolerance = 1.0/(frameRate/2.0) // twice the frame rate to give some slack and allow picking I frame
         imageGenerator!.requestedTimeToleranceBefore = CMTime(seconds: frameTolerance, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
         imageGenerator!.requestedTimeToleranceAfter = CMTime(seconds: frameTolerance, preferredTimescale: CutsTimeConst.PTS_TIMESCALE)
@@ -2418,7 +2435,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     if (durationIsValid)
     {
-      let avItem = AVPlayerItem(asset: avAsset)
+      let avItem = AVPlayerItem(asset: tsAsset)
       //      print("canPlayReverse -> \(avItem.canPlayReverse)")
       //      print("canStepForward -> \(avItem.canStepForward)")
       //      print("canStepBackward -> \(avItem.canStepBackward)")
@@ -2443,6 +2460,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       stepSwapperButton.title = self.monitorView.showsFrameSteppingButtons ? playerStringConsts.ffButtonTitle : playerStringConsts.stepButtonTitle
       // guard against apple avplayer wanting to read entire file across network due to
       // detection that last pts is earlier than first (generates a block on the main thread!!)
+      
+      // TODO: probably OK to seek, if first bookmark is BEFORE PCR reset
       if (!movie.ap.hasPCRReset) {
 //        seekInSequence(to: startTime)
         print ("SKIPPING INITIAL SEEK AS TEST")
@@ -2450,6 +2469,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       self.addPeriodicTimeObserver()
       // change of rate ?
       NotificationCenter.default.addObserver(self, selector: #selector(sawRateChangeInPlayer(_:)), name: kCMTimebaseNotification_EffectiveRateChanged as NSNotification.Name, object: self.monitorView.player?.currentItem?.timebase)
+      deleteRecordingButtonTimer = addPlayerNeverComesReadyTimer()
       
     }
     else {
@@ -2510,8 +2530,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Update the timeline view
   func updateCutsMarksGUI()
   {
-//    if (self.monitorView.player?.currentItem?.status == AVPlayerItemStatus.readyToPlay)
-//    {
+    if (self.monitorView.player?.currentItem?.status == AVPlayerItem.Status.readyToPlay)
+    {
       timelineView?.setBookmarkPositions(normalizedPositions: movie.cuts.normalizedBookmarks)
       timelineView?.setInPositions(normalizedPositions: movie.cuts.normalizedInMarks)
       timelineView?.setOutPositions(normalizedPositions: movie.cuts.normalizedOutMarks)
@@ -2520,7 +2540,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       timelineView?.setGapPositions(normalizedPositions: movie.ap.normalizedGaps)
       timelineView?.setPCRPositions(normalizedPositions: movie.ap.normalizedPCRs)
       timelineView?.setNeedsDisplay((timelineView?.bounds)!)
-//    }
+    }
   }
   
   /// Common function to write the status field GUI entry to match
@@ -2603,7 +2623,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       if (debug) { print("Seek completed") }
       if let centreTime = monitorView.player?.currentTime()
       {
-        if (true) {print("\(centreTime)")}
+        if (debug) {print("\(centreTime)")}
 //        updateTimeLineGUI(currentCMTime: centreTime)
         if (self.monitorView.player?.rate == 0.0 && imageGenerator != nil )
         {
@@ -2682,7 +2702,9 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let seekTolerance = BoundaryHunter.seekTolerance
 //    seekCompleted = false
 //    self.monitorView.player?.seek(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: kCMTimeZero, toleranceAfter: seekTolerance, completionHandler: seekCompletedOK)
-    seekInSequence(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: CMTime.zero, toleranceAfter: seekTolerance)
+//    seekInSequence(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore: CMTime.zero, toleranceAfter: seekTolerance)
+    seekInSequence(to: CMTime(value: Int64(seekBarPos.cutPts), timescale: CutsTimeConst.PTS_TIMESCALE), toleranceBefore:
+      seekTolerance, toleranceAfter: seekTolerance)
   }
   
   /// Get the video players current position as a PTS value
@@ -2800,7 +2822,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Calculate new timeline position from nominal player position
   func updateTimeLineGUI(currentCMTime: CMTime)
   {
-    if (true) { print(#function + "> currentTime = \(currentCMTime.convertScale(1000_000_000, method: CMTimeRoundingMethod.default))")}
+    if (debug) { print(#function + "> currentTime = \(currentCMTime.convertScale(1000_000_000, method: CMTimeRoundingMethod.default))")}
     // update timeline gui
     if (currentCMTime.seconds) >= 0.0
     {
@@ -2815,10 +2837,12 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           // allow for any gaps "played" through
 //          let gapAdjustment = (self.movie.ap.gapsBetweenTimes(start: (self.lastSkippedToTime), end: currentVideoPTS))
           let gapAdjustment = movie.ap.gapsBeforeInSeconds(currentVideoPTS)
-          print("seconds Elapsed \(secondsElapsed)")
+          if (debug) { print("seconds Elapsed \(secondsElapsed)") }
           secondsElapsed -= gapAdjustment
-          print ("adjusting elapsed time by \(gapAdjustment)")
-          print ("adjusted Elapse = \(secondsElapsed)")
+          if (debug) {
+            print ("adjusting elapsed time by \(gapAdjustment)")
+            print ("adjusted Elapse = \(secondsElapsed)")
+          }
 //          let currentAVAsset = self.monitorView.player?.currentItem?.asset
 //          print("\(AVURLAsset.audiovisualMIMETypes())")
         }
@@ -2827,6 +2851,32 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         self.timelineView?.currentPosition =  [normalizedCurrentPosition]
       }
     }
+  }
+  
+  /// Function to enable the delete movie button even if the file is stuffed
+  /// If the recording is stuffed, the player never goes into the readyToPlay state
+  /// So we give it a few seconds to achieve that, if is too corrupt for the "everything
+  /// must be perfect, or I won't play" Apple code, then we enable the delete button anyway.
+  /// Since if it is badly corrupt, we want to be able to delete it.
+  func addPlayerNeverComesReadyTimer() -> Timer
+  {
+    let shouldBeReadyByTime: TimeInterval = 3.0
+//    if (true) { print(#function + " timer added")}
+    let statusTimer = Timer.scheduledTimer(withTimeInterval: shouldBeReadyByTime, repeats: true) {
+      statusTimer in
+//      if (true) { print(#function + " timer fired")}
+      // even if playerStatus is not ready, enable the delete button if
+      // all other conditions are OK (ie listing and coloring has finished
+      if self.deleteRecordingButton.isEnabled == false {
+        self.deleteRecordingButton.isEnabled = (self.filelist.count > 0) && self.progressBar.isHidden
+//        if (true) { print(#function + " timer is trying to change button state")}
+       }
+      if self.deleteRecordingButton.isEnabled {
+//        if (true) { print(#function + " timer invalidated")}
+        statusTimer.invalidate()
+      }
+    }
+   return statusTimer
   }
   
   // from apple code sample
@@ -2870,7 +2920,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
         let avItem = self?.monitorView.player?.currentItem
         // FIXME: Can get called when avItem is nil - UI change before async update completed ?
         let avRate = CMTimebaseGetRate(avItem!.timebase!).description
-        print("item rate = \(avRate)")
+        if (closureDebug) { print("item rate = \(avRate)") }
         if let currentCMTime =  self?.monitorView.player?.currentTime() {
           let currentClock = DispatchTime.now()
           //        print ("currenCMtime is valid = \(currentCMTime?.isValid ?? false)")
@@ -3396,7 +3446,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     let leftMove = steps < 0
     let originalNumberOfRows = self.cutsTable.numberOfRows
     let currentRow = self.cutsTable.selectedRow
-    if (true) {
+    if (debug) {
       let entry = self.movie.cuts.entry(at: currentRow)
       if (debug) { print("moving entry - \(entry!)") }
     }
@@ -3439,7 +3489,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
               if (debug) {print("extending creeping to \(steps)")}
               self.monitorView.player?.currentItem?.step(byCount: steps)
               usleep(waitTime)  // time to let the detached seek happen or we are trying to add a coincident bookmark
-              let success = addCutsMark(sender: (currentMark.type == MARK_TYPE.OUT ? outButton : inButton))
+              let _ = addCutsMark(sender: (currentMark.type == MARK_TYPE.OUT ? outButton : inButton))
             }
             NSSound.beep()
             usleep(waitTime)
@@ -3700,7 +3750,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   }
   // MARK: - Advertisment boundary pickers
   var boundaryAdHunter : BoundaryHunter?
-  let initialStep = 90.0      // TODO: add to user config panel
+  var initialStep = 90.0      // TODO: add to user config panel - 0.75 times middle skip
   let nearEnough = 1.0/25.0   // TODO: add to user config panel 1/25 th is frame level
   
   
@@ -4021,17 +4071,19 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     if (debug) { print("unjump-ing");print("\(self.boundaryAdHunter?.descriptionOfHistory(jumpHistory: history) ?? "no hunter")")}
     var replayIndex = 0
     replayTimer = Timer.scheduledTimer(withTimeInterval: timerDelayInSeconds, repeats: true) {
-      [weak weakSelf = self] (replayTimer) in
-      if (weakSelf?.debug)! { print("TimerFired seekCompleted is \(self.seekCompleted) for index \(replayIndex)") }
-      if (self.seekCompleted)
+      [weak self] (replayTimer) in
+      guard  let weakSelf = self else { return }
+
+      if (weakSelf.debug) { print("TimerFired seekCompleted is \(weakSelf.seekCompleted) for index \(replayIndex)") }
+      if (weakSelf.seekCompleted)
       {
         let entry = history[replayIndex]
-        self.doBinaryJump(button: entry.button, direction: entry.command)
+        weakSelf.doBinaryJump(button: entry.button, direction: entry.command)
         replayIndex += 1
       }
       if replayIndex >= history.count // all done
       {
-        self.replayTimerDone = true
+        weakSelf.replayTimerDone = true
       }
     }
   }
@@ -4113,3 +4165,40 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   
 }
 
+extension AVAssetTrack {
+    var mediaFormat: String {
+        var format = ""
+        let descriptions = self.formatDescriptions as! [CMFormatDescription]
+        for (index, formatDesc) in descriptions.enumerated() {
+            // Get String representation of media type (vide, soun, sbtl, etc.)
+            let type =
+              CMFormatDescriptionGetMediaType(formatDesc).toString()
+            // Get String representation media subtype (avc1, aac, tx3g, etc.)
+            let subType =
+              CMFormatDescriptionGetMediaSubType(formatDesc).toString()
+            // Format string as type/subType
+            format += "\(type)/\(subType)"
+            // Comma separate if more than one format description
+            if index < descriptions.count - 1 {
+                format += ","
+            }
+        }
+        return format
+    }
+}
+
+extension FourCharCode {
+    // Create a String representation of a FourCC
+    func toString() -> String {
+        let bytes: [CChar] = [
+            CChar((self >> 24) & 0xff),
+            CChar((self >> 16) & 0xff),
+            CChar((self >> 8) & 0xff),
+            CChar(self & 0xff),
+            0
+        ]
+        let result = String(cString: bytes)
+        let characterSet = CharacterSet.whitespaces
+        return result.trimmingCharacters(in: characterSet)
+    }
+}

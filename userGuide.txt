@@ -189,6 +189,33 @@ which Beyonwiz PVR the job is ssh'ed to.
 Apologies that some of the configuration items that ought to be global
 (mcut command args) are on a per PVR basis
 
+Filtering of dropdown list
+
+When you have a largish number of recordings it can be tedious to find
+a recording within the list.  To assist with that a number of "filters" are
+available as a right click menun when the mouse is over the recording title drop
+down list.
+ - All (duh) -  use case is revealing all after filtering.
+ - Raw - (red) those which have only bookmarks from recording
+ - Partial - (light blue) those with have unmatch IN/OUT entries
+ - Ready to Cut - (dark blue) those with even number of IN/OUT entries
+ - Reload Cache - aid when editing has occured on device AFTER list was
+   loaded. (System caches all the "little" files, so updated to cuts file are not seen)
+ - Named - filters to just those where the recording title is like the offered string
+   (use case is to see just all of a particular program - however can be used to filter to
+    just a specific channel or ANY string)
+ - Duplicated + Matches - filters the list to the named programs where the recording
+   file name and more that one of the same title exist (Duplicated).  If you have many
+   duplicates then use Matches to show just those which match the current selected program.
+   (Useful to identify when you already have a editted copy of the same episode)
+   
+Cacheing
+
+To minimize network traffic on "slow" (read VPN) links.  When the initial list is loaded
+it processes and caches all files excluding the .ts files in memory.  This enables a more
+expeditious scanning when detecting duplicates etc.  Any selected recording cache can
+be reload from File menu or right click on dropdown list.
+
 User Preferences
 
 General Preferences

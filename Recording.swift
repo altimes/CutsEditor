@@ -210,7 +210,7 @@ class Recording
   {
     var pathName : String
     let fileMgr : FileManager = FileManager.default
-    if (true) { print (#function+":"+fullyPathedFilename) }
+    if (debug) { print (#function+":"+fullyPathedFilename) }
     
     pathName = ""
     if let checkIsURLFormat = URL(string: fullyPathedFilename)
@@ -251,7 +251,7 @@ class Recording
     var data:Data?
     
     // check cache for data
-    if (false) {
+    if (debug) {
       print(#function+" Cache keys are \(cache.keys)")
     }
     data = cache.value(forKey: NSString(string: filename))
@@ -262,7 +262,7 @@ class Recording
       {
         // FIXME: this is failing some how with huge amounts of data being read
         data = fileMgr.contents(atPath: fullFileName)
-        if (true)  {
+        if (debug)  {
           print("Found file \(fullFileName)")
           print("Found file of \((data?.count ?? 0))! size")
         }
@@ -283,13 +283,14 @@ class Recording
     var data:Data?
     
     // check cache for data
-    if (false) {
+    if (debug) {
       print(#function+" Cache keys are \(cache.keys)")
     }
     data = cache.value(forKey: NSString(string: filename))
     if ( data == nil ) { // load the file from disk
-      let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
-      
+//      let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
+      let (_, foundFile, fullFileName) = getFileManagerForFile(filename)
+
       if (foundFile)
       {
         let fileURL = URL(fileURLWithPath: fullFileName)
@@ -528,4 +529,5 @@ class Recording
   func updateValueInCache(_ value: Data, forKey key: String) {
     Recording.cache.update(value, forKey: NSString(string: key))
   }
+  
 }

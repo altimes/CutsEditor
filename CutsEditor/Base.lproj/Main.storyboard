@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="16096" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="16097.2" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="XfG-lQ-9wD">
     <dependencies>
-        <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.AVKitIBPlugin" version="16096"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="16096"/>
+        <plugIn identifier="com.apple.AVKitIBPlugin" version="16097.2"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="16097.2"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -114,6 +113,12 @@
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="revertDocumentToSaved:" target="Ady-hI-5gd" id="iJ3-Pv-kwq"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Reload Cache" id="Qb8-CI-WaI">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="reloadCache:" target="Ady-hI-5gd" id="U12-zr-tLm"/>
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="aJh-i4-bef"/>
@@ -2228,13 +2233,13 @@ Gw
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
                             <scrollView autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="A1j-Yh-gNp">
-                                <rect key="frame" x="20" y="61" width="1012" height="74"/>
+                                <rect key="frame" x="20" y="61" width="1012" height="50"/>
                                 <clipView key="contentView" id="iUv-6I-bhw">
-                                    <rect key="frame" x="1" y="0.0" width="1010" height="73"/>
+                                    <rect key="frame" x="1" y="0.0" width="1010" height="49"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
                                         <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" emptySelection="NO" autosaveColumns="NO" typeSelect="NO" rowSizeStyle="automatic" headerView="mqT-Ps-IzE" viewBased="YES" id="Ujf-AW-G7M">
-                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="50"/>
+                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="26"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <size key="intercellSpacing" width="3" height="2"/>
                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -2554,7 +2559,7 @@ Gw
         <scene sceneID="hIz-AP-VOD">
             <objects>
                 <viewController title="CutsEditor" id="XfG-lQ-9wD" userLabel="EnigmaEdit" customClass="ViewController" customModule="EnigmaEdit" customModuleProvider="target" sceneMemberID="viewController">
-                    <view key="view" id="m2S-Jp-Qdl">
+                    <view key="view" misplaced="YES" id="m2S-Jp-Qdl">
                         <rect key="frame" x="0.0" y="0.0" width="878" height="1096"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
@@ -2738,7 +2743,7 @@ Gw
                                                     <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                     <prototypeCellViews>
                                                         <tableCellView id="MQ5-rP-Qjc">
-                                                            <rect key="frame" x="101" y="1" width="85" height="17"/>
+                                                            <rect key="frame" x="100.5" y="1" width="85" height="17"/>
                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                             <subviews>
                                                                 <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="unB-EB-GFn">
@@ -2785,7 +2790,7 @@ Gw
                                     <autoresizingMask key="autoresizingMask"/>
                                 </tableHeaderView>
                             </scrollView>
-                            <button identifier="addInMark" verticalHuggingPriority="750" ambiguous="YES" tag="1" translatesAutoresizingMaskIntoConstraints="NO" id="WFE-RY-pdG">
+                            <button identifier="addInMark" toolTip="start of program section" verticalHuggingPriority="750" ambiguous="YES" tag="1" translatesAutoresizingMaskIntoConstraints="NO" id="WFE-RY-pdG">
                                 <rect key="frame" x="720" y="1038" width="72" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="60" id="3i6-op-WpD"/>
@@ -2838,7 +2843,7 @@ Gw
                                     <action selector="seekToAction:" target="XfG-lQ-9wD" id="eg5-Ui-h2q"/>
                                 </connections>
                             </button>
-                            <button identifier="addBookmark" verticalHuggingPriority="750" horizontalCompressionResistancePriority="749" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="1ue-gQ-a8f" userLabel="Bookmark Button">
+                            <button identifier="addBookmark" toolTip="insert bookmark" verticalHuggingPriority="750" horizontalCompressionResistancePriority="749" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="1ue-gQ-a8f" userLabel="Bookmark Button">
                                 <rect key="frame" x="792" y="1011" width="41" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="29" id="dFa-Xp-3rn"/>
@@ -2851,7 +2856,7 @@ Gw
                                     <action selector="addMarkWithSender:" target="XfG-lQ-9wD" id="U9F-3P-sNV"/>
                                 </connections>
                             </button>
-                            <button identifier="addOutMark" verticalHuggingPriority="750" ambiguous="YES" tag="2" translatesAutoresizingMaskIntoConstraints="NO" id="vBm-Fs-Dxa">
+                            <button identifier="addOutMark" toolTip="end of program section" verticalHuggingPriority="750" ambiguous="YES" tag="2" translatesAutoresizingMaskIntoConstraints="NO" id="vBm-Fs-Dxa">
                                 <rect key="frame" x="792" y="1038" width="72" height="32"/>
                                 <buttonCell key="cell" type="push" title="OUT" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Oxf-UT-5Vd">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -2911,7 +2916,7 @@ Gw
                                     <action selector="seekToAction:" target="XfG-lQ-9wD" id="rgH-Xo-Wff"/>
                                 </connections>
                             </button>
-                            <button identifier="executeCuts" verticalHuggingPriority="750" ambiguous="YES" tag="3" translatesAutoresizingMaskIntoConstraints="NO" id="hHg-iT-een">
+                            <button identifier="executeCuts" toolTip="execute cut using marks" verticalHuggingPriority="750" ambiguous="YES" tag="3" translatesAutoresizingMaskIntoConstraints="NO" id="hHg-iT-een">
                                 <rect key="frame" x="720" y="1011" width="72" height="32"/>
                                 <buttonCell key="cell" type="push" title="CUT" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="PgS-fG-rdT">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -2931,7 +2936,7 @@ Gw
                                     <action selector="seekToAction:" target="XfG-lQ-9wD" id="UPn-IF-HpA"/>
                                 </connections>
                             </button>
-                            <button verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="n7j-4x-qsS">
+                            <button toolTip="Video is advertisement" verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="n7j-4x-qsS">
                                 <rect key="frame" x="420" y="1022" width="38" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="26" id="FxO-wQ-tmr"/>
@@ -2944,7 +2949,7 @@ Gw
                                     <action selector="inAdvertisment:" target="XfG-lQ-9wD" id="dE3-0U-oAf"/>
                                 </connections>
                             </button>
-                            <button verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="bDf-kM-erf">
+                            <button toolTip="Reset boundary hunt" verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="bDf-kM-erf">
                                 <rect key="frame" x="450" y="1022" width="38" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="26" id="8Tl-kk-oW6"/>
@@ -2970,7 +2975,7 @@ Gw
                                     <action selector="huntDone:" target="XfG-lQ-9wD" id="32u-kQ-zy9"/>
                                 </connections>
                             </button>
-                            <button verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="fl0-VN-WSV">
+                            <button toolTip="Video is program" verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="fl0-VN-WSV">
                                 <rect key="frame" x="382" y="1022" width="38" height="32"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="26" id="Kae-w8-HI3"/>
@@ -2996,7 +3001,7 @@ Gw
                                     <action selector="toggleVoiceRecognition:" target="XfG-lQ-9wD" id="d62-I5-t22"/>
                                 </connections>
                             </button>
-                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="w8L-n2-seh">
+                            <button toolTip="Delete recording" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="w8L-n2-seh">
                                 <rect key="frame" x="14" y="33" width="119" height="37"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="107" id="ESU-ty-Wh2"/>
@@ -4795,7 +4800,7 @@ Gw
                                                 <fragment content="Event Description ...">
                                                     <attributes>
                                                         <color key="NSColor" name="textColor" catalog="System" colorSpace="catalog"/>
-                                                        <font key="NSFont" metaFont="label" size="11"/>
+                                                        <font key="NSFont" metaFont="menu" size="11"/>
                                                         <paragraphStyle key="NSParagraphStyle" alignment="natural" lineBreakMode="wordWrapping" baseWritingDirection="natural" tighteningFactorForTruncation="0.0"/>
                                                     </attributes>
                                                 </fragment>

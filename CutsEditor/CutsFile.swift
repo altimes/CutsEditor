@@ -102,6 +102,7 @@ class CutsFile: NSObject, NSCopying {
   public var inOutOnly: [CutEntry] {
     get {
       let inOut = cutsArray.filter{$0.cutType == MARK_TYPE.IN.rawValue || $0.cutType == MARK_TYPE.OUT.rawValue}
+//      print("In/Out count = \(inOut.count)")
       return inOut
     }
   }
@@ -119,7 +120,10 @@ class CutsFile: NSObject, NSCopying {
     let lastPos = container?.ap.lastPTS
     let firstCut = CutEntry(cutPts: firstPos!, mark: .IN)
     let lastCut = CutEntry(cutPts: lastPos!, mark: .OUT)
-    guard (partialInOut.count > 0) else { return [firstCut,lastCut] }
+    guard (partialInOut.count > 0) else {
+      print("Found 0 in/out returning \(firstCut)/\(lastCut)")
+      return [firstCut,lastCut] }
+    
     
     var inOutTable = [CutEntry]()
     // edge cases
