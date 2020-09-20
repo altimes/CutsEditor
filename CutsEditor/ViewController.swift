@@ -749,7 +749,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     currentFile.selectItem(at: filelistIndex)
     previousButton.isEnabled = (filelistIndex > 0)
-    nextButton.isEnabled = (filelistIndex < (filelist.count-1))
+    nextButton.isEnabled = (filelistIndex > 0) && (filelistIndex < (filelist.count-1))
+    if (isVideoEnabled.state == NSControl.StateValue.off) {
+      deleteRecordingButton.isEnabled = (previousButton.isEnabled || nextButton.isEnabled)
+    }
   }
   
   /// Flush any pending changes back to the file system if

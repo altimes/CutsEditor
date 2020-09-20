@@ -2233,13 +2233,13 @@ Gw
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
                             <scrollView autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="A1j-Yh-gNp">
-                                <rect key="frame" x="20" y="61" width="1012" height="50"/>
+                                <rect key="frame" x="20" y="61" width="1012" height="74"/>
                                 <clipView key="contentView" id="iUv-6I-bhw">
-                                    <rect key="frame" x="1" y="0.0" width="1010" height="49"/>
+                                    <rect key="frame" x="1" y="0.0" width="1010" height="73"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
                                         <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" emptySelection="NO" autosaveColumns="NO" typeSelect="NO" rowSizeStyle="automatic" headerView="mqT-Ps-IzE" viewBased="YES" id="Ujf-AW-G7M">
-                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="26"/>
+                                            <rect key="frame" x="0.0" y="0.0" width="1010" height="50"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                             <size key="intercellSpacing" width="3" height="2"/>
                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -2559,7 +2559,7 @@ Gw
         <scene sceneID="hIz-AP-VOD">
             <objects>
                 <viewController title="CutsEditor" id="XfG-lQ-9wD" userLabel="EnigmaEdit" customClass="ViewController" customModule="EnigmaEdit" customModuleProvider="target" sceneMemberID="viewController">
-                    <view key="view" misplaced="YES" id="m2S-Jp-Qdl">
+                    <view key="view" id="m2S-Jp-Qdl">
                         <rect key="frame" x="0.0" y="0.0" width="878" height="1096"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
@@ -4800,7 +4800,7 @@ Gw
                                                 <fragment content="Event Description ...">
                                                     <attributes>
                                                         <color key="NSColor" name="textColor" catalog="System" colorSpace="catalog"/>
-                                                        <font key="NSFont" metaFont="menu" size="11"/>
+                                                        <font key="NSFont" metaFont="label" size="11"/>
                                                         <paragraphStyle key="NSParagraphStyle" alignment="natural" lineBreakMode="wordWrapping" baseWritingDirection="natural" tighteningFactorForTruncation="0.0"/>
                                                     </attributes>
                                                 </fragment>
