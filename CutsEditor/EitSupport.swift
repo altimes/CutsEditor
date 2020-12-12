@@ -289,6 +289,17 @@ class EITInfo
     decodeEITData(data)
   }
   
+  /// Failable. Decode using fully specified filename
+  /// Empty string fails
+  convenience init?(filename: String)
+  {
+    guard (!filename.isEmpty) else { return nil }
+    self.init()
+    let eitData = Recording.loadRawDataFrom(file: filename)
+    guard eitData != nil else { return nil }
+    decodeEITData(eitData!)
+  }
+  
   // MARK: Support functions
   
 //  /// Get a UInt8 from a Data buffer at index
@@ -510,6 +521,17 @@ class EITInfo
       }
     }
     return program
+  }
+  
+  static func loadEpisodeTextFrom(cutsFileName: String) -> String {
+    
+    let eitFileName = cutsFileName.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: ConstsCuts.EIT_SUFFIX)
+    if let eit = EITInfo(filename: eitFileName)
+    {
+      return eit.episodeText
+    }
+    return ""
+
   }
   
   /// nominally pick out the eventText field of the second short descriptor

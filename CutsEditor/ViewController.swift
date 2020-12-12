@@ -749,7 +749,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   {
     currentFile.selectItem(at: filelistIndex)
     previousButton.isEnabled = (filelistIndex > 0)
-    nextButton.isEnabled = (filelistIndex > 0) && (filelistIndex < (filelist.count-1))
+    nextButton.isEnabled = (filelistIndex >= 0) && (filelistIndex < (filelist.count-1))
     if (isVideoEnabled.state == NSControl.StateValue.off) {
       deleteRecordingButton.isEnabled = (previousButton.isEnabled || nextButton.isEnabled)
     }
@@ -1475,6 +1475,27 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
     return greaterThan
   }
+ 
+  /// Sorter to sort namePairs by assoicated eit title
+  /// do case insensistive sort
+  /// reduce repeated spaces to single spaces to deal with curating faults
+  func pairsListTitleSorter( _ s1:namePair, s2: namePair) -> Bool
+  {
+    var greaterThan: Bool
+    
+    var title1 = EITInfo.loadEpisodeTextFrom(cutsFileName: s1.diskURL).lowercased()
+    title1 = title1.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    var title2 = EITInfo.loadEpisodeTextFrom(cutsFileName: s2.diskURL).lowercased()
+    title2 = title2.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    
+    if sortPrefs.isAscending {
+      greaterThan = title1 < title2
+    }
+    else {
+      greaterThan =  title1 > title2
+    }
+    return greaterThan
+  }
   
   /// Sorter to sort namePairs by date field
   /// picks date from expected format of "^DateTime - Channel - ProgramName$"
@@ -1540,7 +1561,6 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     }
   }
   
-  
   /// Sorts a namePairs array based on the sorting order
   /// found in the user preferences
   /// - parameter namePairs: array to be sorted
@@ -1558,6 +1578,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else if (sortPrefs.sortBy == sortStringConsts.byChannel)
     {
       namePairs.sort(by: pairsListChannelSorter)
+    }
+    else if (sortPrefs.sortBy == sortStringConsts.byTitle)
+    {
+      namePairs.sort(by: pairsListTitleSorter)
     }
   }
   
@@ -2378,22 +2402,13 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   ///
   var deleteRecordingButtonTimer = Timer()
   
-  /// Initialize the AVPlayer for the file URL given with filename
-  /// and seek to the startTime
   
-  func setupAVPlayerFor(_ fileURL:String, startTime: CMTime)
-  {
-    if (debug) { print ("Setting up av Player with string <\(fileURL)") }
-    
-    // remove observers before instantiating new objects
-    removePlayerObserversAndItem()
-    
-    let videoURL = URL(string: fileURL)!
-    let tsAsset = AVURLAsset(url: videoURL)
+  func createAVAssetFromURL(_ url: URL) -> (AVAsset,Bool) {
+    let tsAsset = AVURLAsset(url: url)
     if (debug) { print("available formats:  \(tsAsset.availableMetadataFormats)") ; print(" media chars = \(tsAsset.availableMediaCharacteristicsWithMediaSelectionOptions)")}
     
     // ensure all track durations are valid - don't known enough video to
-    // write bad video recovery functions
+    // TODO: write bad video recovery functions
     var durationIsValid = true
     if (debug) {
       print("Track Count:\(tsAsset.tracks.count)")
@@ -2435,6 +2450,36 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       let duration = track.duration
       durationIsValid = durationIsValid && !duration.isIndefinite && duration.isValid && !duration.isNegativeInfinity && !duration.isPositiveInfinity
     }
+    
+    return (tsAsset,durationIsValid)
+  }
+  
+  /// Look at first video track is check that duration data is being decoded for this
+  /// application to use
+  func durationIsUsableForAsset(_ asset: AVAsset) -> Bool
+  {
+    var durationIsUsable = false
+    let videoAssets = asset.tracks(withMediaType: AVMediaType.video)
+    durationIsUsable = videoAssets.count >= 1
+    // assuming the first and only video track for a ts stream
+    let track = videoAssets[0].asset!
+    let durationIsValid = !track.duration.isIndefinite && track.duration.isValid && !track.duration.isNegativeInfinity && !track.duration.isPositiveInfinity
+    
+    durationIsUsable = durationIsUsable && durationIsValid
+    return durationIsUsable
+  }
+  /// Initialize the AVPlayer for the file URL given with filename
+  /// and seek to the startTime
+  
+  func setupAVPlayerFor(_ fileURL:String, startTime: CMTime)
+  {
+    if (debug) { print ("Setting up av Player with string <\(fileURL)") }
+    
+    let videoURL = URL(string: fileURL)!
+    let (tsAsset,durationIsValid) = createAVAssetFromURL(videoURL)
+    
+    // remove observers before instantiating new objects
+    removePlayerObserversAndItem()
     
     if (durationIsValid)
     {
@@ -2607,6 +2652,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       }
       pendingSeek.append(SeekParams(time, beforeValue, afterValue))
     }
+    lastSeekTime = time
   }
   
   func seekHandler(_ time:CMTime, _ beforeTolerance:CMTime, _ afterTolerance: CMTime)
@@ -2677,11 +2723,20 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// Seek player by delta value in seconds.  Retains
   /// current paused or playing state
   
+  // eugh! global time reference for nonPlaying seeks
+  // updated / set in seekInSequence
+  var lastSeekTime = CMTime()
   func seekToSkip(_ skipDurationSeconds:Double)
   {
     let pts=Int64(skipDurationSeconds*Double(CutsTimeConst.PTS_TIMESCALE))
     wasPlaying = isPlaying
-    let now = (self.monitorView.player?.currentTime())!
+    var now = CMTime()
+    if wasPlaying  {
+      now = (self.monitorView.player?.currentTime())!
+    }
+    else {
+      now = lastSeekTime
+    }
     let newtime = CMTimeAdd(now, CMTime(value: pts, timescale: CutsTimeConst.PTS_TIMESCALE))
     seekInSequence(to: newtime)
   }

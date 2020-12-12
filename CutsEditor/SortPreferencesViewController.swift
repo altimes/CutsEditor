@@ -31,6 +31,7 @@ struct sortStringConsts {
   static let byDate = "Date"
   static let byName = "Name"
   static let byChannel = "Channel"
+  static let byTitle = "Title"
   
   // keys for user defaults
   static let order = "order"
@@ -56,6 +57,7 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
   @IBOutlet weak var sortByName: NSButton!
   @IBOutlet weak var sortByDate: NSButton!
   @IBOutlet weak var sortByChannel: NSButton!
+  @IBOutlet weak var sortByTitle: NSButton!
   
   @IBOutlet weak var visualClosingDisplay: NSButton!
   @IBOutlet weak var speechClosingDisplay: NSButton!
@@ -83,6 +85,7 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     sortByName.title = sortStringConsts.byName
     sortByDate.title = sortStringConsts.byDate
     sortByChannel.title = sortStringConsts.byChannel
+    sortByTitle.title = sortStringConsts.byTitle
   }
   
   func getCurrentSettings()
@@ -103,7 +106,10 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     else if (sortPreference.sortBy == sortStringConsts.byChannel ) {
       sortByChannel.selectCell(sortByChannel.cell!)
     }
-   
+    else if (sortPreference.sortBy == sortStringConsts.byTitle ) {
+      sortByTitle.selectCell(sortByTitle.cell!)
+    }
+
     adHunterPreference = delegate.adHunterPreference()
     visualClosingDisplay.state = adHunterPreference.isOverlayReporting ? .on : .off
     speechClosingDisplay.state = adHunterPreference.isSpeechReporting ? .on : .off

@@ -188,6 +188,8 @@ class MovieCuttingOperation: Operation
       targetPathName = targetPathName.replacingOccurrences(of: "&", with: "\\&")
       targetPathName = targetPathName.replacingOccurrences(of: "!", with: "\\!")
       targetPathName = targetPathName.replacingOccurrences(of: "'", with: "\\'")
+      targetPathName = targetPathName.replacingOccurrences(of: "(", with: "\\(")
+      targetPathName = targetPathName.replacingOccurrences(of: ")", with: "\\)")
       mcutCommandArgs.append(targetPathName.replacingOccurrences(of: " ", with: "\\ ") )
       cutTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, mcutCommandArgs.joined(separator: " ")]
     }

@@ -681,7 +681,8 @@ class AccessPoints {
   {
     get {
       var gapsArray = [PtsOff]()
-      gapsArray = gapIndices.map {m_access_points_array[$0]}
+      // note: swapping as m_access_points_array is [OffPts]
+      gapsArray = gapIndices.map {(m_access_points_array[$0].pts,m_access_points_array[$0].offset)}
       var gapsPts = [PtsType]()
       // FIXME: handle gap after PCR Reset
       if hasPCRReset {
