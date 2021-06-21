@@ -174,7 +174,7 @@ class Recording
           print ("OS reports file size of \(fileSize)")
         }
           // only proceed with rational ap counts otherwise leave ap unpopulated
-        else if let apts = AccessPoints(data: apRawData)
+        else if let apts = AccessPoints(data: apRawData, fileName:movieShortName ?? "indeterminate")
         {
           ap = apts
         }

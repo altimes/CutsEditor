@@ -104,14 +104,22 @@ class GeneralPreferencesViewController: NSViewController, NSTextFieldDelegate
   {
     // force text field to loose focus and end
     self.view.window?.makeFirstResponder(nil)
-    if (pvrChanged) {
-      pvrSettings[pvrIndex] = pvr
-      general.systemConfig.pvrSettings = pvrSettings
-    }
-    preferences.saveGeneralPreference(general)
+    saveGeneralPreferences(hasChanged: pvrChanged, index: pvrIndex)
     NotificationCenter.default.post(name: Notification.Name(rawValue: generalDidChange), object: nil)
   }
   
+  func saveGeneralPreferences(hasChanged pvrChanged:Bool, index: Int)
+  {
+    if (pvrChanged) {
+      pvrSettings[index] = pvr
+      general.systemConfig.pvrSettings = pvrSettings
+    }
+    preferences.saveGeneralPreference(general)
+  }
+  
+  static func saveSystemSetup() {
+    
+  }
   
   @IBAction func reloadAction(_ sender: NSButton) {
     loadCurrentGeneralPrefs()

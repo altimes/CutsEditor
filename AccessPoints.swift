@@ -73,13 +73,14 @@ class AccessPoints {
     apFileName = url.path
     self.postInitSetup()
   }
-  
+   
   /// Initialize from raw contents, typically content of file
   /// Contrived to ensure that collection maintained in order
   /// sorted by file offset.
-  convenience init?( data: Data)
+  convenience init?( data: Data, fileName: String)
   {
     self.init()
+    self.apFileName = fileName
     var d = [UInt64](repeating: 0, count: 2)
     var sorted = true
     var lastOffset = OffType(0)
@@ -279,14 +280,16 @@ class AccessPoints {
   /// - returns: formatted string
   func durationInHMS() -> String
   {
-    return CutEntry.hhMMssFromSeconds(durationInSecs())
+//    return CutEntry.hhMMssFromSeconds(durationInSecs())
+    return durationInSecs().hhMMss
   }
   
   /// return the simple last pts - first pts calculated duration
   /// can be wrong if there are breaks in the PTS sequences
   func simpleDurationInHMS() -> String
   {
-    return CutEntry.hhMMssFromSeconds(simpleDurationInPTS().asSeconds)
+//    return CutEntry.hhMMssFromSeconds(simpleDurationInPTS().asSeconds)
+    return simpleDurationInPTS().hhMMss
   }
   
   /// Determine the runtime of a recording bye checking for "gaps" or breaks in the PTS sequencing.
@@ -607,6 +610,7 @@ class AccessPoints {
       if notAtEnd {
         arrayOfResetPoints.append(startIndex)
         resetFound = true
+//        print("PCR Reset in \(self.apFileName)")
      }
     }
     return (resetFound, arrayOfResetPoints)
@@ -857,9 +861,11 @@ class AccessPoints {
         cummulativeDurationPTS += sequenceDurationPTS
         if (debug) {
           let sequenceDurationSecs = Double(sequenceDurationPTS) * CutsTimeConst.PTS_DURATION
-          let sequenceDurationHMS = CutEntry.hhMMssFromSeconds(sequenceDurationSecs)
+          //          let sequenceDurationHMS = CutEntry.hhMMssFromSeconds(sequenceDurationSecs)
+          let sequenceDurationHMS = sequenceDurationSecs.hhMMss
           let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
-          let readableCummulativeTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+//          let readableCummulativeTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+          let readableCummulativeTime = runTimeSecs.hhMMss
           print("\(sequenceDurationPTS) - \(cummulativeDurationPTS): \(sequenceDurationHMS) - \(readableCummulativeTime)")
         }
         seqStart = index+1
@@ -869,8 +875,9 @@ class AccessPoints {
     let sequenceDurationPTS = m_access_points_array[endIndex].pts - m_access_points_array[seqStart].pts
     cummulativeDurationPTS += sequenceDurationPTS
     if (debug) {
-      let runTimeSecs = Double(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
-      let readableTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+      let runTimeSecs = Seconds(cummulativeDurationPTS)*CutsTimeConst.PTS_DURATION
+//      let readableTime = CutEntry.hhMMssFromSeconds(runTimeSecs)
+      let readableTime = runTimeSecs.hhMMss
       print("Run time of \(cummulativeDurationPTS) pts / \(readableTime)")
     }
     self.sequenceHasGaps = (seqStart != 0)
