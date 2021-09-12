@@ -11,6 +11,7 @@ import Cocoa
 let trashDirectoryName = ".Trash"
 let localTrash = ".Trashes"
 let NASTrash = "#recycle"
+let Olympics = "Olympics_\\ Tokyo\\ 2020"
 
 // MARK: - file search support class
 
@@ -29,12 +30,11 @@ class FindFilesOperation: Operation
   var remoteExportPath: String
   var pvrIndex: Int
   
-  // FIXME: subdirectories are derived as LOCAL !! (oopps)
   var isRemote: Bool
   var sysConfig: systemConfiguration
   var onCompletionBlock: FindCompletionBlock
   let debug = false
-  static let trashes = [trashDirectoryName, NASTrash, localTrash]
+  static let trashes = [trashDirectoryName, NASTrash, localTrash, Olympics]
 
   /// Create a operation queue for file finding
   /// - returns: the queue

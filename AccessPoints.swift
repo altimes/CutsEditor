@@ -82,8 +82,10 @@ class AccessPoints {
     self.init()
     self.apFileName = fileName
     var d = [UInt64](repeating: 0, count: 2)
-    var sorted = true
+    var offsetSorted = true
+    var ptsSorted = true
     var lastOffset = OffType(0)
+    var lastPts = PtsType(PtsType.max)
     let dataElementCount = data.count/MemoryLayout<UInt64>.size
     // for an unknown reason binary loads of data have returned crazy (200 Gb) array
     // counts for ap files.  So this is sanity check on the Data being offered
@@ -118,13 +120,22 @@ class AccessPoints {
       d[1] = littleEndian[index+1].bigEndian  // pts
       let pair = OffPts(d[0], d[1])
       // monitor if file is in file offset sorted order or not
-      sorted = sorted && (lastOffset < d[0])
+      offsetSorted = offsetSorted && (lastOffset < d[0])
+      ptsSorted = ptsSorted && (lastPts > d[1])
       lastOffset = d[0]
+      lastPts = d[1]
       m_access_points_array.append(pair)
       index += 2
     }
     // order the map by offset if it has loaded unordered
-    if (!sorted) { m_access_points_array.sort{$0.offset < $1.offset}}
+    if (!offsetSorted) {
+      m_access_points_array.sort{$0.offset < $1.offset}
+      print("WARNING: unsorted offset access points")
+    }
+    if (!ptsSorted) {
+//      m_access_points_array.sort{$0.pts < $1.pts}
+      print("WARNING: unsorted pts (PCR ?)")
+    }
     
     self.postInitSetup()
   }
@@ -392,6 +403,9 @@ class AccessPoints {
       }
       else {
         found = adjustedPtsValue >= m_access_points_array[index].pts && adjustedPtsValue < m_access_points_array[index+1].pts
+        if (debug) {
+          print("value=\(adjustedPtsValue), curr = \(m_access_points_array[index].pts), next\(m_access_points_array[index+1].pts), at index \(index)")
+        }
         if found {
           // pick the nearest
           index =  ((adjustedPtsValue - m_access_points_array[index].pts) < (m_access_points_array[index+1].pts - adjustedPtsValue)) ? index : index+1

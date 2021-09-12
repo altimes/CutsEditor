@@ -1391,8 +1391,15 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     let remoteList = remoteMountAndSource()
     var remoteEntry: serverTuple = ("","","")
+    let dirPathComponents = dirPath.components(separatedBy: "/")
     for entry in remoteList {
-      if entry.MountPath == dirPath {
+      var matched = true
+      let entryComponents = entry.MountPath.components(separatedBy: "/")
+      // do all the path elements match ? (beware Movie-1 contains Movie)
+      for i in 0 ..< min(dirPathComponents.count, entryComponents.count) {
+        matched = matched && dirPathComponents[i] == entryComponents[i]
+      }
+      if matched {
         remoteEntry = entry
         break
       }
