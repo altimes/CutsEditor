@@ -25,6 +25,17 @@ struct StringsCuts {
   static let COLOUR_CODING_CANCELLED = "Colour Coding Cancelled"
   static let FAILED_TRYING_TO_ACCESS = "Failed trying to access %@"
   static let FAILED_COUNTING_FILES = "Failed counting files expected number, got\n<%@>"
+  static let PATH_TO_REMOTE_CUT_PROGRAM = "Path to remote cut program"
+  static let PATH_TO_LOCAL_CUT_PROGRAM = "Path to local cut program"
+  static let PATH_TO_LOCAL_MOUNT_POINT = "Mount Path"
+  static let PATH_TO_REMOTE_EXPORT = "Remote Path"
+  static let REPLACE_MODE = ("Replace Mode","add -r flag")
+  static let NEW_DESCRIPTION = ("New Description","add -d flag and prompt")
+  static let NEW_TITLE = ("New Title","add -n flag and prompt")
+  static let NEW_OUTPUT_FILE = ("New output file","add -o flag and prompt")
+  static let PATH_TO_SH = "Path to sh"
+  static let PATH_TO_SSH = "Path to ssh"
+  static let REMOTE_LOGIN = "Remote login"
 }
 
 /// Engima file extensions and sundry constants
@@ -64,7 +75,7 @@ public struct mcutConsts {
   static let cutOK = "Cut OK"
   static let cutFailed = "Cut Failed"
   
-  static let  remoteMachineAndLogin = "root@beyonwizt4.local"
+  static let remoteMachineAndLogin = "root@beyonwiztx.local"
   static let sshPath = "/usr/bin/ssh"
   static let shPath = "/bin/sh"
   

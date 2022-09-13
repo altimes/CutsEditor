@@ -728,6 +728,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   /// scanning for colour coding is going on (array content changes)
   @objc func progressBarVisibilityChange(_ notification: Notification)
   {
+    print("Progress Bar change notified")
+    
     deleteRecordingButton.isEnabled = progressBar.isHidden
     if let _ = currentFile.filter {
       if (debug) { print("file index is \(currentFile.stringValue)")}
@@ -1527,6 +1529,37 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     return greaterThan
   }
   
+  /// Sorter to sort namePairs by assoicated series+episode annotation
+  /// which should be " - SxxExx" appended to the name
+  /// when this annotation is not present, simple sort on full filename
+  /// do case insensistive sort
+  /// reduce repeated spaces to single spaces to deal with curating faults
+  func pairsListEpisodeSorter( _ s1:namePair, s2: namePair) -> Bool
+  {
+    var names1, names2: String
+    let names1Array = s1.programeName.components(separatedBy: kHyphen)
+    let names2Array = s2.programeName.components(separatedBy: kHyphen)
+//    print("\(names1Array) -- \(names2Array)")
+    if (names1Array.count >= 4 && names2Array.count >= 4) { // pick name from expected
+      names1 = names1Array[3 ... names1Array.count-1].joined(separator: kHyphen)
+      names2 = names2Array[3 ... names2Array.count-1].joined(separator: kHyphen)
+    }
+    else { // not expected format use full name
+//      print("unexpected - using full name")
+      names1 = s1.programeName
+      names2 = s2.programeName
+    }
+    var greaterThan: Bool
+    if sortPrefs.isAscending {
+      greaterThan = names1 < names2
+    }
+    else {
+      greaterThan =  names1 > names2
+    }
+    return greaterThan
+  }
+  
+
   /// Sorter to sort namePairs by date field
   /// picks date from expected format of "^DateTime - Channel - ProgramName$"
   func pairsListDateSorter( _ s1: namePair, s2: namePair) -> Bool
@@ -1612,6 +1645,10 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     else if (sortPrefs.sortBy == sortStringConsts.byTitle)
     {
       namePairs.sort(by: pairsListTitleSorter)
+    }
+    else if (sortPrefs.sortBy == sortStringConsts.byEpisode)
+    {
+      namePairs.sort(by: pairsListEpisodeSorter)
     }
   }
   

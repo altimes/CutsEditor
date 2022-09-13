@@ -11,7 +11,9 @@ import Cocoa
 let trashDirectoryName = ".Trash"
 let localTrash = ".Trashes"
 let NASTrash = "#recycle"
-let Olympics = "Olympics_\\ Tokyo\\ 2020"
+let Olympics = "Olympics_"
+let BeyonWizT4 = "BeyonWizT4"
+let BeyonWizU4 = "BeyonWizU4"
 
 // MARK: - file search support class
 
@@ -34,7 +36,7 @@ class FindFilesOperation: Operation
   var sysConfig: systemConfiguration
   var onCompletionBlock: FindCompletionBlock
   let debug = false
-  static let trashes = [trashDirectoryName, NASTrash, localTrash, Olympics]
+  static let trashes = [trashDirectoryName, NASTrash, localTrash, Olympics, BeyonWizT4, BeyonWizU4]
 
   /// Create a operation queue for file finding
   /// - returns: the queue
@@ -92,11 +94,19 @@ class FindFilesOperation: Operation
     if (self.foundRootPath.contains(self.localMountPoint) && isRemote) {
       searchPath = self.foundRootPath.replacingOccurrences(of: self.localMountPoint, with: self.remoteExportPath)
       fileCountTask.launchPath = sysConfig.pvrSettings[pvrIndex].sshPath
-      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied | grep -v \"^.*/\\.\""]
+      let limitSize = false
+      var flag = ""
+      if limitSize {
+        flag = " -size -48c"
+      }
+      fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" \(flag) -xdev -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied | grep -v \"^.*/\\.\""]
+      print("remote file count args \(fileCountTask.arguments)")
+// find /Volumes/WizVideo/ -type d -path /Volumes/WizVideo//BeyonWizT4 -prune -false -o -print
     }
     else {
       fileCountTask.launchPath = mcutConsts.shPath
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied"]
+      print("local file count args \(fileCountTask.arguments)")
       searchPath = self.foundRootPath
     }
     fileCountTask.standardOutput = outPipe

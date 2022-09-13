@@ -134,7 +134,7 @@ class AccessPoints {
     }
     if (!ptsSorted) {
 //      m_access_points_array.sort{$0.pts < $1.pts}
-      print("WARNING: unsorted pts (PCR ?)")
+      print("WARNING: unsorted pts (PCR ?)\(fileName)")
     }
     
     self.postInitSetup()

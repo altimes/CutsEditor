@@ -28,6 +28,15 @@ public struct MetaData {
   var isPopulated = false
   let debug = false
   
+  var tagDetail = Tag(tuner: "", resolution: MetaData.Tag.Resolution(width: 0, height: 0))
+  struct Tag {
+   var tuner: String
+    var resolution: Resolution
+    struct Resolution {
+     var width: Int
+     var height: Int
+    }
+  }
   
   init()
   {
@@ -94,6 +103,7 @@ public struct MetaData {
       programDescription = fileAsArray[2]
       recordingTime = fileAsArray[3]
       tags = fileAsArray[4]
+      tagDetail = decodeTags(fileAsArray[4])
       duration = fileAsArray[5]
       programFileSize = fileAsArray[6]
       serviceData = fileAsArray[7]
@@ -177,6 +187,38 @@ public struct MetaData {
     if (items.count>=12) { referenceDecoded.name = items[11] }
     
     return referenceDecoded
+  }
+  
+  func decodeTags(_ tag: String) -> Tag {
+    let tags = tag.components(separatedBy: ";")
+    var tuner: String = ""
+    var width: Int = 0
+    var height: Int = 0
+    if tags.count > 0 {
+      for item in tags {
+        if item.contains("Tuner") {
+          tuner = item
+        }
+        if item.contains("Movie:") {
+          // remove up to "Tuner" or all of it
+          print("------------------------> \(item)")
+        }
+        if item.contains("Cricket:") {
+          print("------------------------> \(item)")
+        }
+        else if item.contains(":") {
+          let components = item.components(separatedBy: ":")
+          if let value0 = Int(components[0]), let value1 = Int(components[1]) {
+            width = value0
+            height = value1
+          }
+          else {
+            print("could not find values in item<\(item)>")
+          }
+        }
+      }
+    }
+    return Tag(tuner: tuner, resolution: Tag.Resolution(width: width, height: height))
   }
   
   func eServiceReferenceAsDescription(_ serviceRef : String) -> String

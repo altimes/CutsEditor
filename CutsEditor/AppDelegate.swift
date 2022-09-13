@@ -374,5 +374,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
   func setMovie(movie: Recording?) {
     self.currentMovie = movie
   }
+  
+  @IBAction func openEITEdit(_ sender: NSMenuItem) {
+    print("Saw edit menu action")
+    if let movieRootName = self.movie()?.movieName
+    {
+      let vc = NSApp.windows[0].windowController?.contentViewController as! ViewController
+      displayEditor(for: movieRootName, type: ConstsCuts.EIT_SUFFIX, vc: vc)
+    }
+  }
+  
+  @IBAction func openMetaEdit(_ sender: NSMenuItem) {
+    print("Saw edit menu action")
+    if let movieRootName = self.movie()?.movieName
+    {
+      let vc = NSApp.windows[0].windowController?.contentViewController as! ViewController
+      displayEditor(for: movieRootName, type: ConstsCuts.META_SUFFIX, vc: vc)
+    }
+  }
 }
 

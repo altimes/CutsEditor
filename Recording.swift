@@ -524,6 +524,10 @@ class Recording
     }
   }
   
+  func reloadCurrentCache() {
+    
+  }
+  
   /// Update data content of cache. Ensure that cache is kept in sync with "Save" operations
   
   func updateValueInCache(_ value: Data, forKey key: String) {

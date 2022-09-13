@@ -362,6 +362,7 @@ class EITInfo
     //        print("eventDate \(eventDate) bigEndian \(eventDate.bigEndian)")
     // decode date
     let MJD = parseMJD(eventDate.bigEndian)
+    if MJD == (1900,3,1) { print("bad date for \(self.container?.movieName)")}
     //        print("decoded event Date \(MJD.year)/\(MJD.month)/\(MJD.day)")
     
     // decode time HH MM SS
@@ -638,6 +639,10 @@ class EITInfo
 /// - return: touple of year, month, day as Ints
 func parseMJD(_ packed:UInt16) -> (year:Int, month:Int, day:Int)
 {
+  if (packed <= 15079) {
+    // bad data return default
+    return (1900,3,1)
+  }
   let packedDate = Double(packed)
   let YY = Int((packedDate - 15078.2)/365.25)
   let yearFactor = trunc(Double(YY)*365.25)

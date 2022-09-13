@@ -32,6 +32,7 @@ struct sortStringConsts {
   static let byName = "Name"
   static let byChannel = "Channel"
   static let byTitle = "Title"
+  static let byEpisode = "Series-Episode"
   
   // keys for user defaults
   static let order = "order"
@@ -58,7 +59,8 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
   @IBOutlet weak var sortByDate: NSButton!
   @IBOutlet weak var sortByChannel: NSButton!
   @IBOutlet weak var sortByTitle: NSButton!
-  
+  @IBOutlet weak var sortByEpisode: NSButton!
+
   @IBOutlet weak var visualClosingDisplay: NSButton!
   @IBOutlet weak var speechClosingDisplay: NSButton!
   @IBOutlet weak var nearEnoughForCutmark: NSTextField!
@@ -86,6 +88,7 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     sortByDate.title = sortStringConsts.byDate
     sortByChannel.title = sortStringConsts.byChannel
     sortByTitle.title = sortStringConsts.byTitle
+    sortByEpisode.title = sortStringConsts.byEpisode
   }
   
   func getCurrentSettings()
@@ -108,6 +111,9 @@ class SortPreferencesViewController: NSViewController, NSControlTextEditingDeleg
     }
     else if (sortPreference.sortBy == sortStringConsts.byTitle ) {
       sortByTitle.selectCell(sortByTitle.cell!)
+    }
+    else if (sortPreference.sortBy == sortStringConsts.byEpisode) {
+      sortByEpisode.selectCell(sortByEpisode.cell!)
     }
 
     adHunterPreference = delegate.adHunterPreference()
