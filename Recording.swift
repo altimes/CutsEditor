@@ -30,12 +30,15 @@ class Recording
   var ap   : AccessPoints
   //  var sc   : StuctureCache?
   static var debug = false
+  
+  ///
   var isCuttable: Bool {
     get {
       return cuts.isCuttable
     }
   }
   
+  /// File contains suffice IN/OUT marks to for recording cutter to run.
   var hasCutsToPerform: Bool {
     return cuts.inOutOnly.count > 0
   }

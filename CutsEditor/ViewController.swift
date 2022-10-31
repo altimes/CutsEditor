@@ -320,7 +320,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     
     
     //    AVPlayerItemTimeJumped
-    NotificationCenter.default.addObserver(self, selector: #selector(sawTimeJumpInPlayer(_:)), name: NSNotification.Name.AVPlayerItemTimeJumped, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(sawTimeJumpInPlayer(_:)), name: /*NSNotification.Name.AVPlayerItemTimeJumped*/ AVPlayerItem.timeJumpedNotification, object: nil)
     // Movie selector has changed programmatically
     NotificationCenter.default.addObserver(self, selector: #selector(popUpWillChange(_:)), name: NSNotification.Name.PopUpWillChange, object: nil )
     NotificationCenter.default.addObserver(self, selector: #selector(popUpHasChanged(_:)), name: NSNotification.Name.PopUpHasChanged, object: nil )
@@ -3684,7 +3684,8 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
     myFileDialog.allowsMultipleSelection = false
     myFileDialog.canChooseDirectories = false
     myFileDialog.title = "Select cuts file"
-    myFileDialog.allowedFileTypes=["cuts"]
+//    myFileDialog.allowedFileTypes=["cuts"]
+    myFileDialog.allowedContentTypes = [UTType(exportedAs: "cuts")]
     myFileDialog.runModal()
     
     if let fileURL = myFileDialog.url

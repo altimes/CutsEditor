@@ -66,23 +66,41 @@ extension UInt32 {
 }
 
 // MARK: structures mapping model
-
+/// Subset of information from subset of the Event Information Table from ETSI  EN 300 468.  Data is extracted from
+/// broadcast data stream and written to a discrete file.
+///
 struct EventInfomationTable {
+  /// Unique broadcast event number
   var EventID = ""
+  /// Type of event - typicall "Recording"
   var When: String = ""             // def getEitWhen(self):  return self.eit.get('when', "")
+  /// Date of start of Event
   var StartDate: String = ""        // def getEitStartDate(self):  return self.eit.get('startdate', "")
+  /// Time of start of Event
   var StartTime: String = ""        // def getEitStartTime(self):  return self.eit.get('starttime', "")
+  ///  Duration hh:mm:ss of Event
   var Duration: String = ""         // def getEitDuration(self):  return self.eit.get('duration', "")
+  ///  Is this recording encrypted
   var Encrypted: String = ""
+  /// Short Descriptor Array - see ETSI definition
   var shortDescriptors:[Short_Event_Descriptor]?
+  /// Extened Descriptor Array - see ETSI definition
   var extendedDescriptors:[Extended_Event_Descriptor]?
 }
 
+/// Short event descriptor which typically contains the program title and episode text in
+/// two discrete entries.  Technically both field could be in single descriptor.  Enigma stips them
+/// from broadcast stream into two entries.
 struct Short_Event_Descriptor {
+  /// String to identify language for following text.
   var languageCode:String?
+  /// Discrete tag to facilitate descriptor decoding
   let tag = EITConst.SHORT_EVENT_DESCRIPTOR_TAG
+  /// Text of "Name" field
   var eventName:DVBTextString?
+  /// Text of "Text" field
   var eventText:DVBTextString?
+  /// Overall length of descriptor in bytes
   var itemLength: Int
   
   init(buffer:[UInt8]) {
@@ -271,12 +289,17 @@ extension Data {
 }
 
 // MARK: Class Info
+
+/// Class wrapper for Model of the subset of the Event Information Table from ETSI  EN 300 468
+///
 class EITInfo
 {
   
   // MARK: Model
+  /// Detailed contents
   var eit = EventInfomationTable()
   let debug = false
+  /// Parent recording if it has one.
   var container: Recording?
   
   // MARK: Initializers
@@ -362,7 +385,7 @@ class EITInfo
     //        print("eventDate \(eventDate) bigEndian \(eventDate.bigEndian)")
     // decode date
     let MJD = parseMJD(eventDate.bigEndian)
-    if MJD == (1900,3,1) { print("bad date for \(self.container?.movieName)")}
+    if MJD == (1900,3,1) { print("bad date for \(self.container?.movieName ?? "undefined Name")")}
     //        print("decoded event Date \(MJD.year)/\(MJD.month)/\(MJD.day)")
     
     // decode time HH MM SS

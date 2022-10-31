@@ -100,13 +100,13 @@ class FindFilesOperation: Operation
         flag = " -size -48c"
       }
       fileCountTask.arguments = [sysConfig.pvrSettings[pvrIndex].remoteMachineAndLogin, "/usr/bin/find \"\(searchPath)\" \(flag) -xdev -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied | grep -v \"^.*/\\.\""]
-      print("remote file count args \(fileCountTask.arguments)")
+      print("remote file count args \(fileCountTask.arguments ?? ["Empty args field"])")
 // find /Volumes/WizVideo/ -type d -path /Volumes/WizVideo//BeyonWizT4 -prune -false -o -print
     }
     else {
       fileCountTask.launchPath = mcutConsts.shPath
       fileCountTask.arguments = ["-c", "/usr/bin/find \"\(self.foundRootPath)\" -regex \"^.*\\\(self.suffixRequired)$\" \(excluding) | grep -v denied"]
-      print("local file count args \(fileCountTask.arguments)")
+      print("local file count args \(fileCountTask.arguments ?? ["no args"])")
       searchPath = self.foundRootPath
     }
     fileCountTask.standardOutput = outPipe
