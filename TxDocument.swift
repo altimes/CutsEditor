@@ -38,6 +38,6 @@ class TxDocument: NSDocument {
     }
 
     override class var autosavesInPlace: Bool {
-        return false
+        return true
     }
 }

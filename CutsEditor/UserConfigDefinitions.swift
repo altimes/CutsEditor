@@ -137,6 +137,7 @@ enum MARK_MODE: Int {
 }
 
 let kHyphen = " - "
+let kPeriod = "."
 
 /// User configuration general preferences
 struct generalPreferences {

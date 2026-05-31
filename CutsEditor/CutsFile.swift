@@ -657,13 +657,12 @@ class CutsFile: NSObject, NSCopying {
   /// Unravels the binary chunk of data into the required local format
   /// - parameter data: the Binary lump to be decoded
   
-  private func decodeCutsData(_ data: Data)
+  private func decodeCutsDataOld(_ data: Data)
   {
       if (debug)  {
         print("Found file ")
         print("Found file of \((data.count))! size")
       }
-      
       let entries = (data.count) / MemoryLayout<CutEntry>.size
       cutsArray = [CutEntry](repeating: CutEntry(cutPts: 0, cutType: 0 ), count: entries)
     
@@ -683,6 +682,49 @@ class CutsFile: NSObject, NSCopying {
       modified = false
   }
   
+  /// Decodes the binary chunk of data into array of cutsEntry
+  /// - parameter data: the Binary lump to be decoded from file
+  
+  private func decodeCutsData(_ data: Data)
+  {
+//    let debug = true
+      if (debug)  {
+        print("Found file ")
+        print("Found file of \((data.count))! size")
+      }
+    let cutEntrySize = MemoryLayout<CutEntry>.size
+    let entries = (data.count) / cutEntrySize
+    if (debug) { print("entry count \(entries)") }
+    guard entries < 100 else { fatalError("cutsArray too large found \(entries)")}
+    cutsArray = [CutEntry](repeating: CutEntry(cutPts: 0, cutType: 0 ), count: entries)
+    var itemOffset = 0
+    for i in 0 ..< entries {
+//      cutsArray[i] = CutEntry.decode(data.subdata(in: itemOffset ..< itemOffset+cutEntrySize))
+      cutsArray[i] = CutEntry.decode(at: itemOffset, data: data)
+      itemOffset += cutEntrySize
+    }
+      cutsArray.sort(by: <)
+      modified = false
+  }
+  
+  /*
+  /// Decode single cuts entry from given data
+  /// - assumes that data is valid and of correct size (ie no error checking of significance)
+  /// - Parameter data: raw binary data from file
+  /// - Returns: decoded cutsFile entry with byte swapping taken care of
+  private func decodeCutEntry(_ data: Data) -> CutEntry {
+    guard data.count == MemoryLayout<CutEntry>.size else { fatalError("Wrong size for CutEntry - got \(data.count), expected \(MemoryLayout<CutEntry>.size)") }
+    // C like "cast" of binary data
+    var cutEntry = data.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) -> CutEntry in
+      return rawBufferPointer.baseAddress!.assumingMemoryBound(to: CutEntry.self).pointee
+    }
+    // do the byte swaps
+    cutEntry.cutPts = UInt64(bigEndian: cutEntry.cutPts)
+    cutEntry.cutType = UInt32(bigEndian: cutEntry.cutType)
+    return cutEntry
+  }
+  */
+  
   /// Encoder for collection. Encodes into binary form suitable for PVR
   /// - returns : data binary blob ready to writing to file
   open func encodeCutsData() -> Data
@@ -690,8 +732,9 @@ class CutsFile: NSObject, NSCopying {
     var data = Data()
     for entry in cutsArray
     {
-      var entryCopy = CutEntry(cutPts: entry.cutPts.bigEndian, cutType: entry.cutType.bigEndian)
-      data.append(Data(bytes: &entryCopy, count: MemoryLayout<CutEntry>.size))
+      data.append(entry.encode())
+//      var entryCopy = CutEntry(cutPts: entry.cutPts.bigEndian, cutType: entry.cutType.bigEndian)
+//      data.append(Data(bytes: &entryCopy, count: MemoryLayout<CutEntry>.size))
     }
     return data
   }
@@ -1094,3 +1137,5 @@ class CutsFile: NSObject, NSCopying {
 //    return outDuration
 //  }
 }
+
+  

@@ -154,6 +154,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, AppPreferences {
 
   }
   
+  func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+    true
+  }
+  
   /// setup entries in bookmarks menu
   func setInsertBookmarksMenuItemText()
   {

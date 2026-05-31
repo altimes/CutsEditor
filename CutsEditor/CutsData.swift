@@ -110,6 +110,7 @@ public struct  CutEntry {
     self.cutType = cutType
   }
   
+  
   /// Constructor that masks underlying values for cut types
   init(cutPts: UInt64, mark: MARK_TYPE)
   {
@@ -117,6 +118,51 @@ public struct  CutEntry {
     self.cutType = mark.rawValue
   }
   
+  /// Decode single cuts entry from given data.
+  /// Assumes that data is valid (ie no error checking of significance) and
+  /// checks only that data is the expected size
+  ///
+  /// - Parameter data: raw binary data from file
+  /// - Returns: decoded cutsFile entry with byte swapping taken care of
+  static func decode(_ data: Data) -> CutEntry {
+    guard data.count == MemoryLayout<CutEntry>.size else { fatalError("Wrong size for CutEntry - got \(data.count), expected \(MemoryLayout<CutEntry>.size)") }
+    // first 8 bytes
+    let ptsRange = 0 ..< MemoryLayout<UInt64>.size
+    // next 4 bytes
+    let typeRange = MemoryLayout<UInt64>.size ..< (MemoryLayout<UInt64>.size + MemoryLayout<UInt32>.size)
+    var cutEntry = CutEntry(cutPts: 0, cutType: 0)
+    cutEntry.cutPts = UInt64(bigEndianData: data.subdata(in: ptsRange))
+    cutEntry.cutType = UInt32(bigEndianData: data.subdata(in: typeRange))
+/*
+    // C like "cast" of binary data
+    var cutEntry = data.withUnsafeBytes { (rawBufferPointer: UnsafeRawBufferPointer) -> CutEntry in
+      return rawBufferPointer.baseAddress!.assumingMemoryBound(to: CutEntry.self).pointee
+    }
+    // do the byte swaps
+    cutEntry.cutPts = UInt64(bigEndian: cutEntry.cutPts)
+    cutEntry.cuttype = UInt32(bigEndian: cutEntry.cutType)
+*/
+    return cutEntry
+  }
+ 
+  /// Decode single cuts entry from given data.
+  /// Assumes that data is valid (ie no error checking of significance) and
+  /// checks only that data is the expected size
+  ///
+  /// - Parameter data: raw binary data from file
+  /// - Returns: decoded cutsFile entry with byte swapping taken care of
+  static func decode(at offset: Int, data: Data) -> CutEntry {
+    guard data.count >= MemoryLayout<CutEntry>.size else { fatalError("Wrong size for CutEntry - got \(data.count), expected \(MemoryLayout<CutEntry>.size)") }
+    return decode(Data(data[offset..<data.index(offset, offsetBy: MemoryLayout<CutEntry>.size)]))
+  }
+
+  
+  func encode() -> Data {
+    // do the byte swapping
+    var entryCopy = CutEntry(cutPts: self.cutPts.bigEndian, cutType: self.cutType.bigEndian)
+    return Data(bytes: &entryCopy, count: MemoryLayout<CutEntry>.size)
+  }
+
   /// A useful "0" entry for IN marks - ie start of recording
   static var InZero: CutEntry {
     get {

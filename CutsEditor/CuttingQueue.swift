@@ -10,12 +10,19 @@ import Foundation
 
 
 enum CuttingState: String {
-//  case holding = "Holding"
   case onqueue = "Waiting"
   case running = "Executing"
   case completed = "Completed"
   case cancelled = "Cancelled"
   case unknown = "Unknown"
+}
+
+enum CuttingSymbol: String {
+  case onqueue = "􀈧"
+  case running = "􂅛"
+  case completed = "􀈥"
+  case cancelled = "􀏍"
+  case unknown = "􀿨"
 }
 
 class CuttingStateString {
@@ -93,12 +100,30 @@ class CuttingQueue : Equatable
   func logQueueEvent(moviePath: String, state newState: CuttingState, resultValue result: Int,  resultString message: String)
   {
     let logEntry = CuttingEntry(moviePathURL: moviePath)
+    let stateSymbol = symbolForCondition(newState)
     logEntry.currentState = CuttingStateString(state: newState)
     logEntry.timeStamp = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .short)
-    logEntry.resultMessage = message
+    logEntry.resultMessage = stateSymbol + message
     logEntry.resultValue = result
     cuttingList.append(logEntry)
     NotificationCenter.default.post(name: Notification.Name(rawValue: jobQueueDidChange), object: nil)
+  }
+  
+  
+  /// Create a compound string of symbols based on current state of job
+  /// - Parameter state: current state of job
+  /// - Returns: string representing serial view of previous and current states
+  ///
+  /// Recursive composition of symbols
+  ///
+  func symbolForCondition(_ state: CuttingState) -> String {
+    switch state {
+      case .onqueue:    return CuttingSymbol.onqueue.rawValue
+      case .running:    return symbolForCondition(.onqueue) + CuttingSymbol.running.rawValue
+      case .completed:  return symbolForCondition(.running) + CuttingSymbol.completed.rawValue
+      case .cancelled:  return symbolForCondition(.onqueue) + CuttingSymbol.cancelled.rawValue
+      case .unknown:    return CuttingSymbol.unknown.rawValue
+    }
   }
   
   func jobAdd(op movieCutterJob: MovieCuttingOperation) {

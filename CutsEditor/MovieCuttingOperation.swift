@@ -94,8 +94,7 @@ class MovieCuttingOperation: Operation
     }
     
     // check that we form a normal file path from the url ?
-    guard let diskPathName = moviePath.replacingOccurrences(of: "file://",
-                                                        with: "").removingPercentEncoding else
+    guard let diskPathName = moviePath.removeFileColonDoubleSlash().removingPercentEncoding else
     {
       cutResultStatusValue = global_mcut_errors.firstIndex(of: FAILED_TO_NORMALIZE_MESSAGE)!
       resultMessage = String(format: global_mcut_errors[Int(cutResultStatusValue)], targetPathName)
@@ -136,7 +135,7 @@ class MovieCuttingOperation: Operation
     // job done.  Delay in background process and then send results back to caller on the main queue
     // Delay found necessary due to finding garbage in the ap file after cutting is "Complete" guessed at
     // being due to remote host not having closed and flushed file to disk.
-    usleep(1_000) // 1 sec delay allow remote caches to be flushed to disk - can end up re-accessing remote whilst dodgey
+    usleep(1_000_000) // 1 sec delay allow remote caches to be flushed to disk - can end up re-accessing remote whilst dodgey
     DispatchQueue.main.async  { [weak weakSelf = self] in
       weakSelf?.onCompletion(self.resultMessage, cutResultStatusValue, self.isCancelled)
     }

@@ -49,7 +49,7 @@ struct ConstsCuts {
   static let TS_SUFFIX = ".ts"
   static let AP_SUFFIX = ".ts.ap"
   static let SC_SUFFIX = ".ts.sc"
-  static let SRT_SUFFIX = ".ts.srt"
+  static let SRT_SUFFIX = ".srt"
 }
 
 /// Control which file to process "selected" or just worked on

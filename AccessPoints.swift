@@ -40,11 +40,13 @@ class AccessPoints {
   /// during the movie which results in the PTS going back to zero.  Used to assist
   /// code that is hunting within the PTS sequence
   private(set) var hasPCRReset: Bool
+  
   /// array of indices where the PCR reset occurs and PTS numbering  re-starts
   private(set) var pcrIndices = [Int]()
   
   /// flag that gapIndices is populated
   private(set) var hasGapIndices:Bool
+  
   /// arrar of indices where a gap starts (end index of video)
   private(set) var gapIndices = [Int]()
   
@@ -152,8 +154,8 @@ class AccessPoints {
     if gaps.hasGap {
       gapIndices = gaps.indexArray
     }
-    
   }
+  
   /// Open and decode the file into the internal structures
   /// Contrived to ensure that collection maintained in order
   /// sorted by file offset.
@@ -321,12 +323,6 @@ class AccessPoints {
     return runTimeDurationPTS
   }
   
-  
-  //  func nearestApIndexForPTSFromAp(ptsValue: PtsType) -> Int
-  //  {
-  //    return 0
-  //  }
-  
   /// given a CMTime from the player convert it into a TS PTS time
   /// and use the ap values and gap checking to determine an actual elapsed time to
   /// drive the timelime control
@@ -394,10 +390,15 @@ class AccessPoints {
         else {
           found = true
           // what is the pts delta to the last index entry ?
-          let ptsDelta = adjustedPtsValue - m_access_points_array[index].pts
-          if ptsDelta > 2*(m_access_points_array[index].pts - m_access_points_array[index-1].pts) {
-            // !argh this is too big a difference .. give up
-            index = -1
+          if m_access_points_array[index].pts >= adjustedPtsValue {
+            print("---******* wft \(adjustedPtsValue) should be greater than \(m_access_points_array[index].pts) for index \(index)")
+          }
+          else {
+            let ptsDelta = adjustedPtsValue - m_access_points_array[index].pts
+              if ptsDelta > 2*(m_access_points_array[index].pts - m_access_points_array[index-1].pts) {
+                // !argh this is too big a difference .. give up
+                index = -1
+              }
           }
         }
       }

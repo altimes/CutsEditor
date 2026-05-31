@@ -28,6 +28,16 @@ class Recording
   var meta : MetaData
   var cuts : CutsFile
   var ap   : AccessPoints
+  var videoResolution: CGSize = CGSize(width: 999, height: 999)
+//  var taskedResolution: CGSize {
+//    get {
+//      self.videoResolution 
+//    }
+//    set {
+//      videoResolution = newValue
+//      print("found set: \(videoResolution)")
+//    }
+//  }
   //  var sc   : StuctureCache?
   static var debug = false
   
@@ -38,7 +48,7 @@ class Recording
     }
   }
   
-  /// File contains suffice IN/OUT marks to for recording cutter to run.
+  /// File contains sufficient IN/OUT marks to for recording cutter to run.
   var hasCutsToPerform: Bool {
     return cuts.inOutOnly.count > 0
   }
@@ -89,13 +99,14 @@ class Recording
         return Array<String>(repeating: "", count:6)
       }
       else {
-        var namesArray:[String] = Array<String>(repeating: "", count:6)
+        var namesArray:[String] = Array<String>(repeating: "", count:7)
         namesArray[0] = movieName! + ConstsCuts.TS_SUFFIX
         namesArray[1] = movieName! + ConstsCuts.AP_SUFFIX
         namesArray[2] = movieName! + ConstsCuts.META_SUFFIX
         namesArray[3] = movieName! + ConstsCuts.EIT_SUFFIX
         namesArray[4] = movieName! + ConstsCuts.SC_SUFFIX
         namesArray[5] = movieName! + ConstsCuts.CUTS_SUFFIX
+        namesArray[6] = movieName! + ConstsCuts.SRT_SUFFIX
         return namesArray
       }
     }
@@ -150,7 +161,7 @@ class Recording
       ap = AccessPoints()
     }
     else {
-      movieName = rootURLName.replacingOccurrences(of: "file://", with: "").removingPercentEncoding
+      movieName = rootURLName.removeFileColonDoubleSlash().removingPercentEncoding
       movieShortName = Recording.programDateTitleFrom(movieURLPath: rootURLName)
       
       // load the meta file
@@ -241,8 +252,26 @@ class Recording
     /// - parameter filename: fully defined file path
     /// - parameter withDelay: int of seconds delay
     /// - returns : raw arbitrary data
-    usleep(delay*1_000)
+    usleep(delay*1_000_000)
     return loadRawDataFrom(file: filename)
+  }
+
+  /// modified from  https://www.mozzlog.com/blog/swift-files-operation-filemanager
+  ///
+  static func getFileSize(name filePath: String) -> Int64 {
+    var fileSize = Int64(0)
+      let fileManager = FileManager.default
+      
+      do {
+          let attributes = try fileManager.attributesOfItem(atPath: filePath)
+          if let foundSize = attributes[.size] as? Int64 {
+            fileSize = foundSize
+            if (debug) { print("\(filePath) file size: \(fileSize) bytes")}
+          }
+      } catch {
+          print(error.localizedDescription)
+      }
+    return fileSize
   }
   
   /// Binary data loader
@@ -251,18 +280,22 @@ class Recording
   
   static func loadRawDataFrom(file filename:String) -> Data?
   {
+    let debug = false
     var data:Data?
     
     // check cache for data
-    if (debug) {
+    if (false) {
       print(#function+" Cache keys are \(cache.keys)")
     }
     data = cache.value(forKey: NSString(string: filename))
     if ( data == nil ) { // load the file from disk
       let (fileMgr, foundFile, fullFileName) = getFileManagerForFile(filename)
-      
       if (foundFile)
       {
+        let fileSize = getFileSize(name: fullFileName)
+        guard fileSize < 10_000_000  else {
+          fatalError("File \(fullFileName) is too large to load at \(fileSize) bytes)")
+        }
         // FIXME: this is failing some how with huge amounts of data being read
         data = fileMgr.contents(atPath: fullFileName)
         if (debug)  {
@@ -350,8 +383,7 @@ class Recording
     let fileNameSeperator = "-"
     var programName = ""
     let basename = movieURLPath.replacingOccurrences(of: ConstsCuts.CUTS_SUFFIX, with: "")
-    if let fullPathName = basename.replacingOccurrences(of: "file://",
-                                                        with: "").removingPercentEncoding {
+    if let fullPathName = basename.removeFileColonDoubleSlash().removingPercentEncoding {
       if let title = fullPathName.components(separatedBy: "/").last {
         programName = title
         let fileElements = programName.components(separatedBy: fileNameSeperator)
@@ -515,7 +547,8 @@ class Recording
       let eitString =  "eit: " + CutEntry.hhMMssFromSeconds(eitDuration)
       let metaString = "meta: " + CutEntry.hhMMssFromSeconds(metaDuration)
       let apString = "ap: " + CutEntry.hhMMssFromSeconds(ptsDuration)
-      return [eitString, metaString, apString]
+      let resolutionString = "res: \(videoResolution)"
+      return [resolutionString, eitString, metaString, apString]
     }
   }
   
