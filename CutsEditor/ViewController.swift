@@ -707,7 +707,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
       print("got: \(fileULR)")
       fileULR.deleteLastPathComponent()
       print("trimmed: \(fileULR)")
-      let components = fileULR.pathComponents
+//      let components = fileULR.pathComponents
     }
     let filePath = String(NSString(string: filename).deletingLastPathComponent) + "/"
     let pathComponents = filePath.components(separatedBy: "/")
@@ -2413,7 +2413,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
           if (debug) { print("status Enum = \(status)") }
           var videoDuration = Float64(0.0)
           var videoDurationString = "\nplyr: \(CutEntry.hhMMssFromSeconds(videoDuration))"
-          var videoSize = NSSize.zero
+//          var videoSize = NSSize.zero
           switch status {
           case .failed:
             if (debug) { print("failed state") }
@@ -3416,7 +3416,7 @@ class ViewController: NSViewController, NSTableViewDelegate, NSTableViewDataSour
   func limitStringTo(_ thisString: String, lineCount: Int) -> String {
     var lines = thisString.components(separatedBy: .newlines)
     if lines.count > lineCount { // remove from head to create shorter list
-      let linesToRemove = lines.count - lineCount
+//      let linesToRemove = lines.count - lineCount
       lines = Array(lines[lines.count-lineCount..<lines.count])
     }
     return lines.joined(separator: "\n")

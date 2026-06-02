@@ -8,7 +8,7 @@
 
 import Cocoa
 
-class MovieCuttingOperation: Operation
+class MovieCuttingOperation: Operation, @unchecked Sendable
 {
   let moviePath : String
   var resultMessage = ""

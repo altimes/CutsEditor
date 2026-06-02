@@ -23,7 +23,7 @@ let BeyonWizU4 = "BeyonWizU4"
 /// programmatic directory traversal.  It is less generic but much quicker.
 
 
-class FindFilesOperation: Operation
+class FindFilesOperation: Operation, @unchecked Sendable
 {
   var foundfiles = [String]()
   var suffixRequired: String
